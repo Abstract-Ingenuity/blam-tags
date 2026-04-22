@@ -1,0 +1,3 @@
+[workspace]
+members = ["blam-tags", "blam-tag-shell"]
+resolver = "3"
