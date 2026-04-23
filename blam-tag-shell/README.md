@@ -2,7 +2,7 @@
 
 ## About
 
-A command-line tool and interactive REPL for inspecting and editing Halo 3 / Reach tag files. Built on the [`blam-tags`](../blam-tags/) library — no ManagedBlam, no .NET, no engine required.
+A command-line tool and interactive REPL for inspecting and editing Halo tag files. Built on the [`blam-tags`](../blam-tags/) library — no ManagedBlam, no .NET, no engine required.
 
 See the workspace [root README](../README.md) for build instructions and an overview of the two crates.
 

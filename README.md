@@ -1,11 +1,8 @@
 # blam-tags workspace
 
-A Rust implementation of the Halo 3 / Reach tag file format: a
-byte-exact roundtrip-capable library plus a CLI for inspecting and
-editing tags.
+A Rust implementation of the Halo tag file format: a byte-exact roundtrip-capable library plus a CLI for inspecting and editing tags.
 
-No ManagedBlam, no .NET, no engine required. The parser reads each
-tag's embedded layout chunk and interprets the bytes directly.
+No ManagedBlam, no .NET, no engine required. The parser reads each tag's embedded layout chunk and interprets the bytes directly.
 
 ## Crates
 
@@ -18,13 +15,9 @@ Each crate has its own README with API shape / command reference.
 
 ## Status
 
-- **Byte-exact roundtrip validated across every tag in the Halo 3,
-  Halo 3: ODST, Halo Reach, Halo 4, and Halo 2: Anniversary MP MCC
-  corpora.** Read → write → md5 compare yields zero differences.
-  Locally verified on the 119,432-tag H3 + Reach subset; full-corpus
-  validation (including H4 and H2A MP) contributed by the community.
-- **Layout versions 1 – 4** all read/write and exercised in the above
-  sweep.
+- **Byte-exact roundtrip validated across every tag in the Halo 3, Halo 3: ODST, Halo Reach, Halo 4, and Halo 2: Anniversary MP MCC corpora.** Read → write → md5 compare yields zero differences. Locally verified on the 119,432-tag H3 + Reach subset; full-corpus, validation (including H4 and H2A MP) contributed by the community.
+
+- **Layout versions 1 – 4** all read/write and exercised in the above sweep.
 
 ## Build
 

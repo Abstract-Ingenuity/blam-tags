@@ -127,17 +127,12 @@ regions.for_each_element_mut(|mut region| {
 });
 ```
 
-Visitor-closure form because each yielded handle reborrows through
-`self` — Rust's borrow checker rules out simultaneous mutable
-iterators. `TagStructMut::for_each_field_mut` and
-`TagArrayMut::for_each_element_mut` follow the same shape.
+Visitor-closure form because each yielded handle reborrows through `self` — Rust's borrow checker rules out simultaneous mutable iterators. `TagStructMut::for_each_field_mut` and `TagArrayMut::for_each_element_mut` follow the same shape.
 
 ### Read or scrub an api_interop field
 
-`api_interop` leaves carry a 12-byte runtime handle — BCS zeros them
-on save to `{ descriptor: 0, address: UINT_MAX, definition_address: 0 }`.
-Typically you'll either read them for introspection or reset them
-before committing a tag.
+`api_interop` leaves carry a 12-byte runtime handle — BCS zeros them on save to `{ descriptor: 0, address: UINT_MAX, definition_address: 0 }`.
+Typically you'll either read them for introspection or reset them before committing a tag.
 
 ```rust
 use blam_tags::{ApiInteropData, TagFieldData};
@@ -159,9 +154,7 @@ tag.root_mut()
 
 ### Inspect the schema (definitions)
 
-The library exposes a second façade rooted at
-`tag.definitions()` for schema traversal without going through
-instance data.
+The library exposes a second facade rooted at `tag.definitions()` for schema traversal without going through instance data.
 
 ```rust
 let root = tag.definitions().root_struct();
@@ -177,11 +170,8 @@ for field in root.fields() {
 }
 ```
 
-From an instance you can always jump to its schema — `tag_struct.definition()`,
-`tag_field.definition()`, `tag_block.definition()`, `tag_array.definition()`.
-`TagFieldDefinition::as_api_interop()` returns the `TagApiInteropDefinition`
-for interop fields, exposing the linked descriptor struct, a stable
-16-byte guid, and the declared type name.
+From an instance you can always jump to its schema — `tag_struct.definition()`, `tag_field.definition()`, `tag_block.definition()`, `tag_array.definition()`.
+`TagFieldDefinition::as_api_interop()` returns the `TagApiInteropDefinition` for interop fields, exposing the linked descriptor struct, a stable 16-byte guid, and the declared type name.
 
 ### Roundtrip (read → write → compare)
 
@@ -206,25 +196,20 @@ cargo run --release -p blam-tags --example roundtrip -- \
 
 ## Architecture
 
-Tag files are schema-driven — every tag carries its own layout
-description (`blay` chunk), so the parser is **generic**: nothing is
-hard-coded per tag type. The library's job is to (a) read the embedded
-schema, (b) read the payload bytes into a tree that mirrors the
-schema, and (c) write that tree back byte-exact.
+Tag files are schema-driven — every tag carries its own layout description (`blay` chunk), so the parser is **generic**: nothing is hard-coded per tag type.
+The library's job is to (a) read the embedded schema, (b) read the payload bytes into a tree that mirrors the schema, and (c) write that tree back byte-exact.
 
-Two façades sit on top of the raw storage types:
+Two facades sit on top of the raw storage types:
 
-- **[`api`]** — data-side façade. `TagStruct`, `TagField`, `TagBlock`,
+- **[`api`]** — data-side facade. `TagStruct`, `TagField`, `TagBlock`,
   `TagArray`, `TagFlag`, `TagResource` and their mutable counterparts.
   Reachable from `TagFile`.
-- **[`definition`]** — schema-side façade. `TagStructDefinition`,
+- **[`definition`]** — schema-side facade. `TagStructDefinition`,
   `TagFieldDefinition`, `TagBlockDefinition`, `TagArrayDefinition`,
   `TagResourceDefinition`. Reachable from `TagFile::definitions()`.
 
 Everything the user-facing code should need is one or the other.
-Lower-level modules (`data`, `path`, `stream`, `io`, `layout::TagLayout`)
-are available but no user code in this workspace (CLI, examples) reaches
-into them.
+Lower-level modules (`data`, `path`, `stream`, `io`, `layout::TagLayout`) are available but no user code in this workspace (CLI, examples) reaches into them.
 
 ## Field paths
 
@@ -250,17 +235,6 @@ Field names are case-sensitive; `Type:` filters are case-insensitive.
 | V3 layouts (adds `]==[` interop)               | ✓    | ✓     | Main Halo 3 / Reach format. |
 | V4 layouts (`stv4` with per-struct version)    | ✓    | ✓     | Exercised on H4 / H2A MP tags in the community corpus sweep. |
 
-Pageable-resource shapes handled: `tg\0c` (null), `tgrc` (exploded
-with inner `tgdt` + nested struct), `tgxc` (xsync, opaque payload).
-ApiInterop (`ti][`) fields are parsed into `TagFieldData::ApiInterop`
-with `descriptor` / `address` / `definition_address` accessors and
-a `reset()` builder for BCS's canonical `{0, UINT_MAX, 0}` pattern.
-VertexBuffer fields are preserved as raw bytes through the roundtrip
-but not yet parsed into typed values.
-
-## What's missing
-
-See [`../NOTES.md`](../NOTES.md) for the open research items —
-creating/removing optional streams, constructing a `TagFile` from
-scratch, and header checksum recomputation. None affect the "edit an
-existing tag" path.
+Pageable-resource shapes handled: `tg\0c` (null), `tgrc` (exploded with inner `tgdt` + nested struct), `tgxc` (xsync, opaque payload).
+ApiInterop (`ti][`) fields are parsed into `TagFieldData::ApiInterop` with `descriptor` / `address` / `definition_address` accessors and a `reset()` builder for BCS's canonical `{0, UINT_MAX, 0}` pattern.
+VertexBuffer fields are preserved as raw bytes through the roundtrip but not yet parsed into typed values.
