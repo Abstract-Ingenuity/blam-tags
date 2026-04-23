@@ -70,8 +70,10 @@ pub use api::{
     TagStruct, TagStructMut,
 };
 pub use definition::{
-    TagArrayDefinition, TagBlockDefinition, TagDefinitions, TagFieldDefinition,
-    TagResourceDefinition, TagStructDefinition,
+    TagApiInteropDefinition, TagArrayDefinition, TagBlockDefinition, TagDefinitions,
+    TagFieldDefinition, TagResourceDefinition, TagStructDefinition,
 };
-pub use fields::{format_group_tag, StringIdData, TagFieldData, TagFieldType, TagReferenceData};
+pub use fields::{
+    format_group_tag, ApiInteropData, StringIdData, TagFieldData, TagFieldType, TagReferenceData,
+};
 pub use file::TagFile;

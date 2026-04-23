@@ -1,3 +1,9 @@
+//! `layout-diff` — *schema*-level comparison: field adds / removes /
+//! type changes between two tags. For *value* comparison see
+//! [`data-diff`](crate::commands::data_diff). Used when tracking
+//! down schema drift between engine versions or debugging a field
+//! whose layout changed on disk.
+
 use anyhow::Result;
 use blam_tags::{format_group_tag, TagFieldDefinition, TagFile, TagStructDefinition};
 

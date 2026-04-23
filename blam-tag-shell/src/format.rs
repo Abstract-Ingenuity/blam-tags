@@ -28,6 +28,12 @@ pub fn value_to_json(value: &TagFieldData) -> Value {
             Some((tag, path)) => json!({ "group": format_group_tag(*tag), "path": path }),
         },
         TagFieldData::Data(d) => json!({ "size": d.len() }),
+        TagFieldData::ApiInterop(i) => match (i.descriptor(), i.address(), i.definition_address()) {
+            (Some(d), Some(a), Some(da)) => json!({
+                "descriptor": d, "address": a, "definition_address": da,
+            }),
+            _ => json!({ "raw_size": i.raw.len() }),
+        },
 
         TagFieldData::CharInteger(v) => json!(v),
         TagFieldData::ShortInteger(v) => json!(v),

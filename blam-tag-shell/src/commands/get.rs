@@ -1,16 +1,22 @@
+//! `get` — read a single field's value. The narrow complement to
+//! `inspect`: no traversal, just the one leaf. `--raw` strips the
+//! label for shell use (`x=$(blam-tag-shell get … --raw)`), `--json`
+//! emits a typed record, and `--hex` formats integers as hex.
+
 use anyhow::{Context, Result};
-use blam_tags::TagFile;
 use serde_json::json;
 
+use crate::context::CliContext;
 use crate::format::{format_value, value_to_json};
 
-pub fn run(file: &str, path: &str, raw_mode: bool, json_output: bool, hex_mode: bool) -> Result<()> {
-    let tag = TagFile::read(file).map_err(|e| anyhow::anyhow!("failed to load tag file: {e}"))?;
-    let root = tag.root();
+pub fn run(ctx: &mut CliContext, path: &str, raw_mode: bool, json_output: bool, hex_mode: bool) -> Result<()> {
+    let resolved = ctx.resolve_path(path);
+    let loaded = ctx.loaded("get")?;
+    let root = loaded.tag.root();
 
-    let field = root.field_path(path).ok_or_else(|| match root.suggest_field_name(path) {
-        Some(s) => anyhow::anyhow!("field '{}' not found. Did you mean '{}'?", path, s),
-        None => anyhow::anyhow!("field '{}' not found", path),
+    let field = root.field_path(&resolved).ok_or_else(|| match root.suggest_field_name(&resolved) {
+        Some(s) => anyhow::anyhow!("field '{}' not found. Did you mean '{}'?", resolved, s),
+        None => anyhow::anyhow!("field '{}' not found", resolved),
     })?;
 
     let type_name = field.type_name();
@@ -18,12 +24,12 @@ pub fn run(file: &str, path: &str, raw_mode: bool, json_output: bool, hex_mode: 
     // Containers have no parsed value — report a summary.
     if let Some(summary) = container_summary(&field) {
         if json_output {
-            let v = json!({ "path": path, "type": type_name, "summary": summary });
+            let v = json!({ "path": &resolved, "type": type_name, "summary": summary });
             println!("{}", serde_json::to_string_pretty(&v)?);
         } else if raw_mode {
             println!("{summary}");
         } else {
-            println!("{path}: {type_name} = {summary}");
+            println!("{resolved}: {type_name} = {summary}");
         }
         return Ok(());
     }
@@ -31,7 +37,7 @@ pub fn run(file: &str, path: &str, raw_mode: bool, json_output: bool, hex_mode: 
     let value = field.value().context("field has no parsed value")?;
 
     if json_output {
-        let out = json!({ "path": path, "type": type_name, "value": value_to_json(&value) });
+        let out = json!({ "path": &resolved, "type": type_name, "value": value_to_json(&value) });
         println!("{}", serde_json::to_string_pretty(&out)?);
         return Ok(());
     }
@@ -40,7 +46,7 @@ pub fn run(file: &str, path: &str, raw_mode: bool, json_output: bool, hex_mode: 
     if raw_mode {
         println!("{formatted}");
     } else {
-        println!("{path}: {type_name} = {formatted}");
+        println!("{resolved}: {type_name} = {formatted}");
     }
 
     Ok(())

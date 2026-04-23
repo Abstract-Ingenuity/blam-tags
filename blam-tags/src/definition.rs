@@ -197,6 +197,20 @@ impl<'a> TagFieldDefinition<'a> {
             resource_layout_index: record.definition as usize,
         })
     }
+
+    /// If this is an `ApiInterop` field, return the interop
+    /// definition — gives the linked descriptor struct and stable
+    /// guid for the interop's runtime type.
+    pub fn as_api_interop(&self) -> Option<TagApiInteropDefinition<'a>> {
+        let record = &self.layout.fields[self.field_index];
+        if record.field_type != TagFieldType::ApiInterop {
+            return None;
+        }
+        Some(TagApiInteropDefinition {
+            layout: self.layout,
+            interop_layout_index: record.definition as usize,
+        })
+    }
 }
 
 //================================================================================
@@ -260,6 +274,36 @@ impl<'a> TagArrayDefinition<'a> {
     pub fn struct_definition(&self) -> TagStructDefinition<'a> {
         let struct_index = self.layout.array_layouts[self.array_layout_index].struct_index as usize;
         TagStructDefinition { layout: self.layout, struct_index }
+    }
+}
+
+/// An api-interop definition — declares the runtime type an
+/// `api_interop` field points at. Sourced from the `]==[` chunk.
+#[derive(Clone, Copy)]
+pub struct TagApiInteropDefinition<'a> {
+    layout: &'a TagLayout,
+    interop_layout_index: usize,
+}
+
+impl<'a> TagApiInteropDefinition<'a> {
+    /// Declared name of the interop type.
+    pub fn name(&self) -> &'a str {
+        let record = &self.layout.interop_layouts[self.interop_layout_index];
+        self.layout.get_string(record.name_offset).unwrap_or("")
+    }
+
+    /// Stable 16-byte identifier for the interop type across layout
+    /// versions. Same role as [`TagStructDefinition::guid`].
+    pub fn guid(&self) -> [u8; 16] {
+        self.layout.interop_layouts[self.interop_layout_index].guid
+    }
+
+    /// The descriptor struct — the runtime object's schema shape.
+    /// Not a struct of on-disk data; only useful for introspection.
+    pub fn descriptor(&self) -> TagStructDefinition<'a> {
+        let struct_index =
+            self.layout.interop_layouts[self.interop_layout_index].struct_index as usize;
+        TagStructDefinition::new(self.layout, struct_index)
     }
 }
 

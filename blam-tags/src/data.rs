@@ -66,6 +66,13 @@ pub(crate) enum TagSubChunkContent {
     OldStringId(Vec<u8>),
     /// `tgda` chunk payload.
     Data(Vec<u8>),
+    /// `[]it` chunk payload for an `api_interop` field. In the
+    /// observed corpus the payload is a fixed 12 bytes matching BCS's
+    /// `s_tag_interop { descriptor: u32, address: u32,
+    /// definition_address: u32 }`, but we preserve the raw bytes
+    /// verbatim so future variants with different sizes still
+    /// roundtrip byte-exactly.
+    ApiInterop(Vec<u8>),
     /// Pageable resource. Signature distinguishes between concrete
     /// resource chunk shapes. Only the two observed in Halo 3 / Reach
     /// tags are modeled.
@@ -291,6 +298,13 @@ impl TagStructData {
                 TagFieldType::StringId => Some(TagSubChunkContent::StringId(Vec::new())),
                 TagFieldType::OldStringId => Some(TagSubChunkContent::OldStringId(Vec::new())),
                 TagFieldType::Data => Some(TagSubChunkContent::Data(Vec::new())),
+                TagFieldType::ApiInterop => {
+                    // 12 zero bytes matches BCS's reset pattern except
+                    // for `address` (which BCS sets to `UINT_MAX`). A
+                    // freshly-defaulted interop won't reach a runtime
+                    // that cares, so plain zeroes are safe.
+                    Some(TagSubChunkContent::ApiInterop(vec![0u8; 12]))
+                }
                 TagFieldType::PageableResource => {
                     Some(TagSubChunkContent::Resource(TagResourceChunk::Null))
                 }
@@ -610,6 +624,15 @@ fn read_sub_chunks<R: Seek + Read>(
                 });
             }
 
+            TagFieldType::ApiInterop => {
+                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"ti]["))?;
+                assert_eq!(version, 0, "ti][ (api_interop) version ({}) != 0", version);
+                sub_chunks.push(TagSubChunkEntry {
+                    field_index: Some(field_index as u32),
+                    content: TagSubChunkContent::ApiInterop(content),
+                });
+            }
+
             // Primitives / pad / skip / custom / explanation / useless_pad.
             _ => {
                 let field_type = &layout.field_types[field.type_index as usize];
@@ -670,6 +693,10 @@ fn write_sub_chunks<W: Write>(
 
             TagSubChunkContent::Data(content) => {
                 write_tag_chunk_content(writer, u32::from_be_bytes(*b"tgda"), 0, content)?;
+            }
+
+            TagSubChunkContent::ApiInterop(content) => {
+                write_tag_chunk_content(writer, u32::from_be_bytes(*b"ti]["), 0, content)?;
             }
 
             TagSubChunkContent::Resource(TagResourceChunk::Null) => {
@@ -854,6 +881,41 @@ impl TagBlockData {
         let start = index * element_size;
         self.raw_data.drain(start..start + element_size);
         self.elements.remove(index);
+    }
+
+    /// Swap elements at `i` and `j`. Panics if either is out of range.
+    pub(crate) fn swap_at(&mut self, layout: &TagLayout, i: usize, j: usize) {
+        if i == j {
+            return;
+        }
+        let size = self.element_size(layout);
+        self.elements.swap(i, j);
+
+        // Swap the two raw-data regions via a temporary buffer.
+        let (lo, hi) = if i < j { (i, j) } else { (j, i) };
+        let lo_start = lo * size;
+        let hi_start = hi * size;
+        let mut buf = vec![0u8; size];
+        buf.copy_from_slice(&self.raw_data[lo_start..lo_start + size]);
+        self.raw_data.copy_within(hi_start..hi_start + size, lo_start);
+        self.raw_data[hi_start..hi_start + size].copy_from_slice(&buf);
+    }
+
+    /// Move the element at `from` to `to` (Vec::remove + Vec::insert
+    /// semantics — `to` is the target index in the final ordering).
+    /// Panics if either is out of range.
+    pub(crate) fn move_at(&mut self, layout: &TagLayout, from: usize, to: usize) {
+        if from == to {
+            return;
+        }
+        let size = self.element_size(layout);
+        let src = from * size;
+        let bytes: Vec<u8> = self.raw_data.drain(src..src + size).collect();
+        let dst = to * size;
+        self.raw_data.splice(dst..dst, bytes);
+
+        let elem = self.elements.remove(from);
+        self.elements.insert(to, elem);
     }
 
     /// Remove all elements.

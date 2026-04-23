@@ -104,6 +104,59 @@ pub(crate) fn lookup_from_struct<'a>(
     })
 }
 
+/// Walk `path` treating every `/`-separated segment as an intermediate
+/// descent (struct sub-chunk / block element at `[i]` / array element
+/// at `[i]`). Returns the struct + raw slice at the terminal position.
+///
+/// Unlike [`lookup_from_struct`], there's no "final-segment lookup" —
+/// the caller just wants to *reach* a struct, not the field that
+/// points to it. Used by the façade's [`crate::api::TagStruct::descend`].
+pub(crate) fn descend_from_struct<'a>(
+    layout: &'a TagLayout,
+    start_struct: &'a TagStructData,
+    start_raw: &'a [u8],
+    path: &str,
+) -> Option<(&'a TagStructData, &'a [u8])> {
+    let mut current_raw: &[u8] = start_raw;
+    let mut current_struct: &TagStructData = start_struct;
+
+    for segment in path.split('/').filter(|s| !s.is_empty()) {
+        let (type_filter, name, index) = parse_segment(segment);
+        let field_index = find_field_in_struct(layout, current_struct, name, type_filter)?;
+        let field = &layout.fields[field_index];
+
+        match field.field_type {
+            TagFieldType::Struct => {
+                let nested_def = &layout.struct_layouts[field.definition as usize];
+                let offset = field.offset as usize;
+                current_raw = &current_raw[offset..offset + nested_def.size];
+                current_struct = descend_struct(current_struct, field_index)?;
+            }
+            TagFieldType::Block => {
+                let block = descend_block_data(current_struct, field_index)?;
+                let block_def = &layout.block_layouts[field.definition as usize];
+                let element_def = &layout.struct_layouts[block_def.struct_index as usize];
+                let element_index = index.unwrap_or(0) as usize;
+                let start = element_index * element_def.size;
+                current_raw = &block.raw_data[start..start + element_def.size];
+                current_struct = block.elements.get(element_index)?;
+            }
+            TagFieldType::Array => {
+                let array_def = &layout.array_layouts[field.definition as usize];
+                let element_def = &layout.struct_layouts[array_def.struct_index as usize];
+                let element_index = index.unwrap_or(0) as usize;
+                let start = field.offset as usize + element_index * element_def.size;
+                current_raw = &current_raw[start..start + element_def.size];
+                let elements = descend_array(current_struct, field_index)?;
+                current_struct = elements.get(element_index)?;
+            }
+            _ => return None,
+        }
+    }
+
+    Some((current_struct, current_raw))
+}
+
 /// Mutable counterpart to [`lookup_from_struct`]. Descends through
 /// disjoint field splits to maintain simultaneous `&mut` access to
 /// the enclosing block's `raw_data` slice and the containing

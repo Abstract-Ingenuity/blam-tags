@@ -1,9 +1,14 @@
 pub mod block;
+pub mod check;
+pub mod data_diff;
+pub mod deps;
+pub mod export;
+pub mod find;
 pub mod flag;
 pub mod get;
 pub mod header;
 pub mod inspect;
 pub mod layout_diff;
+pub mod list;
 pub mod options;
-pub mod scan;
 pub mod set;

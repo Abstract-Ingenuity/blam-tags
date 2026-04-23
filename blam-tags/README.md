@@ -4,9 +4,11 @@ A Rust library for reading, writing, and editing Halo 3 / Reach tag files.
 No ManagedBlam, no .NET, no engine needed — the parser reads each tag's
 embedded layout chunk and interprets its bytes directly.
 
-**Byte-exact roundtrip validated across 119,432 tags** from the Halo 3 and
-Halo Reach MCC tag files. Read a tag, write it back, md5-compare — zero
-differences.
+**Byte-exact roundtrip validated across every tag in the Halo 3, Halo 3:
+ODST, Halo Reach, Halo 4, and Halo 2: Anniversary MP MCC corpora.** Read a
+tag, write it back, md5-compare — zero differences. Locally verified on
+the 119,432-tag H3 + Reach subset; full-corpus validation (including H4
+and H2A MP) contributed by the community.
 
 ## Quick start
 
@@ -102,7 +104,10 @@ let mut seats = tag.root_mut()
     .as_block_mut().unwrap();
 
 let new_index = seats.add();             // append default-initialized element
+seats.insert(0)?;                        // insert default element at index 0
 seats.duplicate(0)?;                     // copy element 0, placed at index 1
+seats.swap(0, 3)?;                       // exchange elements 0 and 3
+seats.move_to(5, 1)?;                    // relocate element 5 to index 1
 seats.delete(2)?;                        // remove element 2
 seats.clear();                           // remove all
 println!("now have {} seats", seats.len());
@@ -127,6 +132,31 @@ Visitor-closure form because each yielded handle reborrows through
 iterators. `TagStructMut::for_each_field_mut` and
 `TagArrayMut::for_each_element_mut` follow the same shape.
 
+### Read or scrub an api_interop field
+
+`api_interop` leaves carry a 12-byte runtime handle — BCS zeros them
+on save to `{ descriptor: 0, address: UINT_MAX, definition_address: 0 }`.
+Typically you'll either read them for introspection or reset them
+before committing a tag.
+
+```rust
+use blam_tags::{ApiInteropData, TagFieldData};
+
+// Read.
+let field = tag.root().field_path("vertex buffer interop").unwrap();
+if let Some(TagFieldData::ApiInterop(i)) = field.value() {
+    println!("descriptor=0x{:08X} address=0x{:08X} defaddr=0x{:08X}",
+        i.descriptor().unwrap_or(0),
+        i.address().unwrap_or(0),
+        i.definition_address().unwrap_or(0));
+}
+
+// Scrub to BCS's reset pattern before saving.
+tag.root_mut()
+    .field_path_mut("vertex buffer interop").unwrap()
+    .set(TagFieldData::ApiInterop(ApiInteropData::reset()))?;
+```
+
 ### Inspect the schema (definitions)
 
 The library exposes a second façade rooted at
@@ -149,6 +179,9 @@ for field in root.fields() {
 
 From an instance you can always jump to its schema — `tag_struct.definition()`,
 `tag_field.definition()`, `tag_block.definition()`, `tag_array.definition()`.
+`TagFieldDefinition::as_api_interop()` returns the `TagApiInteropDefinition`
+for interop fields, exposing the linked descriptor struct, a stable
+16-byte guid, and the declared type name.
 
 ### Roundtrip (read → write → compare)
 
@@ -215,12 +248,15 @@ Field names are case-sensitive; `Type:` filters are case-insensitive.
 | V1 layouts (flat `agro` records)               | ✓    | ✓     | Reconstructs `stv2` + `blv2` from paired aggregate records on write. |
 | V2 layouts (`tgly` with `stv2`)                | ✓    | ✓     | Main Halo 3 / Reach format. |
 | V3 layouts (adds `]==[` interop)               | ✓    | ✓     | Main Halo 3 / Reach format. |
-| V4 layouts (`stv4` with per-struct version)    | ✓    | ✓     | Not present in the H3/Reach corpus; implemented for forward compatibility with later MCC games. |
+| V4 layouts (`stv4` with per-struct version)    | ✓    | ✓     | Exercised on H4 / H2A MP tags in the community corpus sweep. |
 
 Pageable-resource shapes handled: `tg\0c` (null), `tgrc` (exploded
 with inner `tgdt` + nested struct), `tgxc` (xsync, opaque payload).
-ApiInterop and VertexBuffer fields are preserved as raw bytes through
-the roundtrip but not yet parsed into typed values.
+ApiInterop (`ti][`) fields are parsed into `TagFieldData::ApiInterop`
+with `descriptor` / `address` / `definition_address` accessors and
+a `reset()` builder for BCS's canonical `{0, UINT_MAX, 0}` pattern.
+VertexBuffer fields are preserved as raw bytes through the roundtrip
+but not yet parsed into typed values.
 
 ## What's missing
 

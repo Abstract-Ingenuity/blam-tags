@@ -2,9 +2,9 @@
 
 ## About
 
-A command-line tool for inspecting and editing Halo 3 / Reach tag files. Built on the [`blam-tags`](../blam-tags/) library — no ManagedBlam, no .NET, no engine required.
+A command-line tool and interactive REPL for inspecting and editing Halo 3 / Reach tag files. Built on the [`blam-tags`](../blam-tags/) library — no ManagedBlam, no .NET, no engine required.
 
-Any assistance or valid criticism would be appreciated. See the workspace [root README](../README.md) for build instructions and an overview of the two crates.
+See the workspace [root README](../README.md) for build instructions and an overview of the two crates.
 
 ## Install
 
@@ -18,19 +18,27 @@ cargo install --path blam-tag-shell
 blam-tag-shell <COMMAND> [ARGS...] [FLAGS]
 ```
 
+Every tag-bound command takes a `<FILE>` argument as its first positional. In the [REPL](#repl--interactive-shell) that argument is filled in automatically from the currently-loaded tag, so you can type `get "jump velocity"` without repeating the path.
+
 ### Commands
 
 | Command | Description |
 |-|-|
 | `header` | Show tag/cache file header metadata |
-| `scan` | Catalog tag types in a directory |
+| `list` | Walk a directory for tags; filter + list, or summarize by group |
 | `inspect` | Show the field tree |
 | `get` | Read a field value |
 | `set` | Write a field value |
-| `flag` | Get or set a flag bit |
+| `flag` | Get or set a flag bit by name |
 | `options` | List enum/flag options for a field |
-| `block` | Block element operations (count, add, insert, duplicate, delete, clear) |
-| `layout-diff` | Diff the layouts of two tag files |
+| `block` | Block element operations (count, add, insert, duplicate, delete, clear, swap, move) |
+| `layout-diff` | Diff the **schemas** of two tag files |
+| `data-diff` | Diff the **values** of two tag files |
+| `deps` | List every `tag_reference` in a tag |
+| `find` | Search a directory of tags for fields whose value matches a query |
+| `export` | Dump a tag's state as replayable `set` commands |
+| `check` | Integrity check — flag enum / flag / real / reference anomalies |
+| `repl` | Interactive shell against a loaded tag |
 
 ---
 
@@ -39,6 +47,10 @@ blam-tag-shell <COMMAND> [ARGS...] [FLAGS]
 | Argument | Description |
 |-|-|
 | `<FILE>` | Path to a tag or cache file. |
+
+| Long | Description |
+|-|-|
+| `--json` | Emit JSON. |
 
 ```sh
 $ blam-tag-shell header masterchief.biped
@@ -54,19 +66,31 @@ Tag File
 
 ---
 
-### `scan` — Catalog tag types in a directory
+### `list` — Walk a directory for tags
 
 | Argument | Description |
 |-|-|
-| `<DIR>` | Directory to scan (recursive). |
+| `<DIR>` | Directory to walk (recursive). |
 
 | Long | Description |
 |-|-|
-| `--json` | Output as JSON. |
-| `--sort <name\|count>` | Sort order (default `name`). |
+| `--group <TAG>` | Filter by group tag (e.g. `bipd`). |
+| `--starts-with <S>` | Only filenames starting with `S`. |
+| `--contains <S>` | Only paths containing `S`. |
+| `--ends-with <S>` | Only filenames ending with `S` (e.g. extension matching). |
+| `--regex <PAT>` | Only full paths matching `PAT`. |
+| `--from-file <F>` | Read candidate paths from `F` instead of walking. |
+| `--summary` | Group/extension tally instead of a path list. |
+| `--sort-by-count` | Sort summary rows by count (desc) instead of name. |
+| `--json` | Emit JSON. |
+| `--strict` | Fail on any unreadable / malformed tag (default: skip silently). |
 
 ```sh
-$ blam-tag-shell scan /path/to/tags/globals
+# Plain list of every biped under a tags root
+$ blam-tag-shell list /path/to/tags --group bipd
+
+# Group/extension tally
+$ blam-tag-shell list /path/to/tags/globals --summary
 GROUP    EXTENSION                   COUNT
 --------------------------------------------
 bsdt     breakable_surface               2
@@ -77,8 +101,8 @@ wind     wind                            1
 --------------------------------------------
 14 types                                99
 
-# Sort by count, output as JSON
-$ blam-tag-shell scan /path/to/tags --sort count --json
+# JSON-sorted by most common
+$ blam-tag-shell list /path/to/tags --summary --sort-by-count --json
 ```
 
 ---
@@ -93,28 +117,28 @@ $ blam-tag-shell scan /path/to/tags --sort count --json
 | Long | Description |
 |-|-|
 | `--depth <N>` | Maximum depth to display (default `1`). |
-| `--all` | Show all fields including hidden. |
-| `--json` | Output as JSON. |
+| `--all` | Include schema padding / explanation / skip / unknown fields. |
+| `--json` | Emit JSON. |
+| `--filter <S,...>` | Only show fields whose name contains any of the comma-separated substrings. |
+| `--filter-not <S,...>` | Skip fields whose name contains any of these. |
+| `--filter-value <S>` | Only leaves whose rendered value contains `S`. |
 
 ```sh
-# Top-level fields (depth 1)
+# Top-level fields
 $ blam-tag-shell inspect masterchief.biped
 unit: struct
   object: struct
   flags: long flags = 0x0046C708 [fires from camera, melee attackers cannot attach, ...]
   default team: short enum = 1 (player)
   ...
-moving turning speed: angle = 8.4858 rad (486.20 deg)
 jump velocity: real = 3.08
-standing camera height: real = 0.62
-contact points: block [2 elements]
-  [0]
-    marker name: string_id = "right_foot"
-  [1]
-    marker name: string_id = "left_foot"
 
-# Inspect a nested struct
-$ blam-tag-shell inspect masterchief.biped "unit" --depth 0
+# Drill into a subtree
+$ blam-tag-shell inspect masterchief.biped "unit/seats[0]" --depth 2
+
+# Filter by name + value
+$ blam-tag-shell inspect masterchief.biped --depth 5 \
+    --filter velocity --filter-value 3
 
 # Full tree as JSON
 $ blam-tag-shell inspect masterchief.biped --depth 3 --json
@@ -127,33 +151,21 @@ $ blam-tag-shell inspect masterchief.biped --depth 3 --json
 | Argument | Description |
 |-|-|
 | `<FILE>` | Path to a tag file. |
-| `<PATH>` | Field path (e.g. `"jump velocity"` or `"unit/seats[0]/flags"`). |
+| `<PATH>` | Field path. |
 
 | Long | Description |
 |-|-|
 | `--raw` | Output raw value only (no label). |
-| `--json` | Output as JSON. |
+| `--json` | Emit JSON. |
 | `--hex` | Output numeric values in hex. |
 
 ```sh
 $ blam-tag-shell get masterchief.biped "jump velocity"
 jump velocity: real = 3.08
 
-# Raw value only (for scripting)
 $ blam-tag-shell get masterchief.biped "jump velocity" --raw
 3.08
 
-# Navigate nested paths
-$ blam-tag-shell get masterchief.biped "unit/default team"
-unit/default team: short enum = 1 (player)
-
-# Block elements by index
-$ blam-tag-shell get masterchief.biped "contact points[1]/marker name"
-
-# JSON output
-$ blam-tag-shell get masterchief.biped "unit/flags" --json
-
-# Hex output for numeric fields
 $ blam-tag-shell get masterchief.biped "unit/flags" --hex
 ```
 
@@ -172,26 +184,30 @@ $ blam-tag-shell get masterchief.biped "unit/flags" --hex
 | `--output <FILE>` | Write to a different file instead of overwriting the source. |
 | `--dry-run` | Preview changes without writing. |
 
-```sh
-# Set a float
-$ blam-tag-shell set masterchief.biped "jump velocity" 99.5
-set jump velocity = 99.5
+The output reports `(was X)` so dry-runs and real runs are self-documenting.
 
-# Set an enum by name (case-insensitive)
+```sh
+# Float
+$ blam-tag-shell set masterchief.biped "jump velocity" 99.5
+set jump velocity = 99.5 (was 3.08)
+
+# Enum by name (case-insensitive)
 $ blam-tag-shell set masterchief.biped "unit/default team" covenant
 
-# Set a tag reference (GROUP:path format)
+# Tag reference: `GROUP:path` or `none`
 $ blam-tag-shell set masterchief.biped "unit/melee damage" "jpt!:globals/melee_damage"
 
-# Set a string_id
-$ blam-tag-shell set masterchief.biped "unit/right_hand_node" "right_hand"
-
-# Set a block index (-1 or "none" for unset)
+# Block index: integer or `none` (= -1)
 $ blam-tag-shell set some.tag "block index field" none
+
+# api_interop: `reset` writes BCS's canonical {0, UINT_MAX, 0}
+#              or a comma triple (decimal or 0x…)
+$ blam-tag-shell set asset.polyart "vertex buffer interop" reset
+$ blam-tag-shell set asset.polyart "vertex buffer interop" 0xDEADBEEF,0x12345678,0
 
 # Preview without writing
 $ blam-tag-shell set masterchief.biped "jump velocity" 0.5 --dry-run
-(dry run) would set jump velocity = 0.5
+(dry run) would set jump velocity = 0.5 (was 3.08)
 
 # Write to a different file
 $ blam-tag-shell set masterchief.biped "jump velocity" 0.5 --output modified.biped
@@ -199,7 +215,7 @@ $ blam-tag-shell set masterchief.biped "jump velocity" 0.5 --output modified.bip
 
 ---
 
-### `flag` — Get or set flag bits
+### `flag` — Get or set a flag bit
 
 | Argument | Description |
 |-|-|
@@ -210,18 +226,16 @@ $ blam-tag-shell set masterchief.biped "jump velocity" 0.5 --output modified.bip
 
 | Long | Description |
 |-|-|
-| `--output <FILE>` | Write to a different file instead of overwriting the source. |
-| `--dry-run` | Preview changes without writing. |
+| `--output <FILE>` | Write to a different file. |
+| `--dry-run` | Preview without writing. |
 
 ```sh
-# Read a flag
 $ blam-tag-shell flag masterchief.biped "unit/flags" "fires from camera"
 unit/flags.fires from camera = on
 
-# Set a flag
 $ blam-tag-shell flag masterchief.biped "unit/flags" "fires from camera" off
+set unit/flags.fires from camera = off (was on)
 
-# Toggle a flag
 $ blam-tag-shell flag masterchief.biped "unit/flags" "fires from camera" toggle --dry-run
 ```
 
@@ -234,23 +248,25 @@ $ blam-tag-shell flag masterchief.biped "unit/flags" "fires from camera" toggle 
 | `<FILE>` | Path to a tag file. |
 | `<PATH>` | Field path to an enum or flags field. |
 
+| Long | Description |
+|-|-|
+| `--json` | Emit JSON. |
+
 ```sh
-# Enum field — shows all options, marks current
+# Enum — current value marked with an arrow
 $ blam-tag-shell options masterchief.biped "unit/default team"
 Enum options for 'unit/default team':
   0: default
   1: player <-
   2: human
   3: covenant
-  ...
 
-# Flags field — shows checkboxes
+# Flags — checkboxes for each bit
 $ blam-tag-shell options masterchief.biped "unit/flags"
 Flag options for 'unit/flags':
   0: [ ] circular aiming
   1: [ ] destroyed after dying
   3: [x] fires from camera
-  15: [x] melee attackers cannot attach
   ...
 ```
 
@@ -262,46 +278,221 @@ Flag options for 'unit/flags':
 |-|-|
 | `<FILE>` | Path to a tag file. |
 | `<PATH>` | Field path to a block. |
-| `<ACTION>` | One of `count`, `add`, `insert`, `duplicate`, `delete`, `clear`. |
-| `[INDEX]` | Element index for `insert` / `duplicate` / `delete`. |
+| `<ACTION>` | `count`, `add`, `insert`, `duplicate`, `delete`, `clear`, `swap`, or `move`. |
+| `[INDEX]` | First index (`insert`/`duplicate`/`delete`, first of `swap`, from for `move`). |
+| `[INDEX2]` | Second index (`swap` second, `move` to). |
 
 | Long | Description |
 |-|-|
-| `--output <FILE>` | Write to a different file instead of overwriting the source. |
-| `--dry-run` | Preview changes without writing. |
+| `--output <FILE>` | Write to a different file. |
+| `--dry-run` | Preview without writing. |
+| `--json` | Emit JSON (only meaningful for `count`). |
+
+Unknown actions are rejected at parse time — `blam-tag-shell block … foo` fails with clap's `invalid value` listing the valid set.
 
 ```sh
-# Count elements
 $ blam-tag-shell block masterchief.biped "contact points" count
 2
 
-# Add a new default element
 $ blam-tag-shell block masterchief.biped "contact points" add
-
-# Insert at index
 $ blam-tag-shell block masterchief.biped "contact points" insert 0
-
-# Duplicate an element
 $ blam-tag-shell block masterchief.biped "contact points" duplicate 1
-
-# Delete an element
+$ blam-tag-shell block masterchief.biped "contact points" swap 0 1
+$ blam-tag-shell block masterchief.biped "contact points" move 3 0
 $ blam-tag-shell block masterchief.biped "contact points" delete 0
-
-# Clear all elements
 $ blam-tag-shell block masterchief.biped "contact points" clear --dry-run
 ```
 
 ---
 
-### `layout-diff` — Compare tag layouts
+### `layout-diff` — Compare tag schemas
 
 | Argument | Description |
 |-|-|
 | `<FILE_A>` | First tag file. |
 | `<FILE_B>` | Second tag file. |
 
+Reports field adds / removes / type changes between two tags' schemas. For value comparison use [`data-diff`](#data-diff--compare-two-tag-values).
+
 ```sh
 $ blam-tag-shell layout-diff h3/masterchief.biped reach/masterchief.biped
+```
+
+---
+
+### `data-diff` — Compare two tag values
+
+| Argument | Description |
+|-|-|
+| `<FILE_A>` | First tag file. |
+| `<FILE_B>` | Second tag file. |
+
+| Long | Description |
+|-|-|
+| `--only <PATH>` | Restrict both walks to a subtree. |
+| `--json` | Emit JSON. |
+
+Walks every leaf in both tags and reports `~ changed`, `- only in a`, `+ only in b`, plus a summary.
+
+```sh
+$ blam-tag-shell data-diff h3/masterchief.biped h3/floodcombat_elite.biped
+~ jump velocity: 3.08 -> 4.8
+~ physics/dead material name: "hard_metal_thin_hum_masterchief" -> "tough_floodflesh_combatform"
+…
+73 changed, 76 only in a, 6 only in b
+
+$ blam-tag-shell data-diff a.biped b.biped --only 'unit/unit camera'
+```
+
+---
+
+### `deps` — List tag references
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+
+| Long | Description |
+|-|-|
+| `--unique` | De-duplicate repeated references. |
+| `--json` | Emit JSON. |
+
+```sh
+$ blam-tag-shell deps masterchief.biped
+unit/object/model: hlmt:objects\characters\masterchief\masterchief
+unit/object/collision damage: cddf:globals\collision_damage\biped_player
+…
+```
+
+---
+
+### `find` — Search values across a directory
+
+| Argument | Description |
+|-|-|
+| `<DIR>` | Directory to walk. |
+| `<VALUE>` | Substring (or regex with `--regex`) to search for. |
+
+| Long | Description |
+|-|-|
+| `--group <TAG>` | Only search tags of this group. |
+| `--field-name <PAT>` | Only check fields whose name matches `PAT` (regex). |
+| `--regex` | Interpret `<VALUE>` as a regex. |
+| `--json` | Emit JSON. |
+| `--strict` | Fail on any unreadable tag. |
+
+```sh
+# Which weapons reference a specific sound tag?
+$ blam-tag-shell find /path/to/tags 'weapons/fire_sound' \
+    --group weap --field-name 'sound'
+
+# Regex match — all numeric velocities > 5
+$ blam-tag-shell find /path/to/tags '^[5-9]\.' \
+    --field-name 'velocity' --regex
+```
+
+---
+
+### `export` — Dump tag state as replay commands
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+| `[SUBTREE]` | Optional field path; only export fields under this subtree. |
+
+| Long | Description |
+|-|-|
+| `--output <FILE>` | Write to a file instead of stdout. |
+
+Emits one `set <file> <path> <value>` line per round-trippable leaf, plus a trailing comment block listing skipped types (data blobs, math composites, colors, bounds, api_interop runtime handles, etc.). Useful for diffing tag states, committing tag edits as reviewable patches, and reproducible authoring pipelines.
+
+```sh
+# Dump all settable leaves
+$ blam-tag-shell export masterchief.biped > mc.cmds
+
+# Diff two tags at field level (strip the tag-path column first)
+$ blam-tag-shell export a.biped > /tmp/a.cmds
+$ blam-tag-shell export b.biped > /tmp/b.cmds
+$ awk '{$2="";print}' /tmp/a.cmds > /tmp/a.clean
+$ awk '{$2="";print}' /tmp/b.cmds > /tmp/b.clean
+$ diff -u /tmp/a.clean /tmp/b.clean
+
+# Scope to a subtree
+$ blam-tag-shell export masterchief.biped 'unit/unit camera' --output cam.cmds
+```
+
+---
+
+### `check` — Integrity validator
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+
+| Long | Description |
+|-|-|
+| `--tags-root <DIR>` | Tags root directory; required for tag-reference existence checks. |
+| `--only <KINDS>` | Comma-separated subset: `enum`, `flag`, `real`, `reference` (default: all). |
+| `--json` | Emit JSON. |
+| `--strict` | Non-zero exit status on any finding (for CI). |
+
+Surfaces:
+
+- **Enum out of range** — the stored int didn't resolve to a named variant.
+- **Unknown flag bits** — bits set without a declared name.
+- **Non-finite reals** — `NaN` / `±inf` in any real field.
+- **Missing tag references** — with `--tags-root`, references that don't resolve to a file on disk.
+
+```sh
+$ blam-tag-shell check floodcombat_elite.biped --tags-root /path/to/tags
+[reference] unit/dialogue variants[0]/dialogue: no file with stem 'sound\dialog\combat\floodcombat_elite'
+
+1 finding(s)
+
+# Fail the build if anything shows up
+$ blam-tag-shell check masterchief.biped --tags-root /path/to/tags --strict
+```
+
+---
+
+### `repl` — Interactive shell
+
+| Argument | Description |
+|-|-|
+| `[FILE]` | Optional tag to load at startup. |
+
+Opens a persistent session against a loaded tag. Tag-bound commands can omit the file argument — it's injected from the loaded tag's path. Dirty-tracking means the REPL asks for confirmation before discarding unsaved edits. History is persisted to `~/.blam-tag-shell-history`.
+
+**Session verbs:**
+
+| | |
+|-|-|
+| `open <path>` | Load a tag. |
+| `close` | Close the current tag. |
+| `save [path]` | Write the tag (back to source, or to `path`). |
+| `revert` | Reload from disk, discarding edits. |
+| `exit` / `quit` | Leave the REPL (prompts on unsaved changes; `exit --force` skips the prompt). |
+| `help` / `?` | Show inline help. |
+
+**Navigation** (Unix-cd semantics — leading `/` resets to absolute):
+
+| | |
+|-|-|
+| `edit-block <path>` | Push a sub-struct / block-element / array-element onto the nav stack. Alias: `cd`. |
+| `back` | Pop one level. |
+| `exit-to <segment>` | Pop until the named segment is the tail; `exit-to root` clears. |
+| `pwd` | Show the current nav path. |
+
+The prompt reflects the current tag, nav stack, and dirty state:
+
+```
+blam> open masterchief.biped
+blam masterchief.biped> cd unit/seats[0]
+blam masterchief.biped/unit/seats[0]> flag "flags" "invisible" toggle
+set unit/seats[0]/flags.invisible = on (was off)
+blam masterchief.biped*/unit/seats[0]> save
+saved to masterchief.biped
+blam masterchief.biped/unit/seats[0]> exit
 ```
 
 ---
@@ -336,5 +527,8 @@ Most commands support `--json` for machine-readable output, compatible with `jq`
 $ blam-tag-shell inspect masterchief.biped --json --depth 2 | jq '.[0].name'
 "unit"
 
-$ blam-tag-shell scan /path/to/tags --json | jq '.[] | select(.count > 100)'
+$ blam-tag-shell list /path/to/tags --summary --json | jq '.[] | select(.count > 100)'
+
+$ blam-tag-shell check floodcombat_elite.biped --tags-root /path/to/tags --json \
+    | jq '.[] | select(.kind == "reference")'
 ```

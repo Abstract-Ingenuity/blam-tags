@@ -12,18 +12,19 @@ tag's embedded layout chunk and interprets the bytes directly.
 | Crate | Role |
 |---|---|
 | [`blam-tags`](./blam-tags/) | The library. Reads, writes, navigates, and edits tag files. |
-| [`blam-tag-shell`](./blam-tag-shell/) | Command-line front-end. Subcommands for header metadata, tag-type scans, field tree inspection, primitive and flag get/set, block element operations, enum/flag option listing, and layout diffs. |
+| [`blam-tag-shell`](./blam-tag-shell/) | Command-line front-end + interactive REPL. Subcommands for header metadata, directory listing / search / dependency walking, field tree inspection, get / set / flag / block edits, options enumeration, schema and value diffing, integrity checks, and replay-script export. |
 
 Each crate has its own README with API shape / command reference.
 
 ## Status
 
-- **Byte-exact roundtrip validated on 119,432 tags** across the Halo
-  3 and Halo Reach MCC tag files. Read → write → md5 compare yields
-  zero differences.
-- **Layout versions 1 – 4** all read/write. V4 is implemented from
-  format references; no V4 tags are present in the H3/Reach corpus,
-  so that path hasn't been exercised in the roundtrip yet.
+- **Byte-exact roundtrip validated across every tag in the Halo 3,
+  Halo 3: ODST, Halo Reach, Halo 4, and Halo 2: Anniversary MP MCC
+  corpora.** Read → write → md5 compare yields zero differences.
+  Locally verified on the 119,432-tag H3 + Reach subset; full-corpus
+  validation (including H4 and H2A MP) contributed by the community.
+- **Layout versions 1 – 4** all read/write and exercised in the above
+  sweep.
 
 ## Build
 

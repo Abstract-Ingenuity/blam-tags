@@ -216,6 +216,73 @@ impl TagReferenceData {
     }
 }
 
+/// Parsed form of a `ti][` api-interop chunk payload.
+///
+/// The 12-byte shape matches BCS's `s_tag_interop { descriptor,
+/// address, definition_address }`. `address` is the runtime pointer
+/// slot — BCS's writer zeroes it to `UINT_MAX` on save, so the
+/// canonical on-disk reset pattern is `{ 0, 0xFFFFFFFF, 0 }`.
+///
+/// `raw` preserves the payload verbatim so non-12-byte variants
+/// (if any exist in other games) still roundtrip byte-exactly; the
+/// three named fields are convenience accessors over the common case.
+#[derive(Debug)]
+pub struct ApiInteropData {
+    pub raw: Vec<u8>,
+}
+
+impl ApiInteropData {
+    /// Parse a `ti][` payload (header already consumed).
+    pub fn from_bytes(payload: &[u8]) -> Self {
+        Self { raw: payload.to_vec() }
+    }
+
+    /// Serialize back to a `ti][` payload (caller writes the header).
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.raw.clone()
+    }
+
+    /// Reset pattern BCS writes on save: `{ descriptor=0,
+    /// address=UINT_MAX, definition_address=0 }`. 12 bytes.
+    pub fn reset() -> Self {
+        let mut raw = Vec::with_capacity(12);
+        raw.extend_from_slice(&0u32.to_le_bytes());
+        raw.extend_from_slice(&u32::MAX.to_le_bytes());
+        raw.extend_from_slice(&0u32.to_le_bytes());
+        Self { raw }
+    }
+
+    /// `descriptor` field (u32 LE at offset 0), if the payload has the
+    /// canonical 12-byte shape.
+    pub fn descriptor(&self) -> Option<u32> {
+        self.u32_at(0)
+    }
+
+    /// `address` field (u32 LE at offset 4), if the payload has the
+    /// canonical 12-byte shape.
+    pub fn address(&self) -> Option<u32> {
+        self.u32_at(4)
+    }
+
+    /// `definition_address` field (u32 LE at offset 8), if the payload
+    /// has the canonical 12-byte shape.
+    pub fn definition_address(&self) -> Option<u32> {
+        self.u32_at(8)
+    }
+
+    fn u32_at(&self, off: usize) -> Option<u32> {
+        if self.raw.len() < 12 {
+            return None;
+        }
+        Some(u32::from_le_bytes([
+            self.raw[off],
+            self.raw[off + 1],
+            self.raw[off + 2],
+            self.raw[off + 3],
+        ]))
+    }
+}
+
 /// Parsed form of a `tgsi` string-id chunk payload. Used for both
 /// [`TagFieldType::StringId`] and [`TagFieldType::OldStringId`].
 /// Empty content represents `string_id::NONE`.
@@ -270,6 +337,7 @@ pub enum TagFieldData {
     OldStringId(StringIdData),
     TagReference(TagReferenceData),
     Data(Vec<u8>),
+    ApiInterop(ApiInteropData),
 
     // Integers.
     CharInteger(i8),
@@ -439,6 +507,14 @@ impl fmt::Display for TagFieldData {
             TagFieldData::StringId(s) | TagFieldData::OldStringId(s) => write!(f, "{}", s),
             TagFieldData::TagReference(r) => write!(f, "{}", r),
             TagFieldData::Data(d) => write!(f, "data [{} bytes]", d.len()),
+            TagFieldData::ApiInterop(i) => match (i.descriptor(), i.address(), i.definition_address()) {
+                (Some(d), Some(a), Some(da)) => write!(
+                    f,
+                    "api_interop {{ descriptor=0x{:08X}, address=0x{:08X}, definition_address=0x{:08X} }}",
+                    d, a, da,
+                ),
+                _ => write!(f, "api_interop [{} bytes]", i.raw.len()),
+            },
 
             TagFieldData::CharInteger(v) => {
                 if hex { write!(f, "0x{:02X}", *v as u8) } else { write!(f, "{}", v) }
@@ -765,7 +841,7 @@ pub(crate) fn deserialize_field(
         | TagFieldType::PageableResource => None,
 
         // Not yet modeled.
-        TagFieldType::ApiInterop | TagFieldType::VertexBuffer => None,
+        TagFieldType::VertexBuffer => None,
 
         // Strings (null-padded in raw_data).
         TagFieldType::String => Some(TagFieldData::String(
@@ -959,6 +1035,12 @@ pub(crate) fn deserialize_field(
             Some(TagSubChunkContent::Data(payload)) => Some(TagFieldData::Data(payload.clone())),
             _ => panic!("deserialize_field: Data field missing sub_chunk payload"),
         },
+        TagFieldType::ApiInterop => match sub_chunk {
+            Some(TagSubChunkContent::ApiInterop(payload)) => {
+                Some(TagFieldData::ApiInterop(ApiInteropData::from_bytes(payload)))
+            }
+            _ => panic!("deserialize_field: ApiInterop field missing sub_chunk payload"),
+        },
     }
 }
 
@@ -1147,5 +1229,6 @@ pub(crate) fn serialize_field(
         TagFieldData::OldStringId(s) => Some(TagSubChunkContent::OldStringId(s.to_bytes())),
         TagFieldData::TagReference(r) => Some(TagSubChunkContent::TagReference(r.to_bytes())),
         TagFieldData::Data(bytes) => Some(TagSubChunkContent::Data(bytes.clone())),
+        TagFieldData::ApiInterop(i) => Some(TagSubChunkContent::ApiInterop(i.to_bytes())),
     }
 }

@@ -36,8 +36,10 @@ pub struct TagFileHeader {
 }
 
 impl TagFileHeader {
-    /// Read the fixed 64-byte header. Asserts the `BLAM` signature
-    /// before returning.
+    /// Read the fixed 64-byte header. Returns an error (rather than
+    /// panicking) when the `BLAM` signature doesn't match, so callers
+    /// walking directories full of non-tag files can filter them out
+    /// cleanly.
     pub fn read<R: Seek + Read>(reader: &mut std::io::BufReader<R>) -> Result<Self, Box<dyn Error>> {
         let pad = read_u8_array(reader)?;
         let build_version = read_u32_le(reader)? as i32;
@@ -47,7 +49,13 @@ impl TagFileHeader {
         let group_version = read_u32_le(reader)?;
         let checksum = read_u32_le(reader)?;
         let signature = read_u32_le(reader)?;
-        assert!(signature == u32::from_be_bytes(*b"BLAM"));
+        if signature != u32::from_be_bytes(*b"BLAM") {
+            return Err(format!(
+                "not a tag file: expected 'BLAM' signature, got {:#010x}",
+                signature,
+            )
+            .into());
+        }
 
         Ok(Self {
             pad,
@@ -137,11 +145,23 @@ impl TagFile {
                     import_info_stream = Some(TagStream::read(chunk_signature, &mut reader)?);
                 }
 
-                _ => panic!("unhandled chunk signature: '{}' at 0x{:X}", str::from_utf8(&chunk_signature.to_be_bytes()).unwrap(), chunk_header_offset),
+                _ => {
+                    let sig_bytes = chunk_signature.to_be_bytes();
+                    let as_ascii = String::from_utf8_lossy(&sig_bytes);
+                    return Err(format!(
+                        "unhandled chunk signature '{}' at 0x{:X}",
+                        as_ascii, chunk_header_offset,
+                    ).into());
+                }
             }
         }
 
-        assert!(reader.stream_position()? == tag_file_size);
+        if reader.stream_position()? != tag_file_size {
+            return Err(format!(
+                "trailing bytes after last chunk (stream at 0x{:X}, file size 0x{:X})",
+                reader.stream_position()?, tag_file_size,
+            ).into());
+        }
 
         Ok(Self {
             header,

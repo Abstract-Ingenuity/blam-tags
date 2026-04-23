@@ -1,11 +1,37 @@
+//! `header` — print the file-level metadata (group tag, version,
+//! checksum, authoring-toolset build) without descending into the
+//! tag body. Cheap sanity check: if `header` errors, the file isn't
+//! a valid tag at all.
+
 use anyhow::{Context, Result};
-use blam_tags::TagFile;
+use serde_json::json;
 
-pub fn run(file: &str) -> Result<()> {
-    let tag = TagFile::read(file).map_err(|e| anyhow::anyhow!("failed to load tag file: {e}"))?;
-    let file_size = std::fs::metadata(file).context("failed to stat file")?.len();
+use crate::context::CliContext;
 
+pub fn run(ctx: &mut CliContext, json_output: bool) -> Result<()> {
+    let loaded = ctx.loaded("header")?;
+    let file_size = std::fs::metadata(&loaded.path).context("failed to stat file")?.len();
+    let tag = &loaded.tag;
     let group = tag.group();
+
+    let mut streams = vec!["tag!"];
+    if tag.dependency_list().is_some() { streams.push("want"); }
+    if tag.import_info().is_some() { streams.push("info"); }
+
+    if json_output {
+        let out = json!({
+            "group": group.to_string(),
+            "group_version": group.version,
+            "build": { "version": tag.header.build_version, "number": tag.header.build_number },
+            "version": tag.header.version,
+            "checksum": format!("0x{:08X}", tag.header.checksum),
+            "file_size": file_size,
+            "streams": streams,
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
+
     println!("Tag File");
     println!("  Group:         {}", group);
     println!("  Group version: {}", group.version);
@@ -13,11 +39,6 @@ pub fn run(file: &str) -> Result<()> {
     println!("  Version:       {}", tag.header.version);
     println!("  Checksum:      0x{:08X}", tag.header.checksum);
     println!("  File size:     {} bytes", file_size);
-
-    // Stream list: tag! is mandatory; want/info are optional.
-    let mut streams = vec!["tag!"];
-    if tag.dependency_list().is_some() { streams.push("want"); }
-    if tag.import_info().is_some() { streams.push("info"); }
     println!("  Streams:       {}", streams.join(", "));
 
     Ok(())

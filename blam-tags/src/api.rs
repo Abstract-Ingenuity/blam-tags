@@ -183,6 +183,19 @@ impl<'a> TagStruct<'a> {
             .map(move |i| TagField { layout, struct_data, struct_raw, field_index: i })
     }
 
+    /// Walk every field, including padding / skip / explanation /
+    /// unknown fields. Intended for layout investigation tooling
+    /// (e.g. `inspect --all`). Normal consumers should use
+    /// [`TagStruct::fields`] which filters these out.
+    pub fn fields_all(&self) -> impl Iterator<Item = TagField<'a>> + 'a {
+        let TagStruct { layout, struct_data, struct_raw } = *self;
+        let definition = &layout.struct_layouts[struct_data.struct_index as usize];
+        let start = definition.first_field_index as usize;
+        (start..)
+            .take_while(move |&i| layout.fields[i].field_type != TagFieldType::Terminator)
+            .map(move |i| TagField { layout, struct_data, struct_raw, field_index: i })
+    }
+
     /// User-addressable field names in declaration order. Mirrors
     /// [`TagStructData::field_names`] — used by the CLI's "did you
     /// mean?" path.
@@ -201,6 +214,23 @@ impl<'a> TagStruct<'a> {
             struct_raw: self.struct_raw,
             field_index,
         })
+    }
+
+    /// Walk `path` treating every `/`-separated segment as an
+    /// intermediate descent into a struct / block element / array
+    /// element — like [`TagStruct::field_path`] but with no
+    /// "terminal field lookup" step. Returns the struct at the end
+    /// of the walk.
+    ///
+    /// Use this when you want to reach a struct itself (e.g. to walk
+    /// everything underneath it), not a specific field. Paths like
+    /// `"unit/seats[2]/variants[0]"` land inside the 0th variant of
+    /// the 2nd seat.
+    pub fn descend(&self, path: &str) -> Option<TagStruct<'a>> {
+        let (struct_data, struct_raw) = crate::path::descend_from_struct(
+            self.layout, self.struct_data, self.struct_raw, path,
+        )?;
+        Some(TagStruct { layout: self.layout, struct_data, struct_raw })
     }
 
     /// Resolve a `/`-separated field path. Accepts optional
@@ -300,18 +330,19 @@ impl<'a> TagField<'a> {
     }
 
     /// Typed step-in accessors for container fields. Each returns
-    /// `None` when this field isn't that specific container shape,
-    /// and **panics** when the shape matches but the sub-chunk is
-    /// missing or the wrong variant — that's a malformed-data bug,
-    /// not a signal to swallow.
+    /// `None` either when this field isn't that specific container
+    /// shape OR when the schema says it is but the sub-chunk is
+    /// missing on this tag instance. Real-world tags ship with
+    /// null-sized `tgst` chunks whose array / block / struct fields
+    /// have no corresponding entries; callers walking many tags
+    /// shouldn't crash on that.
     pub fn as_struct(&self) -> Option<TagStruct<'a>> {
         if self.layout.fields[self.field_index].field_type != TagFieldType::Struct {
             return None;
         }
         let (struct_data, struct_raw) = self
             .struct_data
-            .nested_struct(self.layout, self.struct_raw, self.field_index)
-            .unwrap_or_else(|| panic!("struct field '{}' is missing its sub-chunk", self.name()));
+            .nested_struct(self.layout, self.struct_raw, self.field_index)?;
         Some(TagStruct { layout: self.layout, struct_data, struct_raw })
     }
 
@@ -319,13 +350,10 @@ impl<'a> TagField<'a> {
         if self.layout.fields[self.field_index].field_type != TagFieldType::Block {
             return None;
         }
-        let block_data = self
-            .sub_chunk()
-            .and_then(|c| match c {
-                TagSubChunkContent::Block(b) => Some(b),
-                _ => None,
-            })
-            .unwrap_or_else(|| panic!("block field '{}' is missing its sub-chunk", self.name()));
+        let block_data = self.sub_chunk().and_then(|c| match c {
+            TagSubChunkContent::Block(b) => Some(b),
+            _ => None,
+        })?;
         Some(TagBlock { layout: self.layout, block_data })
     }
 
@@ -334,13 +362,10 @@ impl<'a> TagField<'a> {
         if field.field_type != TagFieldType::Array {
             return None;
         }
-        let elements = self
-            .sub_chunk()
-            .and_then(|c| match c {
-                TagSubChunkContent::Array(elements) => Some(elements.as_slice()),
-                _ => None,
-            })
-            .unwrap_or_else(|| panic!("array field '{}' is missing its sub-chunk", self.name()));
+        let elements = self.sub_chunk().and_then(|c| match c {
+            TagSubChunkContent::Array(elements) => Some(elements.as_slice()),
+            _ => None,
+        })?;
         let array_layout_index = field.definition;
         let array_def = &self.layout.array_layouts[array_layout_index as usize];
         let element_size = self.layout.struct_layouts[array_def.struct_index as usize].size;
@@ -363,10 +388,7 @@ impl<'a> TagField<'a> {
             .and_then(|c| match c {
                 TagSubChunkContent::Resource(r) => Some(r),
                 _ => None,
-            })
-            .unwrap_or_else(|| {
-                panic!("pageable_resource field '{}' is missing its sub-chunk", self.name())
-            });
+            })?;
         Some(TagResource { chunk })
     }
 
@@ -415,6 +437,15 @@ impl<'a> TagField<'a> {
         let field = &self.layout.fields[self.field_index];
         let bit = find_flag_bit(self.layout, field, name)?;
         Some(TagFlag { field: *self, bit })
+    }
+
+    /// Parse a CLI-flavored string into a [`TagFieldData`] matching
+    /// this field's schema type — without mutating anything. Same
+    /// parser as [`TagFieldMut::parse_and_set`]; pull it out
+    /// separately when you want validation or preview without
+    /// committing (e.g. `set --dry-run`).
+    pub fn parse(&self, input: &str) -> Result<TagFieldData, TagSetError> {
+        parse_value(self.layout, self.field_index, input)
     }
 
     /// The sub-chunk content entry (if any) owned by this field —
@@ -701,9 +732,10 @@ impl<'a> TagFieldMut<'a> {
 
     /// CLI-flavored convenience: parse `input` against this field's
     /// schema (integer / enum variant name / group-tag / etc.) and
-    /// write it.
+    /// write it. Use [`TagField::parse`] on the immutable handle if
+    /// you only want to validate without committing.
     pub fn parse_and_set(&mut self, input: &str) -> Result<(), TagSetError> {
-        let value = parse_value(self.layout, self.field_index, input)?;
+        let value = self.as_ref().parse(input)?;
         self.set(value)
     }
 
@@ -723,18 +755,16 @@ impl<'a> TagFieldMut<'a> {
     }
 
     /// Same shape-vs-missing distinction as [`TagField::as_struct`] —
-    /// returns `None` when this isn't a struct field, panics when it
-    /// is but the sub-chunk is missing.
+    /// Returns `None` either when this isn't a struct field OR when
+    /// its sub-chunk is missing on the loaded tag.
     pub fn as_struct_mut(&mut self) -> Option<TagStructMut<'_>> {
         if self.layout.fields[self.field_index].field_type != TagFieldType::Struct {
             return None;
         }
         let field_index = self.field_index;
-        let field_name = self.layout.get_string(self.layout.fields[field_index].name_offset).unwrap_or("?");
         let (struct_data, struct_raw) = self
             .struct_data
-            .nested_struct_mut(self.layout, &mut *self.struct_raw, field_index)
-            .unwrap_or_else(|| panic!("struct field '{}' is missing its sub-chunk", field_name));
+            .nested_struct_mut(self.layout, &mut *self.struct_raw, field_index)?;
         Some(TagStructMut { layout: self.layout, struct_data, struct_raw })
     }
 
@@ -743,7 +773,6 @@ impl<'a> TagFieldMut<'a> {
             return None;
         }
         let field_index = self.field_index;
-        let field_name = self.layout.get_string(self.layout.fields[field_index].name_offset).unwrap_or("?");
         let block_data = self
             .struct_data
             .sub_chunks
@@ -752,8 +781,7 @@ impl<'a> TagFieldMut<'a> {
             .and_then(|e| match &mut e.content {
                 TagSubChunkContent::Block(b) => Some(b),
                 _ => None,
-            })
-            .unwrap_or_else(|| panic!("block field '{}' is missing its sub-chunk", field_name));
+            })?;
         Some(TagBlockMut { layout: self.layout, block_data })
     }
 
@@ -768,7 +796,6 @@ impl<'a> TagFieldMut<'a> {
         let start = field.offset as usize;
 
         let field_index = self.field_index;
-        let field_name = self.layout.get_string(field.name_offset).unwrap_or("?");
         let elements = self
             .struct_data
             .sub_chunks
@@ -777,8 +804,7 @@ impl<'a> TagFieldMut<'a> {
             .and_then(|e| match &mut e.content {
                 TagSubChunkContent::Array(elements) => Some(elements.as_mut_slice()),
                 _ => None,
-            })
-            .unwrap_or_else(|| panic!("array field '{}' is missing its sub-chunk", field_name));
+            })?;
         let end = start + elements.len() * element_size;
         let array_raw = &mut self.struct_raw[start..end];
         Some(TagArrayMut {
@@ -872,8 +898,10 @@ fn parse_value(
         | TagFieldType::Array
         | TagFieldType::PageableResource => Err(TagSetError::NotAssignable),
 
-        TagFieldType::ApiInterop | TagFieldType::VertexBuffer => {
-            Err(TagSetError::ParseError("parsing api_interop / vertex_buffer fields is not supported".into()))
+        TagFieldType::ApiInterop => Ok(TagFieldData::ApiInterop(parse_api_interop(input)?)),
+
+        TagFieldType::VertexBuffer => {
+            Err(TagSetError::ParseError("parsing vertex_buffer fields is not supported".into()))
         }
 
         _ => Err(TagSetError::ParseError(format!(
@@ -910,6 +938,44 @@ fn parse_block_index(s: &str) -> Result<i32, TagSetError> {
         return Ok(-1);
     }
     s.parse().map_err(|_| TagSetError::ParseError("expected integer or 'none'".into()))
+}
+
+/// Parse an api_interop payload.
+///
+/// - `reset` / `none` → BCS's canonical reset pattern
+///   (`{ 0, UINT_MAX, 0 }`). The usual way to scrub runtime handles
+///   out of a tag before committing it.
+/// - `0xDESCRIPTOR,0xADDRESS,0xDEFINITION_ADDRESS` → verbatim triple
+///   (each field a 32-bit integer, decimal or `0x` hex).
+fn parse_api_interop(s: &str) -> Result<crate::fields::ApiInteropData, TagSetError> {
+    let trimmed = s.trim();
+    if trimmed.eq_ignore_ascii_case("reset") || trimmed.eq_ignore_ascii_case("none") {
+        return Ok(crate::fields::ApiInteropData::reset());
+    }
+
+    let parts: Vec<&str> = trimmed.split(',').map(str::trim).collect();
+    if parts.len() != 3 {
+        return Err(TagSetError::ParseError(
+            "api_interop format: 'reset', or 'descriptor,address,definition_address' (each u32, decimal or 0x…)".into(),
+        ));
+    }
+    let one = |p: &str| -> Result<u32, TagSetError> {
+        let (radix, body) = match p.strip_prefix("0x").or_else(|| p.strip_prefix("0X")) {
+            Some(hex) => (16, hex),
+            None => (10, p),
+        };
+        u32::from_str_radix(body, radix)
+            .map_err(|_| TagSetError::ParseError("expected u32 (decimal or 0x hex)".into()))
+    };
+    let descriptor = one(parts[0])?;
+    let address = one(parts[1])?;
+    let definition_address = one(parts[2])?;
+
+    let mut raw = Vec::with_capacity(12);
+    raw.extend_from_slice(&descriptor.to_le_bytes());
+    raw.extend_from_slice(&address.to_le_bytes());
+    raw.extend_from_slice(&definition_address.to_le_bytes());
+    Ok(crate::fields::ApiInteropData { raw })
 }
 
 fn parse_tag_reference(s: &str) -> Result<TagReferenceData, TagSetError> {
@@ -1010,6 +1076,33 @@ impl<'a> TagBlockMut<'a> {
         Ok(())
     }
 
+    /// Swap elements at `i` and `j`.
+    pub fn swap(&mut self, i: usize, j: usize) -> Result<(), TagIndexError> {
+        let len = self.block_data.elements.len();
+        if i >= len {
+            return Err(TagIndexError::OutOfRange { index: i, len });
+        }
+        if j >= len {
+            return Err(TagIndexError::OutOfRange { index: j, len });
+        }
+        self.block_data.swap_at(self.layout, i, j);
+        Ok(())
+    }
+
+    /// Move the element at `from` to final position `to` (Vec::remove
+    /// + Vec::insert semantics).
+    pub fn move_to(&mut self, from: usize, to: usize) -> Result<(), TagIndexError> {
+        let len = self.block_data.elements.len();
+        if from >= len {
+            return Err(TagIndexError::OutOfRange { index: from, len });
+        }
+        if to >= len {
+            return Err(TagIndexError::OutOfRange { index: to, len });
+        }
+        self.block_data.move_at(self.layout, from, to);
+        Ok(())
+    }
+
     pub fn clear(&mut self) { self.block_data.clear(); }
 }
 
@@ -1041,6 +1134,31 @@ impl<'a> TagArrayMut<'a> {
         let struct_data = &mut self.elements[index];
         let struct_raw = &mut self.array_raw[start..start + size];
         Some(TagStructMut { layout: self.layout, struct_data, struct_raw })
+    }
+
+    /// Swap elements at `i` and `j`. Arrays are fixed-count so
+    /// reordering is the only structural edit available.
+    pub fn swap(&mut self, i: usize, j: usize) -> Result<(), TagIndexError> {
+        let len = self.elements.len();
+        if i >= len {
+            return Err(TagIndexError::OutOfRange { index: i, len });
+        }
+        if j >= len {
+            return Err(TagIndexError::OutOfRange { index: j, len });
+        }
+        if i == j {
+            return Ok(());
+        }
+        self.elements.swap(i, j);
+        let size = element_struct_size(self.layout, self.array_layout_index);
+        let (lo, hi) = if i < j { (i, j) } else { (j, i) };
+        let lo_start = lo * size;
+        let hi_start = hi * size;
+        let mut buf = vec![0u8; size];
+        buf.copy_from_slice(&self.array_raw[lo_start..lo_start + size]);
+        self.array_raw.copy_within(hi_start..hi_start + size, lo_start);
+        self.array_raw[hi_start..hi_start + size].copy_from_slice(&buf);
+        Ok(())
     }
 
     /// Walk the array's elements in order, yielding a mutable handle
