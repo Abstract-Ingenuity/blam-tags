@@ -11,84 +11,198 @@ differences.
 ## Quick start
 
 ```rust
-use blam_tags::file::TagFile;
-use blam_tags::path::lookup;
+use blam_tags::TagFile;
 
-let tag = TagFile::read("path/to/masterchief.biped")?;
+let mut tag = TagFile::read("masterchief.biped")?;
 
-// Navigate by /-separated path, read a primitive.
-let layout = &tag.tag_stream.layout.layout;
-let cursor = lookup(layout, &tag.tag_stream.data, "jump velocity").unwrap();
-let value  = cursor.parse(layout).unwrap();
-// value is a TagFieldData::Real(2.1)
+// Read a field by slash-separated path.
+let jump = tag.root().field_path("jump velocity").unwrap();
+println!("{} = {}", jump.name(), jump.value().unwrap());
+
+// Toggle a flag by name.
+tag.root_mut()
+    .field_path_mut("unit/flags").unwrap()
+    .flag_mut("has_hull").unwrap()
+    .toggle();
+
+tag.write("masterchief.biped.edited")?;
 ```
 
-Writing:
+## Common tasks
+
+### Read a field
 
 ```rust
-use blam_tags::fields::TagFieldData;
-use blam_tags::path::lookup_mut;
+let tag = TagFile::read("path/to/tag.biped")?;
+let field = tag.root().field_path("jump velocity").unwrap();
 
-let mut tag = TagFile::read("path/to/masterchief.biped")?;
-{
-    let tag_stream = &mut tag.tag_stream;
-    let layout = &tag_stream.layout.layout;
-    let mut cursor = lookup_mut(layout, &mut tag_stream.data, "jump velocity").unwrap();
-    cursor.set(layout, TagFieldData::Real(3.14));
+// Schema metadata.
+println!("{} : {}", field.name(), field.type_name());
+
+// Parsed value. Returns None for container / padding fields.
+if let Some(value) = field.value() {
+    println!("  value = {}", value);        // Display impl does the formatting.
+    println!("  hex   = {:#}", value);      // Alternate flag → hex for int variants.
 }
-tag.write("path/to/modified.biped")?;
+```
+
+### Walk all fields of the root struct
+
+```rust
+for field in tag.root().fields() {
+    println!("{}: {}", field.name(), field.type_name());
+}
+```
+
+`fields()` skips padding / explanations / terminators / unknowns. Use
+`TagStructDefinition::fields()` (see below) if you need the raw walk.
+
+### Mutate a scalar field
+
+```rust
+use blam_tags::TagFieldData;
+
+tag.root_mut()
+    .field_path_mut("jump velocity").unwrap()
+    .set(TagFieldData::Real(3.14))?;
+
+tag.write("edited.biped")?;
+```
+
+### Parse a value from a string (CLI-style)
+
+```rust
+tag.root_mut()
+    .field_path_mut("unit/default_team").unwrap()
+    .parse_and_set("red")?;   // handles enums, ints (incl. hex), reals, tag refs, etc.
+```
+
+### Toggle, set, and read flag bits by name
+
+```rust
+let mut field = tag.root_mut().field_path_mut("unit/flags").unwrap();
+
+// Per-bit operations.
+field.flag_mut("has_hull").unwrap().set(true);
+field.flag_mut("airborne").unwrap().toggle();
+
+// Enumerate all bits (names + state).
+if let Some(blam_tags::TagOptions::Flags(bits)) = field.as_ref().options() {
+    for bit in bits {
+        println!("  [{}] {}  (bit {})", if bit.is_set { "x" } else { " " }, bit.name, bit.bit);
+    }
+}
+```
+
+### Block element operations
+
+```rust
+let mut seats = tag.root_mut()
+    .field_path_mut("unit/seats").unwrap()
+    .as_block_mut().unwrap();
+
+let new_index = seats.add();             // append default-initialized element
+seats.duplicate(0)?;                     // copy element 0, placed at index 1
+seats.delete(2)?;                        // remove element 2
+seats.clear();                           // remove all
+println!("now have {} seats", seats.len());
+```
+
+### Walk all elements of a block, mutating as you go
+
+```rust
+let mut regions = tag.root_mut()
+    .field_path_mut("regions").unwrap()
+    .as_block_mut().unwrap();
+
+regions.for_each_element_mut(|mut region| {
+    if let Some(mut name) = region.field_mut("name") {
+        // …inspect, edit, whatever.
+    }
+});
+```
+
+Visitor-closure form because each yielded handle reborrows through
+`self` — Rust's borrow checker rules out simultaneous mutable
+iterators. `TagStructMut::for_each_field_mut` and
+`TagArrayMut::for_each_element_mut` follow the same shape.
+
+### Inspect the schema (definitions)
+
+The library exposes a second façade rooted at
+`tag.definitions()` for schema traversal without going through
+instance data.
+
+```rust
+let root = tag.definitions().root_struct();
+println!("root struct: {} ({} bytes)", root.name(), root.size());
+
+for field in root.fields() {
+    println!("  {} @ {} : {}", field.name(), field.offset(), field.type_name());
+    if let Some(block_def) = field.as_block() {
+        println!("    block of {} (max {})",
+            block_def.struct_definition().name(),
+            block_def.max_count());
+    }
+}
+```
+
+From an instance you can always jump to its schema — `tag_struct.definition()`,
+`tag_field.definition()`, `tag_block.definition()`, `tag_array.definition()`.
+
+### Roundtrip (read → write → compare)
+
+```rust
+use blam_tags::TagFile;
+
+let tag = TagFile::read("path/to/source.biped")?;
+tag.write("path/to/temp.biped")?;
+
+let source = std::fs::read("path/to/source.biped")?;
+let round  = std::fs::read("path/to/temp.biped")?;
+assert_eq!(md5::compute(&source), md5::compute(&round));
+```
+
+The corpus-wide sweep lives in [`examples/roundtrip.rs`](examples/roundtrip.rs).
+Run against one or more tag roots:
+
+```sh
+cargo run --release -p blam-tags --example roundtrip -- \
+    /path/to/halo3_mcc/tags /path/to/haloreach_mcc/tags
 ```
 
 ## Architecture
 
-Tag files are schema-driven. Every tag carries its own layout
-description (`blay` → `tgly` chunks), so the parser is **generic** —
-nothing hardcoded per tag type. The library's job is to (a) read the
-embedded schema, (b) read the payload bytes into a tree that mirrors
-the schema, and (c) write that tree back byte-exact.
+Tag files are schema-driven — every tag carries its own layout
+description (`blay` chunk), so the parser is **generic**: nothing is
+hard-coded per tag type. The library's job is to (a) read the embedded
+schema, (b) read the payload bytes into a tree that mirrors the
+schema, and (c) write that tree back byte-exact.
 
-The parser keeps data separate from schema:
+Two façades sit on top of the raw storage types:
 
-- **Layout** ([`layout`]) — the schema: struct definitions, field
-  definitions, field-type registry, block/resource/interop/array
-  definitions, string pool. Immutable at runtime.
-- **Data tree** ([`data`]) — per-tag instance data. One
-  `TagBlockData` owns the raw bytes of *all* its elements in a single
-  buffer; nested structs / inline arrays are offset regions inside
-  that buffer; nested blocks open fresh buffers. Matches the on-disk
-  `tgbl` layout 1:1.
-- **Path navigation** ([`path`]) — `/`-separated path strings with
-  `[N]` element indices and optional `Type:` filters. Returns a
-  `FieldCursor` (or `FieldCursorMut`) bundling a raw-data slice, the
-  containing `TagStruct`, and the final field's index.
-- **Field values** ([`fields`]) — `TagFieldData` enum of parsed
-  per-field values. Covers primitives, enums+flags (with name
-  resolution), math composites (`RealPoint3d` etc.), colors, bounds,
-  strings, tag references, and data blobs.
+- **[`api`]** — data-side façade. `TagStruct`, `TagField`, `TagBlock`,
+  `TagArray`, `TagFlag`, `TagResource` and their mutable counterparts.
+  Reachable from `TagFile`.
+- **[`definition`]** — schema-side façade. `TagStructDefinition`,
+  `TagFieldDefinition`, `TagBlockDefinition`, `TagArrayDefinition`,
+  `TagResourceDefinition`. Reachable from `TagFile::definitions()`.
 
-## Module tour
-
-| Module | Purpose |
-|---|---|
-| [`io`] | Primitive fixed-width integer readers/writers + the 12-byte `TagChunkHeader` helpers. |
-| [`math`] | Bounds, colors, vectors, points, euler angles — used by field values. |
-| [`fields`] | `TagFieldType` dispatch enum; `TagFieldData` per-field value enum; `deserialize_field` / `serialize_field`; `find_enum_option_index`, `find_flag_bit`, `format_group_tag`, `parse_group_tag`. |
-| [`layout`] | `TagLayout` (the schema) + every definition record (`TagStructDefinition`, `TagFieldDefinition`, etc.). V1 (flat `agro`) and V2 / V3 / V4 (`tgly`-wrapped) all parse into the same in-memory shape. |
-| [`data`] | `TagStruct` (schema-index + sub-chunks), `TagBlockData` (owns `raw_data` for its elements), `TagSubChunkContent`, `TagResourceChunk`. Methods: `parse_field` / `set_field`, `new_default`, block operations (`add_element` / `insert_at` / `duplicate_at` / `delete_at` / `clear`). |
-| [`path`] | `lookup` / `lookup_mut` → `FieldCursor` / `FieldCursorMut`. Immutable descent helpers on `FieldCursor`. |
-| [`stream`] | `TagStream` for `tag!` / `want` / `info` chunks (the three top-level stream types in a tag file). |
-| [`file`] | `TagFileHeader` (64-byte preamble with `BLAM` signature) and `TagFile` (fully parsed tag file). |
+Everything the user-facing code should need is one or the other.
+Lower-level modules (`data`, `path`, `stream`, `io`, `layout::TagLayout`)
+are available but no user code in this workspace (CLI, examples) reaches
+into them.
 
 ## Field paths
 
 Paths match the shape the CLI uses:
 
 ```
-"jump velocity"                       — root-level field
-"unit/flags"                          — inline struct → field
-"unit/seats[0]/flags"                 — struct → block element → field
+"jump velocity"                      — root-level field
+"unit/flags"                         — inline struct → field
+"unit/seats[0]/flags"                — struct → block element → field
 "regions[2]/permutations[0]/name"    — nested block elements
-"Block:regions[0]/name"               — with optional Type: filter
+"Block:regions[0]/name"              — with optional Type: filter
 ```
 
 Block and array element indices default to `0` on descent if omitted.
@@ -96,30 +210,21 @@ Field names are case-sensitive; `Type:` filters are case-insensitive.
 
 ## Version coverage
 
-| Format | Read | Write | Notes |
-|---|---|---|---|
-| V1 layouts (flat `agro` records) | ✓ | ✓ | Reconstructs `stv2` + `blv2` from paired aggregate records on write. |
-| V2 layouts (`tgly` with `stv2`) | ✓ | ✓ | Main Halo 3 / Reach format. |
-| V3 layouts (adds `]==[` interop) | ✓ | ✓ | Main Halo 3 / Reach format. |
-| V4 layouts (`stv4` with per-struct version) | ✓ | ✓ | Not present in the H3/Reach corpus; implemented for forward compatibility with later MCC games. |
+| Format                                         | Read | Write | Notes |
+|------------------------------------------------|------|-------|-------|
+| V1 layouts (flat `agro` records)               | ✓    | ✓     | Reconstructs `stv2` + `blv2` from paired aggregate records on write. |
+| V2 layouts (`tgly` with `stv2`)                | ✓    | ✓     | Main Halo 3 / Reach format. |
+| V3 layouts (adds `]==[` interop)               | ✓    | ✓     | Main Halo 3 / Reach format. |
+| V4 layouts (`stv4` with per-struct version)    | ✓    | ✓     | Not present in the H3/Reach corpus; implemented for forward compatibility with later MCC games. |
 
-Pageable-resource shapes handled: `tg\0c` (null), `tgrc` (exploded with
-inner `tgdt` + nested struct), `tgxc` (xsync, opaque payload).
+Pageable-resource shapes handled: `tg\0c` (null), `tgrc` (exploded
+with inner `tgdt` + nested struct), `tgxc` (xsync, opaque payload).
 ApiInterop and VertexBuffer fields are preserved as raw bytes through
 the roundtrip but not yet parsed into typed values.
 
-## Roundtrip example
+## What's missing
 
-The `examples/roundtrip.rs` sweep walks one or more tag root
-directories, reads each tag, writes it to a temp file via
-`TagFile::write`, and md5-compares source vs temp. Panics on the first
-mismatch — used to gate read/write changes.
-
-```sh
-# One or more roots; --exclude (or -x) can be repeated to skip
-# known-broken tags in a corpus.
-cargo run --release -p blam-tags --example roundtrip -- \
-    /path/to/halo3_mcc/tags \
-    /path/to/haloreach_mcc/tags \
-    --exclude /path/to/halo3_mcc/tags/some/broken.tag
-```
+See [`../NOTES.md`](../NOTES.md) for the open research items —
+creating/removing optional streams, constructing a `TagFile` from
+scratch, and header checksum recomputation. None affect the "edit an
+existing tag" path.

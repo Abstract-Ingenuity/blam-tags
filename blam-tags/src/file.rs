@@ -87,13 +87,16 @@ impl TagFileHeader {
 #[derive(Debug)]
 pub struct TagFile {
     pub header: TagFileHeader,
-    /// The `tag!` stream — carries the tag's main payload.
-    pub tag_stream: TagStream,
+    /// The `tag!` stream — carries the tag's main payload. Access
+    /// the root via [`TagFile::root`] / [`TagFile::root_mut`].
+    pub(crate) tag_stream: TagStream,
     /// The optional `want` stream — lists tag dependencies resolved at
-    /// build time. Present on most but not all tags.
-    pub dependency_list_stream: Option<TagStream>,
-    /// The optional `info` stream — import/source metadata.
-    pub import_info_stream: Option<TagStream>,
+    /// build time. Access via [`TagFile::dependency_list`] /
+    /// [`TagFile::dependency_list_mut`].
+    pub(crate) dependency_list_stream: Option<TagStream>,
+    /// The optional `info` stream — import / source metadata. Access
+    /// via [`TagFile::import_info`] / [`TagFile::import_info_mut`].
+    pub(crate) import_info_stream: Option<TagStream>,
 }
 
 impl TagFile {

@@ -46,16 +46,24 @@ Full command reference in [`blam-tag-shell/README.md`](./blam-tag-shell/README.m
 ## Use the library
 
 ```rust
-use blam_tags::file::TagFile;
-use blam_tags::path::lookup;
+use blam_tags::TagFile;
 
-let tag = TagFile::read("path/to/masterchief.biped")?;
-let layout = &tag.tag_stream.layout.layout;
-let cursor = lookup(layout, &tag.tag_stream.data, "jump velocity").unwrap();
-let value  = cursor.parse(layout).unwrap();
+let mut tag = TagFile::read("path/to/masterchief.biped")?;
+
+// Read a field by slash-separated path.
+let jump = tag.root().field_path("jump velocity").unwrap();
+println!("{}: {} = {}", "jump velocity", jump.type_name(), jump.value().unwrap());
+
+// Toggle a flag and write the edit back to a new file.
+tag.root_mut()
+    .field_path_mut("unit/flags").unwrap()
+    .flag_mut("has_hull").unwrap()
+    .toggle();
+
+tag.write("path/to/edited.biped")?;
 ```
 
-Full API tour in [`blam-tags/README.md`](./blam-tags/README.md).
+Full API tour with more examples in [`blam-tags/README.md`](./blam-tags/README.md).
 
 ## Layout
 

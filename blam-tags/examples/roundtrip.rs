@@ -19,7 +19,7 @@
 use std::error::Error;
 use std::path::{Path, PathBuf};
 
-use blam_tags::file::TagFile;
+use blam_tags::TagFile;
 
 fn collect_tag_paths<P: AsRef<Path>>(dir: P) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let mut paths = vec![];

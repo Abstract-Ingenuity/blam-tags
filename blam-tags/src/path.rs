@@ -16,98 +16,50 @@
 //! - `[index]` — block / array element index. Ignored on the final
 //!   segment (the caller decides what to do with it).
 //!
-//! Lookups return a [`FieldCursor`] / [`FieldCursorMut`] bundling the
+//! Lookups return a [`TagFieldCursor`] / [`TagFieldCursorMut`] bundling the
 //! enclosing block's `raw_data` slice, the containing
-//! [`crate::data::TagStruct`], and the final field's index. Read
-//! primitives via [`FieldCursor::parse`]; write via
-//! [`FieldCursorMut::set`].
+//! [`crate::data::TagStructData`], and the final field's index. Read
+//! primitives via [`TagFieldCursor::parse`]; write via
+//! [`TagFieldCursorMut::set`].
 
-use crate::data::{TagBlockData, TagStruct, TagSubChunkContent};
-use crate::fields::{deserialize_field, serialize_field, TagFieldData, TagFieldType};
+use crate::data::{TagBlockData, TagStructData, TagSubChunkContent};
+use crate::fields::TagFieldType;
 use crate::layout::TagLayout;
 
 /// Immutable cursor at a resolved field. `struct_raw` is the slice
 /// from the enclosing block's `raw_data` covering exactly the
 /// containing struct's bytes; `field_index` indexes into
 /// `layout.fields`.
-pub struct FieldCursor<'a> {
+pub(crate) struct TagFieldCursor<'a> {
     pub struct_raw: &'a [u8],
-    pub struct_data: &'a TagStruct,
+    pub struct_data: &'a TagStructData,
     pub field_index: usize,
 }
 
-impl<'a> FieldCursor<'a> {
-    /// Parse the field's value. See [`crate::data::TagStruct::parse_field`].
-    pub fn parse(&self, layout: &TagLayout) -> Option<TagFieldData> {
-        let field = &layout.fields[self.field_index];
-        let sub_chunk = self
-            .struct_data
-            .sub_chunks
-            .iter()
-            .find(|entry| entry.field_index == Some(self.field_index as u32))
-            .map(|entry| &entry.content);
-        deserialize_field(layout, field, self.struct_raw, sub_chunk)
-    }
-}
-
-/// Mutable cursor. Same layout as [`FieldCursor`] but with mutable
-/// references, so [`FieldCursorMut::set`] can write to `struct_raw`
-/// and swap sub-chunk contents in `struct_data`.
-pub struct FieldCursorMut<'a> {
+/// Mutable cursor. Same shape as [`TagFieldCursor`] but with mutable
+/// references, so the façade's write-side handles (`TagStructMut`,
+/// `TagFieldMut`, …) can split-borrow into it to mutate in place.
+pub(crate) struct TagFieldCursorMut<'a> {
     pub struct_raw: &'a mut [u8],
-    pub struct_data: &'a mut TagStruct,
+    pub struct_data: &'a mut TagStructData,
     pub field_index: usize,
 }
 
-impl<'a> FieldCursorMut<'a> {
-    /// Parse the field's current value. Same as
-    /// [`FieldCursor::parse`] — provided on the mutable cursor so
-    /// read-modify-write flows (e.g. flag toggling) don't need to
-    /// re-resolve the path.
-    pub fn parse(&self, layout: &TagLayout) -> Option<TagFieldData> {
-        let field = &layout.fields[self.field_index];
-        let sub_chunk = self
-            .struct_data
-            .sub_chunks
-            .iter()
-            .find(|entry| entry.field_index == Some(self.field_index as u32))
-            .map(|entry| &entry.content);
-        deserialize_field(layout, field, self.struct_raw, sub_chunk)
-    }
-
-    /// Write `value` back to this field. Primitive values mutate
-    /// `struct_raw`; sub-chunk leaves swap the matching entry's
-    /// content. See [`crate::data::TagStruct::set_field`].
-    pub fn set(&mut self, layout: &TagLayout, value: TagFieldData) {
-        let field = &layout.fields[self.field_index];
-        if let Some(new_content) = serialize_field(field, &value, self.struct_raw) {
-            let entry = self
-                .struct_data
-                .sub_chunks
-                .iter_mut()
-                .find(|entry| entry.field_index == Some(self.field_index as u32))
-                .expect("FieldCursorMut::set: sub-chunk entry missing");
-            entry.content = new_content;
-        }
-    }
-}
-
-/// Resolve `path` against `root_block` (typically
-/// `tag.tag_stream.data`) and return a [`FieldCursor`] at the final
-/// field. Returns `None` if any segment fails to resolve.
-pub fn lookup<'a>(
+/// Resolve `path` against a starting struct + raw slice and return a
+/// [`TagFieldCursor`] at the final field. Used by the façade's
+/// [`crate::api::TagStruct::field_path`]; callers at the tag root
+/// pass `tag.tag_stream.data.elements[0]` and `element_raw(0)`.
+pub(crate) fn lookup_from_struct<'a>(
     layout: &'a TagLayout,
-    root_block: &'a TagBlockData,
+    start_struct: &'a TagStructData,
+    start_raw: &'a [u8],
     path: &str,
-) -> Option<FieldCursor<'a>> {
+) -> Option<TagFieldCursor<'a>> {
     let segments: Vec<&str> = path.split('/').collect();
     let (final_segment, preceding) = segments.split_last()?;
 
-    let root_element = root_block.elements.first()?;
-    let root_struct_index = root_element.struct_index as usize;
-    let root_size = layout.struct_definitions[root_struct_index].size;
-    let mut current_raw: &[u8] = &root_block.raw_data[0..root_size];
-    let mut current_struct: &TagStruct = root_element;
+    let mut current_raw: &[u8] = start_raw;
+    let mut current_struct: &TagStructData = start_struct;
 
     for segment in preceding {
         let (type_filter, name, index) = parse_segment(segment);
@@ -116,23 +68,23 @@ pub fn lookup<'a>(
 
         match field.field_type {
             TagFieldType::Struct => {
-                let nested_def = &layout.struct_definitions[field.definition as usize];
+                let nested_def = &layout.struct_layouts[field.definition as usize];
                 let offset = field.offset as usize;
                 current_raw = &current_raw[offset..offset + nested_def.size];
                 current_struct = descend_struct(current_struct, field_index)?;
             }
             TagFieldType::Block => {
                 let block = descend_block_data(current_struct, field_index)?;
-                let block_def = &layout.block_definitions[field.definition as usize];
-                let element_def = &layout.struct_definitions[block_def.struct_index as usize];
+                let block_def = &layout.block_layouts[field.definition as usize];
+                let element_def = &layout.struct_layouts[block_def.struct_index as usize];
                 let element_index = index.unwrap_or(0) as usize;
                 let start = element_index * element_def.size;
                 current_raw = &block.raw_data[start..start + element_def.size];
                 current_struct = block.elements.get(element_index)?;
             }
             TagFieldType::Array => {
-                let array_def = &layout.array_definitions[field.definition as usize];
-                let element_def = &layout.struct_definitions[array_def.struct_index as usize];
+                let array_def = &layout.array_layouts[field.definition as usize];
+                let element_def = &layout.struct_layouts[array_def.struct_index as usize];
                 let element_index = index.unwrap_or(0) as usize;
                 let start = field.offset as usize + element_index * element_def.size;
                 current_raw = &current_raw[start..start + element_def.size];
@@ -145,32 +97,28 @@ pub fn lookup<'a>(
 
     let (type_filter, name, _index) = parse_segment(final_segment);
     let field_index = find_field_in_struct(layout, current_struct, name, type_filter)?;
-    Some(FieldCursor {
+    Some(TagFieldCursor {
         struct_raw: current_raw,
         struct_data: current_struct,
         field_index,
     })
 }
 
-/// Mutable counterpart to [`lookup`]. Descends through disjoint
-/// field splits to maintain simultaneous `&mut` access to the
-/// enclosing block's `raw_data` slice and the containing `TagStruct`.
-pub fn lookup_mut<'a>(
+/// Mutable counterpart to [`lookup_from_struct`]. Descends through
+/// disjoint field splits to maintain simultaneous `&mut` access to
+/// the enclosing block's `raw_data` slice and the containing
+/// `TagStructData`.
+pub(crate) fn lookup_mut_from_struct<'a>(
     layout: &'a TagLayout,
-    root_block: &'a mut TagBlockData,
+    start_struct: &'a mut TagStructData,
+    start_raw: &'a mut [u8],
     path: &str,
-) -> Option<FieldCursorMut<'a>> {
+) -> Option<TagFieldCursorMut<'a>> {
     let segments: Vec<&str> = path.split('/').collect();
     let (final_segment, preceding) = segments.split_last()?;
 
-    let root_struct_index = root_block.elements.first()?.struct_index as usize;
-    let root_size = layout.struct_definitions[root_struct_index].size;
-
-    let (mut current_raw, mut current_struct): (&mut [u8], &mut TagStruct) = {
-        let raw = &mut root_block.raw_data[0..root_size];
-        let s = root_block.elements.get_mut(0)?;
-        (raw, s)
-    };
+    let mut current_raw: &mut [u8] = start_raw;
+    let mut current_struct: &mut TagStructData = start_struct;
 
     for segment in preceding {
         let (type_filter, name, index) = parse_segment(segment);
@@ -179,7 +127,7 @@ pub fn lookup_mut<'a>(
 
         match field.field_type {
             TagFieldType::Struct => {
-                let nested_def = &layout.struct_definitions[field.definition as usize];
+                let nested_def = &layout.struct_layouts[field.definition as usize];
                 let offset = field.offset as usize;
                 let size = nested_def.size;
                 let new_raw = &mut current_raw[offset..offset + size];
@@ -189,8 +137,8 @@ pub fn lookup_mut<'a>(
             }
             TagFieldType::Block => {
                 let block = descend_block_data_mut(current_struct, field_index)?;
-                let block_def = &layout.block_definitions[field.definition as usize];
-                let element_def = &layout.struct_definitions[block_def.struct_index as usize];
+                let block_def = &layout.block_layouts[field.definition as usize];
+                let element_def = &layout.struct_layouts[block_def.struct_index as usize];
                 let element_index = index.unwrap_or(0) as usize;
                 let element_size = element_def.size;
                 let start = element_index * element_size;
@@ -201,8 +149,8 @@ pub fn lookup_mut<'a>(
                 current_struct = new_struct;
             }
             TagFieldType::Array => {
-                let array_def = &layout.array_definitions[field.definition as usize];
-                let element_def = &layout.struct_definitions[array_def.struct_index as usize];
+                let array_def = &layout.array_layouts[field.definition as usize];
+                let element_def = &layout.struct_layouts[array_def.struct_index as usize];
                 let element_index = index.unwrap_or(0) as usize;
                 let offset = field.offset as usize + element_index * element_def.size;
                 let size = element_def.size;
@@ -218,7 +166,7 @@ pub fn lookup_mut<'a>(
 
     let (type_filter, name, _index) = parse_segment(final_segment);
     let field_index = find_field_in_struct(layout, current_struct, name, type_filter)?;
-    Some(FieldCursorMut {
+    Some(TagFieldCursorMut {
         struct_raw: current_raw,
         struct_data: current_struct,
         field_index,
@@ -249,7 +197,7 @@ fn parse_segment(segment: &str) -> (Option<&str>, &str, Option<u32>) {
 
 fn find_field_in_struct(
     layout: &TagLayout,
-    struct_data: &TagStruct,
+    struct_data: &TagStructData,
     name: &str,
     type_filter: Option<&str>,
 ) -> Option<usize> {
@@ -260,8 +208,8 @@ fn find_field_in_struct(
 
     // Filtered walk: accept the first name match whose field-type
     // name matches the filter case-insensitively.
-    let struct_definition = &layout.struct_definitions[struct_data.struct_index as usize];
-    let mut field_index = struct_definition.first_field_index as usize;
+    let struct_layout = &layout.struct_layouts[struct_data.struct_index as usize];
+    let mut field_index = struct_layout.first_field_index as usize;
     let filter = type_filter.unwrap();
 
     loop {
@@ -280,7 +228,7 @@ fn find_field_in_struct(
     }
 }
 
-fn descend_struct(struct_data: &TagStruct, field_index: usize) -> Option<&TagStruct> {
+fn descend_struct(struct_data: &TagStructData, field_index: usize) -> Option<&TagStructData> {
     let entry = struct_data
         .sub_chunks
         .iter()
@@ -291,7 +239,7 @@ fn descend_struct(struct_data: &TagStruct, field_index: usize) -> Option<&TagStr
     }
 }
 
-fn descend_struct_mut(struct_data: &mut TagStruct, field_index: usize) -> Option<&mut TagStruct> {
+fn descend_struct_mut(struct_data: &mut TagStructData, field_index: usize) -> Option<&mut TagStructData> {
     let entry = struct_data
         .sub_chunks
         .iter_mut()
@@ -302,7 +250,7 @@ fn descend_struct_mut(struct_data: &mut TagStruct, field_index: usize) -> Option
     }
 }
 
-fn descend_block_data(struct_data: &TagStruct, field_index: usize) -> Option<&TagBlockData> {
+fn descend_block_data(struct_data: &TagStructData, field_index: usize) -> Option<&TagBlockData> {
     let entry = struct_data
         .sub_chunks
         .iter()
@@ -314,7 +262,7 @@ fn descend_block_data(struct_data: &TagStruct, field_index: usize) -> Option<&Ta
 }
 
 fn descend_block_data_mut(
-    struct_data: &mut TagStruct,
+    struct_data: &mut TagStructData,
     field_index: usize,
 ) -> Option<&mut TagBlockData> {
     let entry = struct_data
@@ -327,7 +275,7 @@ fn descend_block_data_mut(
     }
 }
 
-fn descend_array<'a>(struct_data: &'a TagStruct, field_index: usize) -> Option<&'a [TagStruct]> {
+fn descend_array<'a>(struct_data: &'a TagStructData, field_index: usize) -> Option<&'a [TagStructData]> {
     let entry = struct_data
         .sub_chunks
         .iter()
@@ -339,9 +287,9 @@ fn descend_array<'a>(struct_data: &'a TagStruct, field_index: usize) -> Option<&
 }
 
 fn descend_array_mut<'a>(
-    struct_data: &'a mut TagStruct,
+    struct_data: &'a mut TagStructData,
     field_index: usize,
-) -> Option<&'a mut [TagStruct]> {
+) -> Option<&'a mut [TagStructData]> {
     let entry = struct_data
         .sub_chunks
         .iter_mut()

@@ -12,13 +12,15 @@
 //! stripped of their outer chunk header, so the parse functions here
 //! operate on payload bytes rather than readers.
 
+use std::fmt;
+
 use crate::data::TagSubChunkContent;
-use crate::layout::{TagFieldDefinition, TagLayout};
+use crate::layout::{TagFieldLayout, TagLayout};
 use crate::math;
 
 /// Resolved type of a layout field.
 ///
-/// Computed once per [`crate::layout::TagFieldDefinition`] during
+/// Computed once per [`crate::layout::TagFieldLayout`] during
 /// [`crate::layout::TagLayout::read`] by [`TagFieldType::from_name`], so
 /// the hot read/write paths can dispatch on an enum instead of comparing
 /// type-name strings on every field.
@@ -26,7 +28,7 @@ use crate::math;
 /// Variant names mirror the Halo type-name strings (e.g. `"real point 3d"
 /// → RealPoint3d`). `Unknown` is the fallback for any unrecognized name
 /// and also the initial value before resolution.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TagFieldType {
     Unknown,
     String,
@@ -396,6 +398,136 @@ impl TagFieldData {
 }
 
 //================================================================================
+// Display
+//================================================================================
+
+/// Render a `tgrf` payload as `"GROUP:path"`, or `"NONE"` for a null
+/// reference.
+impl fmt::Display for TagReferenceData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.group_tag_and_name {
+            None => f.write_str("NONE"),
+            Some((tag, path)) => write!(f, "{}:{}", format_group_tag(*tag), path),
+        }
+    }
+}
+
+/// Render a `tgsi` payload as the quoted string `"name"`, or `"NONE"`
+/// for an empty (sentinel) string-id.
+impl fmt::Display for StringIdData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.string.is_empty() {
+            f.write_str("NONE")
+        } else {
+            write!(f, "\"{}\"", self.string)
+        }
+    }
+}
+
+/// Default rendering of a field value. The `{:#}` alternate flag
+/// switches the four plain integer variants (`CharInteger`,
+/// `ShortInteger`, `LongInteger`, `Int64Integer`) to fixed-width hex
+/// (`0xNN` / `0xNNNN` / `0xNNNNNNNN` / `0xNNNNNNNNNNNNNNNN`).
+/// Block-flags, colors, and block-index sentinels always render in
+/// their canonical form regardless of the flag.
+impl fmt::Display for TagFieldData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let hex = f.alternate();
+        match self {
+            TagFieldData::String(s) | TagFieldData::LongString(s) => write!(f, "\"{}\"", s),
+
+            TagFieldData::StringId(s) | TagFieldData::OldStringId(s) => write!(f, "{}", s),
+            TagFieldData::TagReference(r) => write!(f, "{}", r),
+            TagFieldData::Data(d) => write!(f, "data [{} bytes]", d.len()),
+
+            TagFieldData::CharInteger(v) => {
+                if hex { write!(f, "0x{:02X}", *v as u8) } else { write!(f, "{}", v) }
+            }
+            TagFieldData::ShortInteger(v) => {
+                if hex { write!(f, "0x{:04X}", *v as u16) } else { write!(f, "{}", v) }
+            }
+            TagFieldData::LongInteger(v) => {
+                if hex { write!(f, "0x{:08X}", *v as u32) } else { write!(f, "{}", v) }
+            }
+            TagFieldData::Int64Integer(v) => {
+                if hex { write!(f, "0x{:016X}", *v as u64) } else { write!(f, "{}", v) }
+            }
+            TagFieldData::Tag(v) => f.write_str(&format_group_tag(*v)),
+
+            TagFieldData::CharEnum { value, name } => write_enum(f, *value as i64, name.as_deref()),
+            TagFieldData::ShortEnum { value, name } => write_enum(f, *value as i64, name.as_deref()),
+            TagFieldData::LongEnum { value, name } => write_enum(f, *value as i64, name.as_deref()),
+
+            TagFieldData::ByteFlags { value, names } => write_flags(f, *value as u64, names, 2),
+            TagFieldData::WordFlags { value, names } => write_flags(f, *value as u64, names, 4),
+            TagFieldData::LongFlags { value, names } => write_flags(f, *value as u32 as u64, names, 8),
+
+            TagFieldData::ByteBlockFlags(v) => write!(f, "0x{:02X}", v),
+            TagFieldData::WordBlockFlags(v) => write!(f, "0x{:04X}", v),
+            TagFieldData::LongBlockFlags(v) => write!(f, "0x{:08X}", *v as u32),
+
+            TagFieldData::CharBlockIndex(v) | TagFieldData::CustomCharBlockIndex(v) => write_block_index(f, *v as i64),
+            TagFieldData::ShortBlockIndex(v) | TagFieldData::CustomShortBlockIndex(v) => write_block_index(f, *v as i64),
+            TagFieldData::LongBlockIndex(v) | TagFieldData::CustomLongBlockIndex(v) => write_block_index(f, *v as i64),
+
+            TagFieldData::Angle(v) => write!(f, "{:.4} rad ({:.2} deg)", v, v.to_degrees()),
+            TagFieldData::Real(v) | TagFieldData::RealSlider(v) | TagFieldData::RealFraction(v) => write!(f, "{}", v),
+
+            TagFieldData::Point2d(p) => write!(f, "{}, {}", p.x, p.y),
+            TagFieldData::Rectangle2d(r) => write!(f, "{}, {}, {}, {}", r.top, r.left, r.bottom, r.right),
+            TagFieldData::RealPoint2d(p) => write!(f, "x={}, y={}", p.x, p.y),
+            TagFieldData::RealPoint3d(p) => write!(f, "x={}, y={}, z={}", p.x, p.y, p.z),
+            TagFieldData::RealVector2d(v) => write!(f, "i={}, j={}", v.i, v.j),
+            TagFieldData::RealVector3d(v) => write!(f, "i={}, j={}, k={}", v.i, v.j, v.k),
+            TagFieldData::RealQuaternion(q) => write!(f, "i={}, j={}, k={}, w={}", q.i, q.j, q.k, q.w),
+            TagFieldData::RealEulerAngles2d(e) => write!(f, "yaw={}, pitch={}", e.yaw, e.pitch),
+            TagFieldData::RealEulerAngles3d(e) => write!(f, "yaw={}, pitch={}, roll={}", e.yaw, e.pitch, e.roll),
+            TagFieldData::RealPlane2d(p) => write!(f, "i={}, j={}, d={}", p.i, p.j, p.d),
+            TagFieldData::RealPlane3d(p) => write!(f, "i={}, j={}, k={}, d={}", p.i, p.j, p.k, p.d),
+
+            TagFieldData::RgbColor(c) => write!(f, "0x{:08X}", c.0),
+            TagFieldData::ArgbColor(c) => write!(f, "0x{:08X}", c.0),
+            TagFieldData::RealRgbColor(c) => write!(f, "r={}, g={}, b={}", c.red, c.green, c.blue),
+            TagFieldData::RealArgbColor(c) => write!(f, "a={}, r={}, g={}, b={}", c.alpha, c.red, c.green, c.blue),
+            TagFieldData::RealHsvColor(c) => write!(f, "h={}, s={}, v={}", c.hue, c.saturation, c.value),
+            TagFieldData::RealAhsvColor(c) => write!(f, "a={}, h={}, s={}, v={}", c.alpha, c.hue, c.saturation, c.value),
+
+            TagFieldData::ShortIntegerBounds(b) => write!(f, "{}..{}", b.lower, b.upper),
+            TagFieldData::AngleBounds(b) | TagFieldData::RealBounds(b) | TagFieldData::FractionBounds(b) => {
+                write!(f, "{}..{}", b.lower, b.upper)
+            }
+
+            TagFieldData::Custom(d) => write!(f, "custom [{} bytes]", d.len()),
+        }
+    }
+}
+
+fn write_enum(f: &mut fmt::Formatter<'_>, value: i64, name: Option<&str>) -> fmt::Result {
+    match name {
+        Some(n) => write!(f, "{} ({})", value, n),
+        None => write!(f, "{}", value),
+    }
+}
+
+fn write_flags(
+    f: &mut fmt::Formatter<'_>,
+    value: u64,
+    names: &[(u32, String)],
+    hex_width: usize,
+) -> fmt::Result {
+    if names.is_empty() {
+        write!(f, "0x{:0width$X} (none set)", value, width = hex_width)
+    } else {
+        let joined = names.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>().join(", ");
+        write!(f, "0x{:0width$X} [{}]", value, joined, width = hex_width)
+    }
+}
+
+fn write_block_index(f: &mut fmt::Formatter<'_>, value: i64) -> fmt::Result {
+    if value == -1 { f.write_str("NONE") } else { write!(f, "{}", value) }
+}
+
+//================================================================================
 // Raw-data read/write helpers (LE).
 //================================================================================
 
@@ -466,7 +598,7 @@ fn encode_null_padded_string(s: &str, dest: &mut [u8]) {
 /// Resolve an enum value to its variant name via the layout's
 /// `string_lists[field.definition]`. Returns `None` if `value` is out
 /// of range or the string list / offset is missing.
-fn resolve_enum_name(layout: &TagLayout, field: &TagFieldDefinition, value: i64) -> Option<String> {
+fn resolve_enum_name(layout: &TagLayout, field: &TagFieldLayout, value: i64) -> Option<String> {
     let string_list = layout.string_lists.get(field.definition as usize)?;
     if value < 0 || (value as u32) >= string_list.count {
         return None;
@@ -481,7 +613,7 @@ fn resolve_enum_name(layout: &TagLayout, field: &TagFieldDefinition, value: i64)
 /// Returns `None` if the field has no string list or no bit with that
 /// name exists. Used by the `flag` CLI command to map a user-supplied
 /// flag name to the bit it should set/clear.
-pub fn find_flag_bit(layout: &TagLayout, field: &TagFieldDefinition, name: &str) -> Option<u32> {
+pub(crate) fn find_flag_bit(layout: &TagLayout, field: &TagFieldLayout, name: &str) -> Option<u32> {
     let string_list = layout.string_lists.get(field.definition as usize)?;
     for bit in 0..string_list.count {
         let offset_index = (string_list.first + bit) as usize;
@@ -497,9 +629,9 @@ pub fn find_flag_bit(layout: &TagLayout, field: &TagFieldDefinition, name: &str)
 /// string list. Case-insensitive. Returns `None` if the field has
 /// no string list or no matching option. Companion to
 /// [`find_flag_bit`].
-pub fn find_enum_option_index(
+pub(crate) fn find_enum_option_index(
     layout: &TagLayout,
-    field: &TagFieldDefinition,
+    field: &TagFieldLayout,
     name: &str,
 ) -> Option<u32> {
     let string_list = layout.string_lists.get(field.definition as usize)?;
@@ -530,7 +662,7 @@ pub fn format_group_tag(tag: u32) -> String {
 /// `"mo"`) into the BE-packed `u32` form used on disk. Short tags
 /// are right-padded with spaces to 4 bytes. Returns `None` if the
 /// input is longer than 4 bytes. Inverse of [`format_group_tag`].
-pub fn parse_group_tag(s: &str) -> Option<u32> {
+pub(crate) fn parse_group_tag(s: &str) -> Option<u32> {
     let bytes = s.as_bytes();
     if bytes.len() > 4 {
         return None;
@@ -544,10 +676,10 @@ pub fn parse_group_tag(s: &str) -> Option<u32> {
 /// `field.definition` into `layout.string_lists`). Yields `""` for
 /// empty / missing entries. Returns an empty iterator for fields
 /// whose `definition` doesn't reference a valid string list
-/// (e.g. block-flags, which index into `block_definitions`).
-pub fn field_option_names<'a>(
+/// (e.g. block-flags, which index into `block_layouts`).
+pub(crate) fn field_option_names<'a>(
     layout: &'a TagLayout,
-    field: &TagFieldDefinition,
+    field: &TagFieldLayout,
 ) -> impl Iterator<Item = &'a str> + 'a {
     let string_list = layout.string_lists.get(field.definition as usize);
     let range = match string_list {
@@ -568,7 +700,7 @@ pub fn field_option_names<'a>(
 /// `TagFieldData` preserves them regardless.
 fn resolve_flag_names(
     layout: &TagLayout,
-    field: &TagFieldDefinition,
+    field: &TagFieldLayout,
     value: u64,
     total_bits: u32,
 ) -> Vec<(u32, String)> {
@@ -609,9 +741,9 @@ fn resolve_flag_names(
 /// sub-chunks navigation, and the not-yet-modeled api_interop /
 /// vertex_buffer). Container fields live in the sub-chunks tree
 /// already — the caller walks them directly.
-pub fn deserialize_field(
+pub(crate) fn deserialize_field(
     layout: &TagLayout,
-    field: &TagFieldDefinition,
+    field: &TagFieldLayout,
     raw_struct: &[u8],
     sub_chunk: Option<&TagSubChunkContent>,
 ) -> Option<TagFieldData> {
@@ -841,8 +973,8 @@ pub fn deserialize_field(
 ///
 /// Panics if `value`'s variant doesn't match `field.field_type` — the
 /// caller is responsible for only passing compatible pairs.
-pub fn serialize_field(
-    field: &TagFieldDefinition,
+pub(crate) fn serialize_field(
+    field: &TagFieldLayout,
     value: &TagFieldData,
     raw_struct: &mut [u8],
 ) -> Option<TagSubChunkContent> {

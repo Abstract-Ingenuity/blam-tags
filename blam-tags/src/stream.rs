@@ -8,7 +8,7 @@ use std::io::{Read, Seek, Write};
 
 use crate::data::TagBlockData;
 use crate::io::*;
-use crate::layout::TagBlockLayout;
+use crate::layout::TagLayout;
 
 /// One of the three top-level chunks in a tag file: `tag!` (main
 /// payload), `want` (dependency list), or `info` (import info). All three
@@ -16,20 +16,20 @@ use crate::layout::TagBlockLayout;
 /// block data. The chunk signature is passed in by the caller since it
 /// determines *which* stream is being read, not *how* it's shaped.
 #[derive(Debug)]
-pub struct TagStream {
+pub(crate) struct TagStream {
     /// The `blay` chunk — the schema (structs, blocks, fields, types)
     /// used to interpret `data`.
-    pub layout: TagBlockLayout,
+    pub(crate) layout: TagLayout,
     /// The `bdat` chunk — the root block whose elements are the actual
     /// tag values, shaped by `layout`.
-    pub data: TagBlockData,
+    pub(crate) data: TagBlockData,
 }
 
 impl TagStream {
     /// Read a stream chunk. Caller supplies the expected outer signature
     /// (`b"tag!"`, `b"want"`, or `b"info"`); the function asserts it and
     /// parses the `blay` + `bdat` body.
-    pub fn read<R: Seek + Read>(
+    pub(crate) fn read<R: Seek + Read>(
         chunk_signature: u32,
         reader: &mut std::io::BufReader<R>,
     ) -> Result<Self, Box<dyn Error>> {
@@ -48,9 +48,9 @@ impl TagStream {
         // Now we're inside the chunk, read the 'blay' chunk
         //
 
-        let block_layout = TagBlockLayout::read(reader)?;
-        let block_definition = &block_layout.layout.block_definitions[block_layout.layout.header.tag_group_block_index as usize];
-        // block_layout.layout.display_block(block_layout.layout.header.tag_group_block_index as usize, 0);
+        let layout = TagLayout::read(reader)?;
+        let root_block_layout = &layout.block_layouts[layout.header.tag_group_block_index as usize];
+        // layout.display_block(layout.header.tag_group_block_index as usize, 0);
 
         //
         // Read the 'bdat' chunk
@@ -65,7 +65,7 @@ impl TagStream {
         );
         let block_data_offset = reader.stream_position()?;
 
-        let tag_block_data = TagBlockData::read(&block_layout, &block_definition, reader)?;
+        let tag_block_data = TagBlockData::read(&layout, root_block_layout, reader)?;
 
         let end_offset = reader.stream_position()?;
         let expected_offset = block_data_offset + block_data_header.size as u64;
@@ -83,7 +83,7 @@ impl TagStream {
         }
 
         Ok(Self {
-            layout: block_layout,
+            layout,
             data: tag_block_data,
         })
     }
@@ -92,7 +92,7 @@ impl TagStream {
     /// a `blay` chunk (block layout) followed by a `bdat` chunk (block
     /// data). Both the outer stream chunk and `blay` have version 0;
     /// `bdat` has version 1 (hypothesis-verified on read).
-    pub fn write<W: Write>(
+    pub(crate) fn write<W: Write>(
         &self,
         chunk_signature: u32,
         writer: &mut W,

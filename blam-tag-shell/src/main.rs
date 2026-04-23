@@ -3,7 +3,6 @@ use clap::{Parser, Subcommand};
 
 mod commands;
 mod format;
-mod resolve;
 
 #[derive(Parser)]
 #[command(name = "blam-tag-shell", about = "Halo tag file inspector and editor")]

@@ -2,10 +2,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use blam_tags::file::TagFile;
+use blam_tags::TagFile;
 use serde_json::json;
-
-use crate::format::format_tag_group;
 
 pub fn run(dir: &str, json_output: bool, sort: &str) -> Result<()> {
     // (group_tag string, extension) → count
@@ -67,7 +65,7 @@ fn walk_dir(dir: &Path, groups: &mut BTreeMap<(String, String), u64>) -> Result<
             Ok(t) => t,
             Err(_) => continue,
         };
-        let group = format_tag_group(tag.header.group_tag);
+        let group = tag.group().to_string();
         let extension = path
             .extension()
             .and_then(|e| e.to_str())

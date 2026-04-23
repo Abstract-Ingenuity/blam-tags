@@ -5,7 +5,7 @@
 //!
 //! Everything here is *schema*, not instance data. Per-tag values live in
 //! [`crate::data`], which dispatches on the [`TagFieldType`] resolved on
-//! each [`TagFieldDefinition`] during layout read.
+//! each [`TagFieldLayout`] during layout read.
 
 use std::error::Error;
 use std::io::{Read, Seek, Write};
@@ -32,19 +32,19 @@ pub struct TagStringList {
 /// the parent struct's `raw_data`, and their sub-chunks flow inline
 /// into the parent's `tgst` content.
 #[derive(Debug)]
-pub struct TagArrayDefinition {
+pub struct TagArrayLayout {
     /// Offset into [`TagLayout::string_data`] of the array's name.
     pub name_offset: u32,
     /// Number of elements.
     pub count: u32,
-    /// Index into [`TagLayout::struct_definitions`] of the element struct.
+    /// Index into [`TagLayout::struct_layouts`] of the element struct.
     pub struct_index: u32,
 }
 
 /// A `tgft` entry: a field-type registry record. Indexed by
-/// [`TagFieldDefinition::type_index`].
+/// [`TagFieldLayout::type_index`].
 #[derive(Debug)]
-pub struct TagFieldTypeDefinition {
+pub struct TagFieldTypeLayout {
     /// Offset into [`TagLayout::string_data`] of the canonical type name
     /// (e.g. `"real point 3d"`), resolved at read time via
     /// [`TagFieldType::from_name`].
@@ -63,7 +63,7 @@ pub struct TagFieldTypeDefinition {
 /// derived `field_type` and `offset` are computed at read time and are
 /// not on the wire.
 #[derive(Debug)]
-pub struct TagFieldDefinition {
+pub struct TagFieldLayout {
     /// Offset into [`TagLayout::string_data`] of the field name.
     pub name_offset: u32,
     /// Index into [`TagLayout::field_types`].
@@ -84,8 +84,8 @@ pub struct TagFieldDefinition {
 /// A `blv2` entry (v2/v3) or half of a v1 `agro` record: names a block
 /// whose elements are instances of a struct.
 #[derive(Debug)]
-pub struct TagBlockDefinition {
-    /// Position in [`TagLayout::block_definitions`]. Tracked so
+pub struct TagBlockLayout {
+    /// Position in [`TagLayout::block_layouts`]. Tracked so
     /// [`crate::data::TagBlockData`] can remember which block it came from.
     pub index: u32,
     /// Offset into [`TagLayout::string_data`] of the block name.
@@ -93,18 +93,18 @@ pub struct TagBlockDefinition {
     /// Element-count cap from the schema. Not enforced here — preserved
     /// for roundtrip.
     pub max_count: u32,
-    /// Index into [`TagLayout::struct_definitions`] of the element struct.
+    /// Index into [`TagLayout::struct_layouts`] of the element struct.
     pub struct_index: u32,
 }
 
 /// An `rcv2` entry: declares a pageable-resource field's shape.
 #[derive(Debug)]
-pub struct TagResourceDefinition {
+pub struct TagResourceLayout {
     /// Offset into [`TagLayout::string_data`] of the resource name.
     pub name_offset: u32,
     /// Unknown purpose; preserved verbatim.
     pub unknown: u32,
-    /// Index into [`TagLayout::struct_definitions`] of the struct that
+    /// Index into [`TagLayout::struct_layouts`] of the struct that
     /// wraps the resource payload when it's in
     /// [`crate::data::TagResourceChunk::Exploded`] form.
     pub struct_index: u32,
@@ -113,7 +113,7 @@ pub struct TagResourceDefinition {
 /// A `]==[` entry (v3 only): declares an api-interop field — an opaque
 /// runtime-only pointer slot. Not parsed.
 #[derive(Debug)]
-pub struct TagInteropDefinition {
+pub struct TagInteropLayout {
     pub name_offset: u32,
     pub struct_index: u32,
     /// Stable identifier for the interop type across versions.
@@ -125,9 +125,9 @@ pub struct TagInteropDefinition {
 /// by [`TagLayout::compute_struct_layout`] walking fields until the
 /// terminator.
 #[derive(Debug)]
-pub struct TagStructDefinition {
-    /// Position in [`TagLayout::struct_definitions`]. Tracked so
-    /// [`crate::data::TagStruct`] can remember which struct it came from.
+pub struct TagStructLayout {
+    /// Position in [`TagLayout::struct_layouts`]. Tracked so
+    /// [`crate::data::TagStructData`] can remember which struct it came from.
     pub index: u32,
     /// Stable identifier for the struct type across layout versions.
     pub guid: [u8;16],
@@ -148,12 +148,12 @@ pub struct TagStructDefinition {
 /// Counts at the top of the `blay` payload; each field here is the
 /// length of the correspondingly named `Vec` on [`TagLayout`]. Which
 /// fields are present depends on the block-layout version: v1 flattens
-/// structs + blocks + fields into `aggregate_definition_count` records;
+/// structs + blocks + fields into `aggregate_layout_count` records;
 /// v2/v3 split them into the modern separate tables, and v3 adds
 /// interop definitions.
 #[derive(Debug)]
 pub struct TagLayoutHeader {
-    /// Index into [`TagLayout::block_definitions`] of the root (tag
+    /// Index into [`TagLayout::block_layouts`] of the root (tag
     /// group) block. The tag's root `bdat` interprets its elements
     /// through this block's struct. v2/v3 only.
     pub tag_group_block_index: u32,
@@ -162,29 +162,41 @@ pub struct TagLayoutHeader {
     pub string_list_count: u32,
     pub custom_block_index_search_names_count: u32,
     pub data_definition_name_count: u32,
-    pub array_definition_count: u32,
+    pub array_layout_count: u32,
     pub field_type_count: u32,
     pub field_count: u32,
     /// v1 only. Each aggregate record is a flat (guid, name, max_count,
     /// first_field_index) tuple that the reader splits into a paired
-    /// [`TagStructDefinition`] and [`TagBlockDefinition`].
-    pub aggregate_definition_count: u32,
+    /// [`TagStructLayout`] and [`TagBlockLayout`].
+    pub aggregate_layout_count: u32,
     /// v2/v3 only.
-    pub struct_definition_count: u32,
+    pub struct_layout_count: u32,
     /// v2/v3 only.
-    pub block_definition_count: u32,
+    pub block_layout_count: u32,
     /// v2/v3 only.
-    pub resource_definition_count: u32,
+    pub resource_layout_count: u32,
     /// v3 only.
-    pub interop_definition_count: u32,
+    pub interop_layout_count: u32,
 }
 
-/// The full schema that interprets a tag's payload bytes. Lives in the
-/// `blay` chunk's `tgly` body (v2/v3) or flat after the header (v1).
+/// The full `blay` chunk: a tag's schema plus its 24-byte payload
+/// header (`root_data_size`, `guid`, `version`). The outer `blay`
+/// chunk header is always version 2, even when the inner layout
+/// payload `version` (1/2/3/4) differs.
+///
 /// All name-bearing records reference [`Self::string_data`] by byte
 /// offset; use [`Self::get_string`] to resolve.
 #[derive(Debug)]
 pub struct TagLayout {
+    /// Raw-data size of the root struct (one element of the root
+    /// block). Schema-level sanity check; preserved for roundtrip.
+    pub root_data_size: u32,
+    /// Stable identifier for the tag group / root block type.
+    pub guid: [u8; 16],
+    /// Layout payload version (1, 2, 3, or 4). Distinct from the
+    /// outer `blay` chunk-header version (always 2).
+    pub version: u32,
+
     pub header: TagLayoutHeader,
     /// `str*` chunk — concatenated null-terminated UTF-8 strings. All
     /// `name_offset` fields elsewhere index into here.
@@ -202,22 +214,22 @@ pub struct TagLayout {
     /// type names (used to distinguish different `data` field flavors).
     pub data_definition_name_offsets: Vec<u32>,
     /// `arr!` chunk.
-    pub array_definitions: Vec<TagArrayDefinition>,
+    pub array_layouts: Vec<TagArrayLayout>,
     /// `tgft` chunk.
-    pub field_types: Vec<TagFieldTypeDefinition>,
+    pub field_types: Vec<TagFieldTypeLayout>,
     /// `gras` chunk. Field definitions are stored flat; each struct's
     /// fields are the range `[first_field_index .. first_field_index +
     /// n]` where `n` is the count of fields up to and including the
     /// `Terminator`.
-    pub fields: Vec<TagFieldDefinition>,
+    pub fields: Vec<TagFieldLayout>,
     /// `blv2` chunk (v2/v3) or reconstructed from v1 aggregate records.
-    pub block_definitions: Vec<TagBlockDefinition>,
+    pub block_layouts: Vec<TagBlockLayout>,
     /// `rcv2` chunk. Empty in v1.
-    pub resource_definitions: Vec<TagResourceDefinition>,
+    pub resource_layouts: Vec<TagResourceLayout>,
     /// `]==[` chunk. Empty in v1/v2.
-    pub interop_definitions: Vec<TagInteropDefinition>,
+    pub interop_layouts: Vec<TagInteropLayout>,
     /// `stv2` chunk (v2/v3) or reconstructed from v1 aggregate records.
-    pub struct_definitions: Vec<TagStructDefinition>,
+    pub struct_layouts: Vec<TagStructLayout>,
 }
 
 impl TagLayout {
@@ -249,7 +261,7 @@ impl TagLayout {
     /// in Blam-Creation-Suite (tag_file_reader.cpp).
     pub fn get_struct_expected_children(&self, struct_index: usize) -> u32 {
         let mut count = 0;
-        let mut field_index = self.struct_definitions[struct_index].first_field_index as usize;
+        let mut field_index = self.struct_layouts[struct_index].first_field_index as usize;
 
         loop {
             let field = &self.fields[field_index];
@@ -268,18 +280,18 @@ impl TagLayout {
         }
     }
 
-    /// Compute [`TagStructDefinition::size`] and each
-    /// [`TagFieldDefinition::offset`] for `struct_index` by walking its
+    /// Compute [`TagStructLayout::size`] and each
+    /// [`TagFieldLayout::offset`] for `struct_index` by walking its
     /// fields, recursing into nested struct/array fields first so their
     /// sizes are known before we accumulate. Idempotent — re-running on
     /// an already-laid-out struct is a no-op.
     pub fn compute_struct_layout(&mut self, struct_index: usize) {
-        if self.struct_definitions[struct_index].size != 0 {
+        if self.struct_layouts[struct_index].size != 0 {
             return;
         }
 
         let mut size = 0;
-        let mut field_index = self.struct_definitions[struct_index].first_field_index as usize;
+        let mut field_index = self.struct_layouts[struct_index].first_field_index as usize;
 
         let mut done = false;
 
@@ -294,14 +306,14 @@ impl TagLayout {
             } else if field.field_type == TagFieldType::Struct {
                 let child_index = field.definition as usize;
                 self.compute_struct_layout(child_index);
-                size += self.struct_definitions[child_index].size;
+                size += self.struct_layouts[child_index].size;
             } else if field.field_type == TagFieldType::Array {
                 let (array_struct_index, count) = {
-                    let array_definition = &self.array_definitions[field.definition as usize];
-                    (array_definition.struct_index as usize, array_definition.count)
+                    let array_layout = &self.array_layouts[field.definition as usize];
+                    (array_layout.struct_index as usize, array_layout.count)
                 };
                 self.compute_struct_layout(array_struct_index);
-                size += self.struct_definitions[array_struct_index].size * count as usize;
+                size += self.struct_layouts[array_struct_index].size * count as usize;
             } else if field.field_type == TagFieldType::Pad || field.field_type == TagFieldType::Skip {
                 size += field.definition as usize;
             } else {
@@ -311,35 +323,55 @@ impl TagLayout {
             field_index += 1;
         }
 
-        self.struct_definitions[struct_index].size = size;
+        self.struct_layouts[struct_index].size = size;
     }
 
-    /// Parse a `tgly`-shaped (v2/v3) or flat (v1) layout body.
+    /// Parse a `blay` chunk: outer chunk header, 24-byte payload
+    /// header (`root_data_size` + `guid[16]` + payload `version`),
+    /// then the layout body. The payload `version` (1/2/3/4) controls
+    /// which layout-header fields are present and whether the body is
+    /// wrapped in a `tgly` chunk with per-section sub-chunk headers.
     ///
-    /// `block_layout_version` is the payload version carried on the
-    /// enclosing `blay` chunk (1, 2, or 3) and controls which header
-    /// fields are present and whether the body is wrapped in a `tgly`
-    /// chunk with per-section sub-chunk headers.
-    ///
-    /// After parsing all records, the reader resolves each field's
+    /// After parsing all records, resolves each field's
     /// [`TagFieldType`] and computes the size/offset of every struct
     /// so the data-layer parsing can dispatch cheaply.
     pub fn read<R: Seek + Read>(
-        block_layout_version: u32,
         reader: &mut std::io::BufReader<R>,
     ) -> Result<Self, Box<dyn Error>> {
+        //================================================================================
+        // Outer blay chunk header + 24-byte payload header
+        //================================================================================
+
+        let blay_header = read_tag_chunk_header(reader)?;
+        assert!(blay_header.signature == u32::from_be_bytes(*b"blay"));
+
+        let blay_offset = reader.stream_position()?;
+
+        let root_data_size = read_u32_le(reader)?;
+        let guid = read_u8_array(reader)?;
+        let version = read_u32_le(reader)?;
+        let block_layout_version = version;
+
+        // HYPOTHESIS: the outer blay chunk-header version is always 2 (even
+        // when the payload version — 1/2/3/4 — differs).
+        assert_eq!(
+            blay_header.version, 2,
+            "blay chunk-header version ({}) != 2 (payload version = {})",
+            blay_header.version, version,
+        );
+
         let mut string_data;
         let mut string_offsets;
         let mut string_lists;
         let mut custom_block_index_search_names_offsets;
         let mut data_definition_name_offsets;
-        let mut array_definitions;
+        let mut array_layouts;
         let mut field_types;
-        let mut field_definitions;
-        let mut block_definitions;
-        let mut resource_definitions;
-        let mut interop_definitions;
-        let mut struct_definitions;
+        let mut field_layouts;
+        let mut block_layouts;
+        let mut resource_layouts;
+        let mut interop_layouts;
+        let mut struct_layouts;
 
         //================================================================================
         // Read the tag layout header
@@ -352,14 +384,14 @@ impl TagLayout {
             string_list_count: read_u32_le(reader)?,
             custom_block_index_search_names_count: read_u32_le(reader)?,
             data_definition_name_count: read_u32_le(reader)?,
-            array_definition_count: read_u32_le(reader)?,
+            array_layout_count: read_u32_le(reader)?,
             field_type_count: read_u32_le(reader)?,
             field_count: read_u32_le(reader)?,
-            aggregate_definition_count: if block_layout_version == 1 { read_u32_le(reader)? } else { 0 },
-            struct_definition_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
-            block_definition_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
-            resource_definition_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
-            interop_definition_count: if matches!(block_layout_version, 3 | 4) { read_u32_le(reader)? } else { 0 },
+            aggregate_layout_count: if block_layout_version == 1 { read_u32_le(reader)? } else { 0 },
+            struct_layout_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
+            block_layout_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
+            resource_layout_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
+            interop_layout_count: if matches!(block_layout_version, 3 | 4) { read_u32_le(reader)? } else { 0 },
         };
 
         //================================================================================
@@ -476,17 +508,17 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let array_definitions_header = read_tag_chunk_header(reader)?;
-            assert!(array_definitions_header.signature == u32::from_be_bytes(*b"arr!"));
+            let array_layouts_header = read_tag_chunk_header(reader)?;
+            assert!(array_layouts_header.signature == u32::from_be_bytes(*b"arr!"));
             // HYPOTHESIS: arr! version is always 0.
-            assert_eq!(array_definitions_header.version, 0, "arr! version ({}) != 0", array_definitions_header.version);
-            assert!(header.array_definition_count as usize == array_definitions_header.size as usize / 12);
+            assert_eq!(array_layouts_header.version, 0, "arr! version ({}) != 0", array_layouts_header.version);
+            assert!(header.array_layout_count as usize == array_layouts_header.size as usize / 12);
         }
 
-        array_definitions = Vec::with_capacity(header.array_definition_count as usize);
+        array_layouts = Vec::with_capacity(header.array_layout_count as usize);
 
-        for _ in 0..header.array_definition_count {
-            array_definitions.push(TagArrayDefinition {
+        for _ in 0..header.array_layout_count {
+            array_layouts.push(TagArrayLayout {
                 name_offset: read_u32_le(reader)?,
                 count: read_u32_le(reader)?,
                 struct_index: read_u32_le(reader)?,
@@ -508,7 +540,7 @@ impl TagLayout {
         field_types = Vec::with_capacity(header.field_type_count as usize);
 
         for _ in 0..header.field_type_count {
-            field_types.push(TagFieldTypeDefinition {
+            field_types.push(TagFieldTypeLayout {
                 name_offset: read_u32_le(reader)?,
                 size: read_u32_le(reader)?,
                 needs_sub_chunk: read_u32_le(reader)?,
@@ -527,10 +559,10 @@ impl TagLayout {
             assert!(header.field_count as usize == fields_header.size as usize / 12);
         }
 
-        field_definitions = Vec::with_capacity(header.field_count as usize);
+        field_layouts = Vec::with_capacity(header.field_count as usize);
 
         for _ in 0..header.field_count {
-            field_definitions.push(TagFieldDefinition {
+            field_layouts.push(TagFieldLayout {
                 name_offset: read_u32_le(reader)?,
                 type_index: read_u32_le(reader)?,
                 definition: read_u32_le(reader)?,
@@ -544,10 +576,10 @@ impl TagLayout {
             // Read the aggregate definitions
             //================================================================================
 
-            block_definitions = Vec::with_capacity(header.aggregate_definition_count as usize);
-            struct_definitions = Vec::with_capacity(header.aggregate_definition_count as usize);
+            block_layouts = Vec::with_capacity(header.aggregate_layout_count as usize);
+            struct_layouts = Vec::with_capacity(header.aggregate_layout_count as usize);
 
-            for i in 0..header.aggregate_definition_count {
+            for i in 0..header.aggregate_layout_count {
                 // Convert v1 agro records (28 bytes: guid[16] + name_offset + max_count + first_field_index)
                 // into stv2 (24 bytes: guid[16] + name_offset + first_field_index)
                 // and blv2 (12 bytes: name_offset + max_count + struct_index) format.
@@ -556,7 +588,7 @@ impl TagLayout {
                 let max_count = read_u32_le(reader)?;
                 let first_field_index = read_u32_le(reader)?;
 
-                struct_definitions.push(TagStructDefinition {
+                struct_layouts.push(TagStructLayout {
                     index: i,
                     guid,
                     name_offset,
@@ -565,7 +597,7 @@ impl TagLayout {
                     version: 0,
                 });
 
-                block_definitions.push(TagBlockDefinition {
+                block_layouts.push(TagBlockLayout {
                     index: i,
                     name_offset,
                     max_count,
@@ -574,8 +606,8 @@ impl TagLayout {
             }
 
             // Not present in V1:
-            resource_definitions = vec![];
-            interop_definitions = vec![];
+            resource_layouts = vec![];
+            interop_layouts = vec![];
         } else {
             assert!(matches!(block_layout_version, 2 | 3 | 4));
 
@@ -583,17 +615,17 @@ impl TagLayout {
             // Read the block definitions
             //================================================================================
 
-            let block_definition_header = read_tag_chunk_header(reader)?;
+            let block_layout_header = read_tag_chunk_header(reader)?;
 
-            assert!(block_definition_header.signature == u32::from_be_bytes(*b"blv2"));
+            assert!(block_layout_header.signature == u32::from_be_bytes(*b"blv2"));
             // HYPOTHESIS: blv2 version is always 0.
-            assert_eq!(block_definition_header.version, 0, "blv2 version ({}) != 0", block_definition_header.version);
-            assert!(header.block_definition_count as usize == block_definition_header.size as usize / 12);
+            assert_eq!(block_layout_header.version, 0, "blv2 version ({}) != 0", block_layout_header.version);
+            assert!(header.block_layout_count as usize == block_layout_header.size as usize / 12);
 
-            block_definitions = Vec::with_capacity(header.block_definition_count as usize);
+            block_layouts = Vec::with_capacity(header.block_layout_count as usize);
 
-            for i in 0..header.block_definition_count {
-                block_definitions.push(TagBlockDefinition {
+            for i in 0..header.block_layout_count {
+                block_layouts.push(TagBlockLayout {
                     index: i,
                     name_offset: read_u32_le(reader)?,
                     max_count: read_u32_le(reader)?,
@@ -605,17 +637,17 @@ impl TagLayout {
             // Read the resource definitions
             //================================================================================
 
-            let resource_definitions_header = read_tag_chunk_header(reader)?;
+            let resource_layouts_header = read_tag_chunk_header(reader)?;
 
-            assert!(resource_definitions_header.signature == u32::from_be_bytes(*b"rcv2"));
+            assert!(resource_layouts_header.signature == u32::from_be_bytes(*b"rcv2"));
             // HYPOTHESIS: rcv2 version is always 0.
-            assert_eq!(resource_definitions_header.version, 0, "rcv2 version ({}) != 0", resource_definitions_header.version);
-            assert!(header.resource_definition_count as usize == resource_definitions_header.size as usize / 12);
+            assert_eq!(resource_layouts_header.version, 0, "rcv2 version ({}) != 0", resource_layouts_header.version);
+            assert!(header.resource_layout_count as usize == resource_layouts_header.size as usize / 12);
 
-            resource_definitions = Vec::with_capacity(header.resource_definition_count as usize);
+            resource_layouts = Vec::with_capacity(header.resource_layout_count as usize);
 
-            for _ in 0..header.resource_definition_count {
-                resource_definitions.push(TagResourceDefinition {
+            for _ in 0..header.resource_layout_count {
+                resource_layouts.push(TagResourceLayout {
                     name_offset: read_u32_le(reader)?,
                     unknown: read_u32_le(reader)?,
                     struct_index: read_u32_le(reader)?,
@@ -626,20 +658,20 @@ impl TagLayout {
             // Read the interop definitions (not present in V2; present in V3 and V4)
             //================================================================================
 
-            interop_definitions = vec![];
+            interop_layouts = vec![];
 
             if matches!(block_layout_version, 3 | 4) {
-                let interop_definitions_header = read_tag_chunk_header(reader)?;
+                let interop_layouts_header = read_tag_chunk_header(reader)?;
 
-                assert!(interop_definitions_header.signature == u32::from_be_bytes(*b"]==["));
+                assert!(interop_layouts_header.signature == u32::from_be_bytes(*b"]==["));
                 // HYPOTHESIS: ]==[ version is always 0.
-                assert_eq!(interop_definitions_header.version, 0, "]==[ version ({}) != 0", interop_definitions_header.version);
-                assert!(header.interop_definition_count as usize == interop_definitions_header.size as usize / 24);
+                assert_eq!(interop_layouts_header.version, 0, "]==[ version ({}) != 0", interop_layouts_header.version);
+                assert!(header.interop_layout_count as usize == interop_layouts_header.size as usize / 24);
 
-                interop_definitions.reserve(header.interop_definition_count as usize);
+                interop_layouts.reserve(header.interop_layout_count as usize);
 
-                for _ in 0..header.interop_definition_count {
-                    interop_definitions.push(TagInteropDefinition {
+                for _ in 0..header.interop_layout_count {
+                    interop_layouts.push(TagInteropLayout {
                         name_offset: read_u32_le(reader)?,
                         struct_index: read_u32_le(reader)?,
                         guid: read_u8_array(reader)?,
@@ -653,26 +685,26 @@ impl TagLayout {
             // stv2 is 24 bytes.
             //================================================================================
 
-            let struct_definitions_header = read_tag_chunk_header(reader)?;
+            let struct_layouts_header = read_tag_chunk_header(reader)?;
             let (expected_struct_sig, struct_record_size) = if block_layout_version == 4 {
                 (u32::from_be_bytes(*b"stv4"), 28usize)
             } else {
                 (u32::from_be_bytes(*b"stv2"), 24usize)
             };
 
-            assert!(struct_definitions_header.signature == expected_struct_sig);
+            assert!(struct_layouts_header.signature == expected_struct_sig);
             // HYPOTHESIS: stv2/stv4 version is always 0.
-            assert_eq!(struct_definitions_header.version, 0, "stv2/stv4 version ({}) != 0", struct_definitions_header.version);
-            assert!(header.struct_definition_count as usize == struct_definitions_header.size as usize / struct_record_size);
+            assert_eq!(struct_layouts_header.version, 0, "stv2/stv4 version ({}) != 0", struct_layouts_header.version);
+            assert!(header.struct_layout_count as usize == struct_layouts_header.size as usize / struct_record_size);
 
-            struct_definitions = Vec::with_capacity(header.struct_definition_count as usize);
+            struct_layouts = Vec::with_capacity(header.struct_layout_count as usize);
 
-            for i in 0..header.struct_definition_count {
+            for i in 0..header.struct_layout_count {
                 let guid = read_u8_array(reader)?;
                 let name_offset = read_u32_le(reader)?;
                 let first_field_index = read_u32_le(reader)?;
                 let version = if block_layout_version == 4 { read_u32_le(reader)? } else { 0 };
-                struct_definitions.push(TagStructDefinition {
+                struct_layouts.push(TagStructLayout {
                     index: i,
                     guid,
                     name_offset,
@@ -691,20 +723,32 @@ impl TagLayout {
             assert!(reader.stream_position()? == tag_layout_offset + tag_layout_header.size as u64);
         }
 
+        // Outer blay chunk's end must match its declared size.
+        let blay_end = reader.stream_position()?;
+        let blay_expected_end = blay_offset + blay_header.size as u64;
+        if blay_end != blay_expected_end {
+            panic!(
+                "blay chunk: ended at 0x{blay_end:X}, expected 0x{blay_expected_end:X}",
+            );
+        }
+
         let mut result = Self {
+            root_data_size,
+            guid,
+            version,
             header,
             string_data,
             string_offsets,
             string_lists,
             custom_block_index_search_names_offsets,
             data_definition_name_offsets,
-            array_definitions,
+            array_layouts,
             field_types,
-            fields: field_definitions,
-            block_definitions,
-            struct_definitions,
-            resource_definitions,
-            interop_definitions,
+            fields: field_layouts,
+            block_layouts,
+            struct_layouts,
+            resource_layouts,
+            interop_layouts,
         };
 
         //================================================================================
@@ -719,7 +763,7 @@ impl TagLayout {
             result.fields[i].field_type = TagFieldType::from_name(name);
         }
 
-        for i in 0..result.struct_definitions.len() {
+        for i in 0..result.struct_layouts.len() {
             result.compute_struct_layout(i);
         }
 
@@ -730,7 +774,7 @@ impl TagLayout {
     /// recursively. Writes to stdout with two-space indent per depth
     /// level. Intended for investigation, not production output.
     pub fn display_block(&self, block_index: usize, depth: usize) {
-        let block = &self.block_definitions[block_index];
+        let block = &self.block_layouts[block_index];
 
         let block_name = self.get_string(block.name_offset).unwrap();
         println!("block: {} (index {})", block_name, block_index);
@@ -743,13 +787,13 @@ impl TagLayout {
     /// recursing into nested struct/block/array/resource/interop fields.
     /// Writes to stdout; for investigation only.
     pub fn display_struct(&self, struct_index: usize, depth: usize) {
-        let struct_definition = &self.struct_definitions[struct_index];
-        let struct_name = self.get_string(struct_definition.name_offset).unwrap();
+        let struct_layout = &self.struct_layouts[struct_index];
+        let struct_name = self.get_string(struct_layout.name_offset).unwrap();
         println!("struct: {} (index {})", struct_name, struct_index);
 
         let mut field_offset = 0;
 
-        for field in &self.fields[struct_definition.first_field_index as usize ..] {
+        for field in &self.fields[struct_layout.first_field_index as usize ..] {
             let field_type = &self.field_types[field.type_index as usize];
             let field_type_name = self.get_string(field_type.name_offset).unwrap();
             let field_name = self.get_string(field.name_offset).unwrap();
@@ -835,8 +879,8 @@ impl TagLayout {
                     (0..depth + 1).for_each(|_| print!("  "));
                     print!("field: \"{}\" - offset 0x{:X} - ", field_name, field_offset);
                     self.display_struct(field.definition as usize, depth + 1);
-                    let struct_definition = &self.struct_definitions[field.definition as usize];
-                    field_offset += struct_definition.size as u32;
+                    let struct_layout = &self.struct_layouts[field.definition as usize];
+                    field_offset += struct_layout.size as u32;
                     continue;
                 }
 
@@ -853,29 +897,29 @@ impl TagLayout {
                 TagFieldType::VertexBuffer => {}
 
                 TagFieldType::Array => {
-                    let array_definition = &self.array_definitions[field.definition as usize];
+                    let array_layout = &self.array_layouts[field.definition as usize];
                     (0..depth + 1).for_each(|_| print!("  "));
-                    print!("field: \"{}\" - \"{}\" - \"{}\" - offset 0x{:X} - ", field_name, field_type_name, array_definition.count, field_offset);
-                    self.display_struct(array_definition.struct_index as usize, depth + 1);
-                    let struct_definition = &self.struct_definitions[array_definition.struct_index as usize];
-                    field_offset += struct_definition.size as u32 * array_definition.count;
+                    print!("field: \"{}\" - \"{}\" - \"{}\" - offset 0x{:X} - ", field_name, field_type_name, array_layout.count, field_offset);
+                    self.display_struct(array_layout.struct_index as usize, depth + 1);
+                    let struct_layout = &self.struct_layouts[array_layout.struct_index as usize];
+                    field_offset += struct_layout.size as u32 * array_layout.count;
                     continue;
                 }
 
                 TagFieldType::PageableResource => {
-                    let resource_definition = &self.resource_definitions[field.definition as usize];
+                    let resource_layout = &self.resource_layouts[field.definition as usize];
                     (0..depth + 1).for_each(|_| print!("  "));
                     print!("field: \"{}\" - \"{}\" - offset 0x{:X} - ", field_name, field_type_name, field_offset);
-                    self.display_struct(resource_definition.struct_index as usize, depth + 1);
+                    self.display_struct(resource_layout.struct_index as usize, depth + 1);
                     field_offset += field_type.size;
                     continue;
                 }
 
                 TagFieldType::ApiInterop => {
-                    let interop_definition = &self.interop_definitions[field.definition as usize];
+                    let interop_layout = &self.interop_layouts[field.definition as usize];
                     (0..depth + 1).for_each(|_| print!("  "));
                     print!("field: \"{}\" - \"{}\" - offset 0x{:X} - ", field_name, field_type_name, field_offset);
-                    self.display_struct(interop_definition.struct_index as usize, depth + 1);
+                    self.display_struct(interop_layout.struct_index as usize, depth + 1);
                     field_offset += field_type.size;
                     continue;
                 }
@@ -889,19 +933,33 @@ impl TagLayout {
         }
     }
 
-    /// Write this layout. Mirrors `TagLayout::read`: the layout header fields
-    /// are conditional on `block_layout_version`; v1 emits flat records
-    /// directly (no `tgly` wrapper, no section chunk headers); v2/v3/v4
-    /// emit a `tgly` chunk wrapping per-section chunks (`str*`, `sz+x`,
-    /// `sz[]`, `csbn`, `dtnm`, `arr!`, `tgft`, `gras`, `blv2`, `rcv2`,
-    /// optional `]==[`, and `stv2` for v2/v3 / `stv4` for v4). v1
-    /// aggregate records are reconstructed 1:1 from the paired
-    /// struct/block definitions.
-    pub fn write<W: Write>(
-        &self,
-        block_layout_version: u32,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
+    /// Write this layout as a `blay` chunk. Mirrors [`TagLayout::read`]:
+    /// outer `blay` chunk header (always version 2), 24-byte payload
+    /// header (root data size, guid, layout version), then the layout
+    /// body. The body shape depends on the payload version (`self.version`):
+    /// v1 emits flat records directly; v2/v3/v4 wrap them in a `tgly`
+    /// chunk with per-section sub-chunks (`str*`, `sz+x`, `sz[]`,
+    /// `csbn`, `dtnm`, `arr!`, `tgft`, `gras`, `blv2`, `rcv2`, optional
+    /// `]==[`, and `stv2` for v2/v3 / `stv4` for v4).
+    pub fn write<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        // Buffer the blay body into a Vec so we can emit the outer
+        // chunk header with the correct size without pre-computing.
+        let mut body = Vec::new();
+        body.extend_from_slice(&self.root_data_size.to_le_bytes());
+        body.extend_from_slice(&self.guid);
+        body.extend_from_slice(&self.version.to_le_bytes());
+
+        self.write_body(&mut body)?;
+
+        write_tag_chunk_content(writer, u32::from_be_bytes(*b"blay"), 2, &body)
+    }
+
+    /// Write the layout body (everything after the 24-byte payload
+    /// header). Private — [`TagLayout::write`] owns the outer chunk
+    /// wrapping. Uses `self.version` to drive the conditional shape.
+    fn write_body<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let block_layout_version = self.version;
+
         //============================================================
         // Layout header
         //============================================================
@@ -914,19 +972,19 @@ impl TagLayout {
         writer.write_all(&self.header.string_list_count.to_le_bytes())?;
         writer.write_all(&self.header.custom_block_index_search_names_count.to_le_bytes())?;
         writer.write_all(&self.header.data_definition_name_count.to_le_bytes())?;
-        writer.write_all(&self.header.array_definition_count.to_le_bytes())?;
+        writer.write_all(&self.header.array_layout_count.to_le_bytes())?;
         writer.write_all(&self.header.field_type_count.to_le_bytes())?;
         writer.write_all(&self.header.field_count.to_le_bytes())?;
         if block_layout_version == 1 {
-            writer.write_all(&self.header.aggregate_definition_count.to_le_bytes())?;
+            writer.write_all(&self.header.aggregate_layout_count.to_le_bytes())?;
         }
         if matches!(block_layout_version, 2 | 3 | 4) {
-            writer.write_all(&self.header.struct_definition_count.to_le_bytes())?;
-            writer.write_all(&self.header.block_definition_count.to_le_bytes())?;
-            writer.write_all(&self.header.resource_definition_count.to_le_bytes())?;
+            writer.write_all(&self.header.struct_layout_count.to_le_bytes())?;
+            writer.write_all(&self.header.block_layout_count.to_le_bytes())?;
+            writer.write_all(&self.header.resource_layout_count.to_le_bytes())?;
         }
         if matches!(block_layout_version, 3 | 4) {
-            writer.write_all(&self.header.interop_definition_count.to_le_bytes())?;
+            writer.write_all(&self.header.interop_layout_count.to_le_bytes())?;
         }
 
         //============================================================
@@ -979,15 +1037,15 @@ impl TagLayout {
         size += section_size(self.string_lists.len(), 12);
         size += section_size(self.custom_block_index_search_names_offsets.len(), size_of::<u32>());
         size += section_size(self.data_definition_name_offsets.len(), size_of::<u32>());
-        size += section_size(self.array_definitions.len(), 12);
+        size += section_size(self.array_layouts.len(), 12);
         size += section_size(self.field_types.len(), 12);
         size += section_size(self.fields.len(), 12);
-        size += section_size(self.block_definitions.len(), 12);
-        size += section_size(self.resource_definitions.len(), 12);
+        size += section_size(self.block_layouts.len(), 12);
+        size += section_size(self.resource_layouts.len(), 12);
         if matches!(block_layout_version, 3 | 4) {
-            size += section_size(self.interop_definitions.len(), 24);
+            size += section_size(self.interop_layouts.len(), 24);
         }
-        size += section_size(self.struct_definitions.len(), struct_record_size);
+        size += section_size(self.struct_layouts.len(), struct_record_size);
         size
     }
 
@@ -1084,13 +1142,13 @@ impl TagLayout {
                 writer,
                 u32::from_be_bytes(*b"arr!"),
                 0,
-                (self.array_definitions.len() * 12) as u32,
+                (self.array_layouts.len() * 12) as u32,
             )?;
         }
-        for array_definition in &self.array_definitions {
-            writer.write_all(&array_definition.name_offset.to_le_bytes())?;
-            writer.write_all(&array_definition.count.to_le_bytes())?;
-            writer.write_all(&array_definition.struct_index.to_le_bytes())?;
+        for array_layout in &self.array_layouts {
+            writer.write_all(&array_layout.name_offset.to_le_bytes())?;
+            writer.write_all(&array_layout.count.to_le_bytes())?;
+            writer.write_all(&array_layout.struct_index.to_le_bytes())?;
         }
 
         //------------------------------------------------------------
@@ -1104,15 +1162,15 @@ impl TagLayout {
                 (self.field_types.len() * 12) as u32,
             )?;
         }
-        for field_type_definition in &self.field_types {
-            writer.write_all(&field_type_definition.name_offset.to_le_bytes())?;
-            writer.write_all(&field_type_definition.size.to_le_bytes())?;
-            writer.write_all(&field_type_definition.needs_sub_chunk.to_le_bytes())?;
+        for field_type_layout in &self.field_types {
+            writer.write_all(&field_type_layout.name_offset.to_le_bytes())?;
+            writer.write_all(&field_type_layout.size.to_le_bytes())?;
+            writer.write_all(&field_type_layout.needs_sub_chunk.to_le_bytes())?;
         }
 
         //------------------------------------------------------------
         // gras  — field definitions (12 bytes each: name_offset,
-        // type_index, definition). The in-memory TagFieldDefinition also
+        // type_index, definition). The in-memory TagFieldLayout also
         // carries derived `field_type` / `offset`, which are not
         // serialized — they're recomputed from the layout at read time.
         //------------------------------------------------------------
@@ -1124,10 +1182,10 @@ impl TagLayout {
                 (self.fields.len() * 12) as u32,
             )?;
         }
-        for field_definition in &self.fields {
-            writer.write_all(&field_definition.name_offset.to_le_bytes())?;
-            writer.write_all(&field_definition.type_index.to_le_bytes())?;
-            writer.write_all(&field_definition.definition.to_le_bytes())?;
+        for field_layout in &self.fields {
+            writer.write_all(&field_layout.name_offset.to_le_bytes())?;
+            writer.write_all(&field_layout.type_index.to_le_bytes())?;
+            writer.write_all(&field_layout.definition.to_le_bytes())?;
         }
 
         //------------------------------------------------------------
@@ -1135,14 +1193,14 @@ impl TagLayout {
         // from paired struct/block definitions (1:1, by index).
         //------------------------------------------------------------
         if block_layout_version == 1 {
-            assert_eq!(self.struct_definitions.len(), self.block_definitions.len());
-            for i in 0..self.struct_definitions.len() {
-                let struct_definition = &self.struct_definitions[i];
-                let block_definition = &self.block_definitions[i];
-                writer.write_all(&struct_definition.guid)?;
-                writer.write_all(&struct_definition.name_offset.to_le_bytes())?;
-                writer.write_all(&block_definition.max_count.to_le_bytes())?;
-                writer.write_all(&struct_definition.first_field_index.to_le_bytes())?;
+            assert_eq!(self.struct_layouts.len(), self.block_layouts.len());
+            for i in 0..self.struct_layouts.len() {
+                let struct_layout = &self.struct_layouts[i];
+                let block_layout = &self.block_layouts[i];
+                writer.write_all(&struct_layout.guid)?;
+                writer.write_all(&struct_layout.name_offset.to_le_bytes())?;
+                writer.write_all(&block_layout.max_count.to_le_bytes())?;
+                writer.write_all(&struct_layout.first_field_index.to_le_bytes())?;
             }
             return Ok(());
         }
@@ -1154,12 +1212,12 @@ impl TagLayout {
             writer,
             u32::from_be_bytes(*b"blv2"),
             0,
-            (self.block_definitions.len() * 12) as u32,
+            (self.block_layouts.len() * 12) as u32,
         )?;
-        for block_definition in &self.block_definitions {
-            writer.write_all(&block_definition.name_offset.to_le_bytes())?;
-            writer.write_all(&block_definition.max_count.to_le_bytes())?;
-            writer.write_all(&block_definition.struct_index.to_le_bytes())?;
+        for block_layout in &self.block_layouts {
+            writer.write_all(&block_layout.name_offset.to_le_bytes())?;
+            writer.write_all(&block_layout.max_count.to_le_bytes())?;
+            writer.write_all(&block_layout.struct_index.to_le_bytes())?;
         }
 
         //------------------------------------------------------------
@@ -1169,12 +1227,12 @@ impl TagLayout {
             writer,
             u32::from_be_bytes(*b"rcv2"),
             0,
-            (self.resource_definitions.len() * 12) as u32,
+            (self.resource_layouts.len() * 12) as u32,
         )?;
-        for resource_definition in &self.resource_definitions {
-            writer.write_all(&resource_definition.name_offset.to_le_bytes())?;
-            writer.write_all(&resource_definition.unknown.to_le_bytes())?;
-            writer.write_all(&resource_definition.struct_index.to_le_bytes())?;
+        for resource_layout in &self.resource_layouts {
+            writer.write_all(&resource_layout.name_offset.to_le_bytes())?;
+            writer.write_all(&resource_layout.unknown.to_le_bytes())?;
+            writer.write_all(&resource_layout.struct_index.to_le_bytes())?;
         }
 
         //------------------------------------------------------------
@@ -1185,12 +1243,12 @@ impl TagLayout {
                 writer,
                 u32::from_be_bytes(*b"]==["),
                 0,
-                (self.interop_definitions.len() * 24) as u32,
+                (self.interop_layouts.len() * 24) as u32,
             )?;
-            for interop_definition in &self.interop_definitions {
-                writer.write_all(&interop_definition.name_offset.to_le_bytes())?;
-                writer.write_all(&interop_definition.struct_index.to_le_bytes())?;
-                writer.write_all(&interop_definition.guid)?;
+            for interop_layout in &self.interop_layouts {
+                writer.write_all(&interop_layout.name_offset.to_le_bytes())?;
+                writer.write_all(&interop_layout.struct_index.to_le_bytes())?;
+                writer.write_all(&interop_layout.guid)?;
             }
         }
 
@@ -1209,14 +1267,14 @@ impl TagLayout {
             writer,
             struct_sig,
             0,
-            (self.struct_definitions.len() * struct_record_size) as u32,
+            (self.struct_layouts.len() * struct_record_size) as u32,
         )?;
-        for struct_definition in &self.struct_definitions {
-            writer.write_all(&struct_definition.guid)?;
-            writer.write_all(&struct_definition.name_offset.to_le_bytes())?;
-            writer.write_all(&struct_definition.first_field_index.to_le_bytes())?;
+        for struct_layout in &self.struct_layouts {
+            writer.write_all(&struct_layout.guid)?;
+            writer.write_all(&struct_layout.name_offset.to_le_bytes())?;
+            writer.write_all(&struct_layout.first_field_index.to_le_bytes())?;
             if block_layout_version == 4 {
-                writer.write_all(&struct_definition.version.to_le_bytes())?;
+                writer.write_all(&struct_layout.version.to_le_bytes())?;
             }
         }
 
@@ -1224,77 +1282,3 @@ impl TagLayout {
     }
 }
 
-/// The `blay` chunk: a [`TagLayout`] plus its header metadata
-/// (root data size, GUID, payload version). The outer `blay` chunk
-/// header is always version 2, even when the inner `version` field
-/// (1/2/3) differs — see [`TagBlockLayout::read`].
-#[derive(Debug)]
-pub struct TagBlockLayout {
-    /// Raw-data size of the root struct (one element of the root
-    /// block). Used as a schema-level sanity check.
-    pub root_data_size: u32,
-    /// Stable identifier for the tag group / root block type.
-    pub guid: [u8; 16],
-    /// The layout payload version (1, 2, or 3). Distinct from the
-    /// `blay` chunk-header version. See [`TagLayout::read`].
-    pub version: u32,
-    pub layout: TagLayout,
-}
-
-impl TagBlockLayout {
-    /// Read a `blay` chunk: its 24-byte payload header (root data
-    /// size, guid, layout version) plus the wrapped [`TagLayout`].
-    /// Asserts the outer `blay` chunk-header version is 2 and that
-    /// the stream reaches exactly the chunk's declared end.
-    pub fn read<R: Seek + Read>(reader: &mut std::io::BufReader<R>) -> Result<Self, Box<dyn Error>> {
-        // Read the 'blay' chunk header
-        let block_layout_header = read_tag_chunk_header(reader)?;
-        assert!(block_layout_header.signature == u32::from_be_bytes(*b"blay"));
-
-        let offset = reader.stream_position()?;
-
-        // Read the block layout header data
-        let root_data_size = read_u32_le(reader)?;
-        let guid = read_u8_array(reader)?;
-        let version = read_u32_le(reader)?;
-
-        // HYPOTHESIS: the outer blay chunk-header version is always 2 (even
-        // when the inner payload version — 1/2/3 — differs).
-        assert_eq!(
-            block_layout_header.version, 2,
-            "blay chunk-header version ({}) != 2 (payload version = {})",
-            block_layout_header.version, version,
-        );
-
-        let layout = TagLayout::read(version, reader)?;
-
-        let end_offset = reader.stream_position()?;
-        let expected_offset = offset + block_layout_header.size as u64;
-        if end_offset != expected_offset {
-            panic!("At offset 0x{end_offset:X}, expected 0x{expected_offset:X}");
-        }
-
-        Ok(Self {
-            root_data_size,
-            guid,
-            version,
-            layout,
-        })
-    }
-
-    /// Write this block layout as a `blay` chunk. The payload is:
-    /// `root_data_size (u32 LE) + guid[16] + version (u32 LE) + TagLayout
-    /// body`. The outer `blay` chunk-header version is always 2
-    /// (hypothesis-verified on read), even when the inner layout version
-    /// is 1/2/3.
-    pub fn write<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        let mut body = Vec::new();
-        body.extend_from_slice(&self.root_data_size.to_le_bytes());
-        body.extend_from_slice(&self.guid);
-        body.extend_from_slice(&self.version.to_le_bytes());
-        self.layout.write(self.version, &mut body)?;
-
-        write_tag_chunk_content(writer, u32::from_be_bytes(*b"blay"), 2, &body)?;
-        Ok(())
-    }
-}
