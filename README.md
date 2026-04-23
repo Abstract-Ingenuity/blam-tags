@@ -24,9 +24,6 @@ Each crate has its own README with API shape / command reference.
 - **Layout versions 1 – 4** all read/write. V4 is implemented from
   format references; no V4 tags are present in the H3/Reach corpus,
   so that path hasn't been exercised in the roundtrip yet.
-- **Writes are new.** Both reference implementations (`pytagfilelayout`
-  and Blam-Creation-Suite's read path) are read-only; the write path
-  here is the first public one we're aware of.
 
 ## Build
 

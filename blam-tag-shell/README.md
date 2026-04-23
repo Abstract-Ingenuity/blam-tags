@@ -1,16 +1,44 @@
 # blam-tag-shell
 
-A command-line tool for inspecting and editing Halo 3 / Reach tag files. Built on the `blam-tags` library.
+## About
+
+A command-line tool for inspecting and editing Halo 3 / Reach tag files. Built on the [`blam-tags`](../blam-tags/) library — no ManagedBlam, no .NET, no engine required.
+
+Any assistance or valid criticism would be appreciated. See the workspace [root README](../README.md) for build instructions and an overview of the two crates.
 
 ## Install
 
 ```sh
-cargo install --path cli
+cargo install --path blam-tag-shell
 ```
 
-## Commands
+## Usage
 
-### `blam-tag-shell header` — File metadata
+```
+blam-tag-shell <COMMAND> [ARGS...] [FLAGS]
+```
+
+### Commands
+
+| Command | Description |
+|-|-|
+| `header` | Show tag/cache file header metadata |
+| `scan` | Catalog tag types in a directory |
+| `inspect` | Show the field tree |
+| `get` | Read a field value |
+| `set` | Write a field value |
+| `flag` | Get or set a flag bit |
+| `options` | List enum/flag options for a field |
+| `block` | Block element operations (count, add, insert, duplicate, delete, clear) |
+| `layout-diff` | Diff the layouts of two tag files |
+
+---
+
+### `header` — File metadata
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag or cache file. |
 
 ```sh
 $ blam-tag-shell header masterchief.biped
@@ -24,7 +52,18 @@ Tag File
   Streams:       tag!, want
 ```
 
-### `blam-tag-shell scan` — Catalog tag types in a directory
+---
+
+### `scan` — Catalog tag types in a directory
+
+| Argument | Description |
+|-|-|
+| `<DIR>` | Directory to scan (recursive). |
+
+| Long | Description |
+|-|-|
+| `--json` | Output as JSON. |
+| `--sort <name\|count>` | Sort order (default `name`). |
 
 ```sh
 $ blam-tag-shell scan /path/to/tags/globals
@@ -37,14 +76,25 @@ matg     globals                         1
 wind     wind                            1
 --------------------------------------------
 14 types                                99
-```
 
-```sh
 # Sort by count, output as JSON
 $ blam-tag-shell scan /path/to/tags --sort count --json
 ```
 
-### `blam-tag-shell inspect` — Show field tree
+---
+
+### `inspect` — Show field tree
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+| `[PATH]` | Field path to start from (optional — defaults to the root). |
+
+| Long | Description |
+|-|-|
+| `--depth <N>` | Maximum depth to display (default `1`). |
+| `--all` | Show all fields including hidden. |
+| `--json` | Output as JSON. |
 
 ```sh
 # Top-level fields (depth 1)
@@ -70,7 +120,20 @@ $ blam-tag-shell inspect masterchief.biped "unit" --depth 0
 $ blam-tag-shell inspect masterchief.biped --depth 3 --json
 ```
 
-### `blam-tag-shell get` — Read a field value
+---
+
+### `get` — Read a field value
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+| `<PATH>` | Field path (e.g. `"jump velocity"` or `"unit/seats[0]/flags"`). |
+
+| Long | Description |
+|-|-|
+| `--raw` | Output raw value only (no label). |
+| `--json` | Output as JSON. |
+| `--hex` | Output numeric values in hex. |
 
 ```sh
 $ blam-tag-shell get masterchief.biped "jump velocity"
@@ -94,7 +157,20 @@ $ blam-tag-shell get masterchief.biped "unit/flags" --json
 $ blam-tag-shell get masterchief.biped "unit/flags" --hex
 ```
 
-### `blam-tag-shell set` — Write a field value
+---
+
+### `set` — Write a field value
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+| `<PATH>` | Field path. |
+| `<VALUE>` | Value to set. |
+
+| Long | Description |
+|-|-|
+| `--output <FILE>` | Write to a different file instead of overwriting the source. |
+| `--dry-run` | Preview changes without writing. |
 
 ```sh
 # Set a float
@@ -121,7 +197,21 @@ $ blam-tag-shell set masterchief.biped "jump velocity" 0.5 --dry-run
 $ blam-tag-shell set masterchief.biped "jump velocity" 0.5 --output modified.biped
 ```
 
-### `blam-tag-shell flag` — Get or set flag bits
+---
+
+### `flag` — Get or set flag bits
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+| `<PATH>` | Field path to a flags field. |
+| `<FLAG_NAME>` | Flag name. |
+| `[ACTION]` | `on`, `off`, or `toggle`. Omit to read. |
+
+| Long | Description |
+|-|-|
+| `--output <FILE>` | Write to a different file instead of overwriting the source. |
+| `--dry-run` | Preview changes without writing. |
 
 ```sh
 # Read a flag
@@ -135,7 +225,14 @@ $ blam-tag-shell flag masterchief.biped "unit/flags" "fires from camera" off
 $ blam-tag-shell flag masterchief.biped "unit/flags" "fires from camera" toggle --dry-run
 ```
 
-### `blam-tag-shell options` — List enum/flag options
+---
+
+### `options` — List enum/flag options
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+| `<PATH>` | Field path to an enum or flags field. |
 
 ```sh
 # Enum field — shows all options, marks current
@@ -157,7 +254,21 @@ Flag options for 'unit/flags':
   ...
 ```
 
-### `blam-tag-shell block` — Block element operations
+---
+
+### `block` — Block element operations
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+| `<PATH>` | Field path to a block. |
+| `<ACTION>` | One of `count`, `add`, `insert`, `duplicate`, `delete`, `clear`. |
+| `[INDEX]` | Element index for `insert` / `duplicate` / `delete`. |
+
+| Long | Description |
+|-|-|
+| `--output <FILE>` | Write to a different file instead of overwriting the source. |
+| `--dry-run` | Preview changes without writing. |
 
 ```sh
 # Count elements
@@ -180,13 +291,22 @@ $ blam-tag-shell block masterchief.biped "contact points" delete 0
 $ blam-tag-shell block masterchief.biped "contact points" clear --dry-run
 ```
 
-### `blam-tag-shell layout-diff` — Compare tag layouts
+---
+
+### `layout-diff` — Compare tag layouts
+
+| Argument | Description |
+|-|-|
+| `<FILE_A>` | First tag file. |
+| `<FILE_B>` | Second tag file. |
 
 ```sh
 $ blam-tag-shell layout-diff h3/masterchief.biped reach/masterchief.biped
 ```
 
-## Field Paths
+---
+
+## Field paths
 
 Fields are addressed by `/`-separated paths. Block and array elements use `[index]` notation:
 
@@ -197,9 +317,9 @@ Fields are addressed by `/`-separated paths. Block and array elements use `[inde
 "regions[2]/permutations[0]/name"    # nested block elements
 ```
 
-An optional `Type:` prefix on a segment disambiguates fields that share a name across types (`Block:regions`, `Struct:definitions[0]`). Type filters are case-insensitive; field names are case-sensitive.
+An optional `Type:` prefix on a segment disambiguates fields that share a name across types (`Block:regions`, `Struct:definitions[0]`). Type filters are case-insensitive; field names are case-sensitive. Element indices default to `0` when omitted.
 
-## Fuzzy Matching
+## Fuzzy matching
 
 Mistyped field names get suggestions:
 
@@ -208,7 +328,7 @@ $ blam-tag-shell get masterchief.biped "jmup velocity"
 Error: field 'jmup velocity' not found. Did you mean 'jump velocity'?
 ```
 
-## JSON Output
+## JSON output
 
 Most commands support `--json` for machine-readable output, compatible with `jq`:
 

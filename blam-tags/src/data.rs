@@ -124,15 +124,12 @@ pub enum ContainerKind {
 impl TagStruct {
     /// Parse a `tgst` chunk.
     ///
-    /// `raw_data` is the enclosing slice that owns this struct's
-    /// bytes — passed in by the caller (the containing block). This
-    /// method parses only the `tgst` header and its sub-chunks from
-    /// `reader`; the raw bytes themselves stay in the enclosing
+    /// This method parses only the `tgst` header and its sub-chunks
+    /// from `reader`; the raw bytes themselves stay in the enclosing
     /// block's `raw_data`.
     pub fn read<R: Seek + Read>(
         block_layout: &TagBlockLayout,
         definition: &TagStructDefinition,
-        raw_data: &[u8],
         reader: &mut std::io::BufReader<R>,
     ) -> Result<Self, Box<dyn Error>> {
         let tag_struct_header = read_tag_chunk_header(reader)?;
@@ -151,7 +148,7 @@ impl TagStruct {
 
         // tgst with size=0 is a null struct: no sub-chunks follow.
         let sub_chunks = if tag_struct_header.size != 0 {
-            let mut sub_chunks = read_sub_chunks(block_layout, definition, raw_data, reader)?;
+            let mut sub_chunks = read_sub_chunks(block_layout, definition, reader)?;
 
             // Trailing empty-tgst absorb: MCC's writer occasionally
             // emits size=0 tgst chunks at the end of a struct's
@@ -530,7 +527,6 @@ impl TagStruct {
 fn read_sub_chunks<R: Seek + Read>(
     block_layout: &TagBlockLayout,
     definition: &TagStructDefinition,
-    raw_data: &[u8],
     reader: &mut std::io::BufReader<R>,
 ) -> Result<Vec<TagSubChunkEntry>, Box<dyn Error>> {
     let mut sub_chunks = Vec::new();
@@ -544,8 +540,6 @@ fn read_sub_chunks<R: Seek + Read>(
 
             TagFieldType::Struct => {
                 let nested_definition = &block_layout.layout.struct_definitions[field.definition as usize];
-                let nested_offset = field.offset as usize;
-                let nested_raw = &raw_data[nested_offset..nested_offset + nested_definition.size];
 
                 // Placeholder-skip: MCC may emit size=0 tgst placeholder(s) before
                 // the real tgst when the nested struct expects sub-chunks.
@@ -580,7 +574,7 @@ fn read_sub_chunks<R: Seek + Read>(
                     }
                 }
 
-                let nested = TagStruct::read(block_layout, nested_definition, nested_raw, reader)?;
+                let nested = TagStruct::read(block_layout, nested_definition, reader)?;
 
                 sub_chunks.push(TagSubChunkEntry {
                     field_index: Some(field_index as u32),
@@ -591,15 +585,11 @@ fn read_sub_chunks<R: Seek + Read>(
             TagFieldType::Array => {
                 let array_definition = &block_layout.layout.array_definitions[field.definition as usize];
                 let element_definition = &block_layout.layout.struct_definitions[array_definition.struct_index as usize];
-                let array_offset = field.offset as usize;
 
                 let mut elements = Vec::with_capacity(array_definition.count as usize);
 
-                for i in 0..array_definition.count as usize {
-                    let element_offset = array_offset + i * element_definition.size;
-                    let element_raw_data = &raw_data[element_offset..element_offset + element_definition.size];
-                    let element_sub_chunks =
-                        read_sub_chunks(block_layout, element_definition, element_raw_data, reader)?;
+                for _ in 0..array_definition.count as usize {
+                    let element_sub_chunks = read_sub_chunks(block_layout, element_definition, reader)?;
 
                     elements.push(TagStruct {
                         struct_index: element_definition.index,
@@ -661,10 +651,7 @@ fn read_sub_chunks<R: Seek + Read>(
 
             TagFieldType::PageableResource => {
                 let resource_definition = &block_layout.layout.resource_definitions[field.definition as usize];
-                let resource_struct_definition =
-                    &block_layout.layout.struct_definitions[resource_definition.struct_index as usize];
-                let resource_offset = field.offset as usize;
-                let resource_raw = &raw_data[resource_offset..resource_offset + 8];
+                let resource_struct_definition = &block_layout.layout.struct_definitions[resource_definition.struct_index as usize];
 
                 let outer_header = read_tag_chunk_header(reader)?;
                 let outer_content_offset = reader.stream_position()?;
@@ -692,7 +679,6 @@ fn read_sub_chunks<R: Seek + Read>(
                         let struct_data = TagStruct::read(
                             block_layout,
                             resource_struct_definition,
-                            resource_raw,
                             reader,
                         )?;
 
@@ -873,15 +859,8 @@ impl TagBlockData {
 
         if (block_flags & 1) == 0 {
             // Complex block: per-element tgst sub-chunks.
-            for i in 0..block_element_count {
-                let element_offset = i as usize * element_size;
-                let element_raw = &raw_data[element_offset..element_offset + element_size];
-                elements.push(TagStruct::read(
-                    block_layout,
-                    struct_definition,
-                    element_raw,
-                    reader,
-                )?);
+            for _ in 0..block_element_count {
+                elements.push(TagStruct::read(block_layout, struct_definition, reader)?);
             }
         } else {
             // Simple block: raw bytes only, no per-element tgst, no sub-chunks.

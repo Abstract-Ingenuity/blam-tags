@@ -108,9 +108,18 @@ inner `tgdt` + nested struct), `tgxc` (xsync, opaque payload).
 ApiInterop and VertexBuffer fields are preserved as raw bytes through
 the roundtrip but not yet parsed into typed values.
 
-## Credits
+## Roundtrip example
 
-Built with heavy reference to Blam-Creation-Suite (C++) and a
-read-only Python reference that ships with the Halo Asset Blender
-Development Toolset. The write path is new — neither reference
-implementation has one.
+The `examples/roundtrip.rs` sweep walks one or more tag root
+directories, reads each tag, writes it to a temp file via
+`TagFile::write`, and md5-compares source vs temp. Panics on the first
+mismatch — used to gate read/write changes.
+
+```sh
+# One or more roots; --exclude (or -x) can be repeated to skip
+# known-broken tags in a corpus.
+cargo run --release -p blam-tags --example roundtrip -- \
+    /path/to/halo3_mcc/tags \
+    /path/to/haloreach_mcc/tags \
+    --exclude /path/to/halo3_mcc/tags/some/broken.tag
+```
