@@ -173,6 +173,61 @@ for field in root.fields() {
 From an instance you can always jump to its schema — `tag_struct.definition()`, `tag_field.definition()`, `tag_block.definition()`, `tag_array.definition()`.
 `TagFieldDefinition::as_api_interop()` returns the `TagApiInteropDefinition` for interop fields, exposing the linked descriptor struct, a stable 16-byte guid, and the declared type name.
 
+### Create a new tag from a schema
+
+Schemas live under `definitions/<game>/<group>.json`, dumped from the engine DLLs by a pair of IDAPython scripts under `$HALO_ROOT/halo3_mcc/`:
+
+- `halo3_dump_tag_definitions_json.py` — H3 guerilla.exe
+- `haloreach_dump_tag_definitions_json.py` — Reach sapien.exe
+
+The library builds a zero-filled tag directly from a schema:
+
+```rust
+use blam_tags::TagFile;
+
+let mut tag = TagFile::new("definitions/halo3_mcc/biped.json")?;
+// tag has: header with group_tag='bipd', signature='BLAM', checksum=0.
+// tag_stream has: one zero-filled root element with default sub-chunks
+// (empty blocks, null tag_references, reset api_interops).
+
+tag.write("my_biped.biped")?;
+```
+
+`TagFile::new` validates every struct's computed size against the dumped `size` field. If the computed sum is short, it resolves any `tmpl` custom fields in that struct by loading the target group's sibling JSON, walks the target's parent chain, and adds each ancestor's root-struct size — matching Reach's factored shader layout (where `shader_decal_struct_definition` is 4 bytes of decal-specific data and `render_method_struct_definition` is inlined via the `tmpl` custom to supply the 100 bytes of common shader fields). H3 schemas keep the common fields inlined directly, so no expansion kicks in and the size check passes as-is.
+
+A helper example validates every dumped schema against a sample real tag:
+
+```sh
+cargo run --release -p blam-tags --example schema_match -- \
+    definitions/halo3_mcc /path/to/halo3_mcc/tags
+```
+
+### Optional streams (want / info / assd)
+
+Three optional streams can hang off the tag file — `want` (dependency list), `info` (import info), `assd` (asset-depot icon storage). They're off by default on freshly created tags; attach as needed:
+
+```rust
+tag.add_dependency_list("definitions/halo3_mcc/tag_dependency_list.json")?;
+tag.add_import_info("definitions/halo3_mcc/tag_import_information.json")?;
+tag.add_asset_depot_storage("definitions/halo3_mcc/asset_depot_storage.json")?;
+
+// Populate the dependency list from the tag's tag_reference fields
+// (walks the tag tree, collects every non-null non-`impo` reference,
+// matches the authoring toolset 98.8% exact on real tags):
+tag.rebuild_dependency_list("definitions/halo3_mcc/tag_dependency_list.json")?;
+
+// Drop a stream:
+tag.remove_import_info();
+tag.remove_asset_depot_storage();
+
+// Read the root element of each stream via the façade:
+if let Some(info) = tag.import_info() {
+    println!("build: {}", info.field_path("build").unwrap().value().unwrap());
+}
+```
+
+**Header checksum** is left at `0` on new tags, matching BCS's behaviour (see [`NOTES.md`](../NOTES.md) for the checksum-research trail — primitives are known but the byte-span isn't, deferred until a concrete load-failure forces the issue). A `TagFile::recompute_checksum()` stub exists for when we come back to it.
+
 ### Roundtrip (read → write → compare)
 
 ```rust

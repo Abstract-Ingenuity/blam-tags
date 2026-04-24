@@ -17,6 +17,7 @@ pub fn run(ctx: &mut CliContext, json_output: bool) -> Result<()> {
     let mut streams = vec!["tag!"];
     if tag.dependency_list().is_some() { streams.push("want"); }
     if tag.import_info().is_some() { streams.push("info"); }
+    if tag.asset_depot_storage().is_some() { streams.push("assd"); }
 
     if json_output {
         let out = json!({

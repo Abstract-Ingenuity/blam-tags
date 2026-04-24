@@ -1,0 +1,1813 @@
+{
+  "name": "projectile",
+  "tag": "proj",
+  "version": 5,
+  "flags": 3,
+  "parent_tag": "obje",
+  "block": "projectile_block",
+  "blocks": {
+    "projectile_block": {
+      "max_count": 1,
+      "max_count_string": "1",
+      "struct": "projectile_group",
+      "short_name": "projectile"
+    },
+    "object_early_mover_obb_block": {
+      "max_count": 1,
+      "max_count_string": "1",
+      "struct": "object_early_mover_obb_block"
+    },
+    "object_ai_properties_block": {
+      "max_count": 1,
+      "max_count_string": "1",
+      "struct": "object_ai_properties_block"
+    },
+    "object_function_block": {
+      "max_count": 256,
+      "max_count_string": "k_maximum_object_functions",
+      "struct": "object_function_block"
+    },
+    "object_attachment_block": {
+      "max_count": 16,
+      "max_count_string": "k_maximum_number_of_attachments_per_object",
+      "struct": "object_attachment_block"
+    },
+    "object_widget_block": {
+      "max_count": 4,
+      "max_count_string": "MAXIMUM_WIDGETS_PER_OBJECT",
+      "struct": "object_widget_block"
+    },
+    "object_change_colors": {
+      "max_count": 4,
+      "max_count_string": "k_object_change_color_count",
+      "struct": "object_change_colors"
+    },
+    "object_change_color_initial_permutation": {
+      "max_count": 32,
+      "max_count_string": "MAXIMUM_NUMBER_OF_OBJECT_CHANGE_COLOR_INITIAL_PERMUTATIONS",
+      "struct": "object_change_color_initial_permutation"
+    },
+    "object_change_color_function": {
+      "max_count": 4,
+      "max_count_string": "MAXIMUM_NUMBER_OF_OBJECT_CHANGE_COLOR_FUNCTIONS",
+      "struct": "object_change_color_function"
+    },
+    "multiplayer_object_block": {
+      "max_count": 1,
+      "max_count_string": "k_maximum_multiplayer_object_blocks",
+      "struct": "multiplayer_object_block"
+    },
+    "object_health_pack_block": {
+      "max_count": 16,
+      "max_count_string": "16",
+      "struct": "object_health_pack_block"
+    },
+    "projectile_material_response_block": {
+      "max_count": 200,
+      "max_count_string": "k_maximum_material_responses",
+      "struct": "projectile_material_response_block"
+    },
+    "brute_grenade_block": {
+      "max_count": 1,
+      "max_count_string": "1",
+      "struct": "brute_grenade_block"
+    },
+    "fire_bomb_grenade_block": {
+      "max_count": 1,
+      "max_count_string": "1",
+      "struct": "fire_bomb_grenade_block"
+    },
+    "conical_projection_block": {
+      "max_count": 1,
+      "max_count_string": "1",
+      "struct": "conical_projection_block"
+    }
+  },
+  "structs": {
+    "projectile_group": {
+      "guid": "782ed8f78c4b07197294d480c100d67b",
+      "size": 672,
+      "size_string": "actual_size",
+      "flags": 653,
+      "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
+        {
+          "type": "custom",
+          "name": "$$$ PROJECTILE $$$",
+          "group_tag": "fgrb"
+        },
+        {
+          "type": "long_flags",
+          "name": "flags",
+          "definition": "projectile_flags"
+        },
+        {
+          "type": "short_enum",
+          "name": "detonation timer starts",
+          "definition": "projectile_detonation_timer_modes"
+        },
+        {
+          "type": "short_enum",
+          "name": "impact noise",
+          "definition": "ai_sound_volume_enum"
+        },
+        {
+          "type": "real",
+          "name": "collision radius:world units"
+        },
+        {
+          "type": "explanation",
+          "name": "detonation",
+          "definition": ""
+        },
+        {
+          "type": "real",
+          "name": "arming time:seconds#won't detonate before this time elapses"
+        },
+        {
+          "type": "real",
+          "name": "danger radius:world units"
+        },
+        {
+          "type": "real_bounds",
+          "name": "timer:seconds#detonation countdown (zero is untimed)"
+        },
+        {
+          "type": "real",
+          "name": "minimum velocity:world units per second#detonates when slowed below this velocity"
+        },
+        {
+          "type": "real",
+          "name": "maximum range:world units#detonates after travelling this distance"
+        },
+        {
+          "type": "real",
+          "name": "bounce maximum range:world units#detonates after travelling this distance, but is reset after a bounce.  Combines with maximum range"
+        },
+        {
+          "type": "short_enum",
+          "name": "detonation noise",
+          "definition": "ai_sound_volume_enum"
+        },
+        {
+          "type": "short_integer",
+          "name": "super det. projectile count"
+        },
+        {
+          "type": "real",
+          "name": "super det. time"
+        },
+        {
+          "type": "tag_reference",
+          "name": "detonation started",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "effe"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "detonation effect (airborne)",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "effe"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "detonation effect (ground)",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "effe"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "detonation damage",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "jpt!"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "attached detonation damage",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "jpt!"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "super detonation",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "effe"
+            ]
+          }
+        },
+        {
+          "type": "struct",
+          "name": "your momma!",
+          "definition": "super_detonation_damage_struct"
+        },
+        {
+          "type": "tag_reference",
+          "name": "detonation sound",
+          "definition": {
+            "flags": 8,
+            "allowed": [
+              "snd!"
+            ]
+          }
+        },
+        {
+          "type": "char_enum",
+          "name": "damage reporting type",
+          "definition": "global_damage_reporting_enum_definition"
+        },
+        {
+          "type": "pad",
+          "name": "UAQLONXGN",
+          "definition": 3
+        },
+        {
+          "type": "tag_reference",
+          "name": "super attached detonation damage",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "jpt!"
+            ]
+          }
+        },
+        {
+          "type": "real",
+          "name": "material effect radius#radius within we will generate material effects"
+        },
+        {
+          "type": "explanation",
+          "name": "flyby/impact",
+          "definition": ""
+        },
+        {
+          "type": "tag_reference",
+          "name": "flyby sound",
+          "definition": {
+            "flags": 8,
+            "allowed": [
+              "snd!"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "impact effect",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "effe"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "object impact effect",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "effe"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "impact damage",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "jpt!"
+            ]
+          }
+        },
+        {
+          "type": "explanation",
+          "name": "boarding fields",
+          "definition": ""
+        },
+        {
+          "type": "real",
+          "name": "boarding detonation time"
+        },
+        {
+          "type": "tag_reference",
+          "name": "boarding detonation damage",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "jpt!"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "boarding attached detonation damage",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "jpt!"
+            ]
+          }
+        },
+        {
+          "type": "explanation",
+          "name": "physics",
+          "definition": ""
+        },
+        {
+          "type": "real",
+          "name": "air gravity scale#the proportion of normal gravity applied to the projectile when in air."
+        },
+        {
+          "type": "real_bounds",
+          "name": "air damage range:world units#the range over which damage is scaled when the projectile is in air."
+        },
+        {
+          "type": "real",
+          "name": "water gravity scale#the proportion of normal gravity applied to the projectile when in water."
+        },
+        {
+          "type": "real_bounds",
+          "name": "water damage range:world units#the range over which damage is scaled when the projectile is in water."
+        },
+        {
+          "type": "real",
+          "name": "initial velocity:world units per second#bullet's velocity when inflicting maximum damage"
+        },
+        {
+          "type": "real",
+          "name": "final velocity:world units per second#bullet's velocity when inflicting minimum damage"
+        },
+        {
+          "type": "real",
+          "name": "ai velocity scale (normal):[0-1]#scale on the initial velocity when fired by the ai on normal difficulty"
+        },
+        {
+          "type": "real",
+          "name": "ai velocity scale (legendary):[0-1]#scale on the initial velocity when fired by the ai on legendary difficulty (0 defaults to 1.0)"
+        },
+        {
+          "type": "struct",
+          "name": "blah",
+          "definition": "angular_velocity_lower_bound_struct"
+        },
+        {
+          "type": "angle",
+          "name": "guided angular velocity (upper):degrees per second"
+        },
+        {
+          "type": "angle",
+          "name": "guided angular velocity at rest:degrees per second"
+        },
+        {
+          "type": "real_bounds",
+          "name": "acceleration range:world units#what distance range the projectile goes from initial velocity to final velocity"
+        },
+        {
+          "type": "real",
+          "name": "runtime acceleration bound inverse!"
+        },
+        {
+          "type": "real_fraction",
+          "name": "targeted leading fraction"
+        },
+        {
+          "type": "real",
+          "name": "guided projectile (outer range) error radius"
+        },
+        {
+          "type": "real",
+          "name": "autoaim leading max lead time"
+        },
+        {
+          "type": "block",
+          "name": "material responses",
+          "group_tag": "sort",
+          "definition": "projectile_material_response_block"
+        },
+        {
+          "type": "block",
+          "name": "brute grenade",
+          "definition": "brute_grenade_block"
+        },
+        {
+          "type": "block",
+          "name": "fire bomb grenade",
+          "definition": "fire_bomb_grenade_block"
+        },
+        {
+          "type": "block",
+          "name": "conical spread",
+          "definition": "conical_projection_block"
+        },
+        {
+          "type": "custom",
+          "name": null,
+          "group_tag": "fgre"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "short_name": "projectile",
+      "source_file": "c:\\mcc\\release\\h3\\source\\items\\projectile_definitions.cpp"
+    },
+    "object_struct_definition": {
+      "guid": "6c5aa9947a45fcf55742a488f0943380",
+      "size": 248,
+      "size_string": "sizeof(struct _object_definition)",
+      "flags": 819,
+      "fields": [
+        {
+          "type": "custom",
+          "name": "OBJECT",
+          "group_tag": "fgrb"
+        },
+        {
+          "type": "short_integer",
+          "name": "runtime object type!"
+        },
+        {
+          "type": "word_flags",
+          "name": "flags",
+          "definition": "object_definition_flags"
+        },
+        {
+          "type": "real",
+          "name": "bounding radius:world units"
+        },
+        {
+          "type": "real_point_3d",
+          "name": "bounding offset"
+        },
+        {
+          "type": "real",
+          "name": "acceleration scale:[0,+inf]#marine 1.0, grunt 1.4, elite 0.9, hunter 0.5, etc."
+        },
+        {
+          "type": "short_enum",
+          "name": "lightmap shadow mode",
+          "definition": "lightmap_shadow_mode_enum"
+        },
+        {
+          "type": "char_enum",
+          "name": "sweetener size",
+          "definition": "sweetener_size_enum"
+        },
+        {
+          "type": "char_enum",
+          "name": "water density",
+          "definition": "water_density_type_enum"
+        },
+        {
+          "type": "long_integer",
+          "name": "runtime flags!*"
+        },
+        {
+          "type": "real",
+          "name": "dynamic light sphere radius#sphere to use for dynamic lights and shadows. only used if not 0"
+        },
+        {
+          "type": "real_point_3d",
+          "name": "dynamic light sphere offset#only used if radius not 0"
+        },
+        {
+          "type": "string_id",
+          "name": "default model variant"
+        },
+        {
+          "type": "tag_reference",
+          "name": "model",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "hlmt"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "crate object",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "bloc"
+            ]
+          }
+        },
+        {
+          "type": "explanation",
+          "name": "only set this tag if you want to override the default collision damage values in globals.globals",
+          "definition": ""
+        },
+        {
+          "type": "tag_reference",
+          "name": "collision damage",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "cddf"
+            ]
+          }
+        },
+        {
+          "type": "block",
+          "name": "early mover OBB",
+          "definition": "object_early_mover_obb_block"
+        },
+        {
+          "type": "tag_reference",
+          "name": "creation effect",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "effe"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "material effects",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "foot"
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "melee sound#this is the sound that is made when I am meleed.  This overrides the sweetener sound of my material.",
+          "definition": {
+            "flags": 8,
+            "allowed": [
+              "snd!"
+            ]
+          }
+        },
+        {
+          "type": "block",
+          "name": "ai properties",
+          "definition": "object_ai_properties_block"
+        },
+        {
+          "type": "block",
+          "name": "functions",
+          "definition": "object_function_block"
+        },
+        {
+          "type": "short_integer",
+          "name": "hud text message index"
+        },
+        {
+          "type": "word_flags",
+          "name": "secondary flags",
+          "definition": "object_definition_secondary_flags"
+        },
+        {
+          "type": "block",
+          "name": "attachments",
+          "definition": "object_attachment_block"
+        },
+        {
+          "type": "block",
+          "name": "widgets",
+          "definition": "object_widget_block"
+        },
+        {
+          "type": "block",
+          "name": "change colors",
+          "definition": "object_change_colors"
+        },
+        {
+          "type": "block",
+          "name": "multiplayer object",
+          "definition": "multiplayer_object_block"
+        },
+        {
+          "type": "block",
+          "name": "health packs",
+          "definition": "object_health_pack_block"
+        },
+        {
+          "type": "custom",
+          "name": null,
+          "group_tag": "fgre"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "object_early_mover_obb_block": {
+      "guid": "ffffd17aff48aaaad47736cb3b0ee7ff",
+      "size": 40,
+      "size_string": "sizeof(s_object_early_mover_obb_definition)",
+      "flags": 794,
+      "fields": [
+        {
+          "type": "string_id",
+          "name": "node name#empty mean object space"
+        },
+        {
+          "type": "real",
+          "name": "x0"
+        },
+        {
+          "type": "real",
+          "name": "x1"
+        },
+        {
+          "type": "real",
+          "name": "y0"
+        },
+        {
+          "type": "real",
+          "name": "y1"
+        },
+        {
+          "type": "real",
+          "name": "z0"
+        },
+        {
+          "type": "real",
+          "name": "z1"
+        },
+        {
+          "type": "real_euler_angles_3d",
+          "name": "angles"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "object_ai_properties_block": {
+      "guid": "3553fb267d442e71527ff7937178fdaf",
+      "size": 12,
+      "size_string": "sizeof(struct object_ai_properties)",
+      "flags": 440,
+      "fields": [
+        {
+          "type": "long_flags",
+          "name": "ai flags",
+          "definition": "ai_properties_flags"
+        },
+        {
+          "type": "string_id",
+          "name": "ai type name#used for combat dialogue, etc."
+        },
+        {
+          "type": "short_enum",
+          "name": "ai size",
+          "definition": "ai_size_enum"
+        },
+        {
+          "type": "short_enum",
+          "name": "leap jump speed",
+          "definition": "global_ai_jump_height_enum"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "object_function_block": {
+      "guid": "e6dbefd2c24dee4110245f80d9baf582",
+      "size": 44,
+      "size_string": "sizeof(s_object_function_definition)",
+      "flags": 169,
+      "fields": [
+        {
+          "type": "long_flags",
+          "name": "flags",
+          "definition": "object_function_flags"
+        },
+        {
+          "type": "string_id",
+          "name": "import name",
+          "group_tag": "sted"
+        },
+        {
+          "type": "string_id",
+          "name": "export name"
+        },
+        {
+          "type": "string_id",
+          "name": "turn off with#if the specified function is off, so is this function",
+          "group_tag": "sted"
+        },
+        {
+          "type": "real",
+          "name": "min value#function must exceed this value (after mapping) to be active 0. means do nothing"
+        },
+        {
+          "type": "custom",
+          "name": "default function",
+          "group_tag": "fned",
+          "definition": "A%?X"
+        },
+        {
+          "type": "struct",
+          "name": "default function",
+          "definition": "mapping_function"
+        },
+        {
+          "type": "string_id",
+          "name": "scale by"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "mapping_function": {
+      "guid": "8fa9145a8444fa53d46810809e45f10a",
+      "size": 20,
+      "size_string": "actual_size",
+      "flags": 6999,
+      "fields": [
+        {
+          "type": "custom",
+          "name": null,
+          "group_tag": "hide"
+        },
+        {
+          "type": "data",
+          "name": "data",
+          "definition": "function_definition_data"
+        },
+        {
+          "type": "custom",
+          "name": null,
+          "group_tag": "edih"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\math\\function_definitions.cpp"
+    },
+    "object_attachment_block": {
+      "guid": "577209119c42754733d975a73f4575ee",
+      "size": 32,
+      "size_string": "sizeof(struct object_attachment_definition)",
+      "flags": 195,
+      "fields": [
+        {
+          "type": "tag_reference",
+          "name": "type^",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "AH\u0015?",
+              "???\u0001",
+              "@?? ",
+              "???\u0001",
+              "@?? ",
+              "???\u0001",
+              "???\u0010"
+            ]
+          }
+        },
+        {
+          "type": "old_string_id",
+          "name": "marker"
+        },
+        {
+          "type": "short_enum",
+          "name": "change color",
+          "definition": "global_object_change_color_enum"
+        },
+        {
+          "type": "pad",
+          "name": "DPKP",
+          "definition": 2
+        },
+        {
+          "type": "string_id",
+          "name": "primary scale",
+          "group_tag": "sted"
+        },
+        {
+          "type": "string_id",
+          "name": "secondary scale",
+          "group_tag": "sted"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "object_widget_block": {
+      "guid": "1e9b91626146aaa58a7d31b8aaddc03a",
+      "size": 16,
+      "size_string": "sizeof(struct object_definition_widget)",
+      "flags": 226,
+      "fields": [
+        {
+          "type": "tag_reference",
+          "name": "type",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "AH\u0017?",
+              "???\u0001",
+              "???("
+            ]
+          }
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "object_change_colors": {
+      "guid": "ad56b00ac941328f6ab2db9efef6249b",
+      "size": 24,
+      "size_string": "sizeof(struct object_change_color_definition)",
+      "flags": 288,
+      "fields": [
+        {
+          "type": "block",
+          "name": "initial permutations",
+          "definition": "object_change_color_initial_permutation"
+        },
+        {
+          "type": "block",
+          "name": "functions",
+          "definition": "object_change_color_function"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "object_change_color_initial_permutation": {
+      "guid": "793e40fc2e4da6a7216c0cad7b6ca0c2",
+      "size": 32,
+      "size_string": "sizeof(struct object_change_color_initial_permutation)",
+      "flags": 236,
+      "fields": [
+        {
+          "type": "real",
+          "name": "weight"
+        },
+        {
+          "type": "real_rgb_color",
+          "name": "color lower bound"
+        },
+        {
+          "type": "real_rgb_color",
+          "name": "color upper bound"
+        },
+        {
+          "type": "string_id",
+          "name": "variant name#if empty, may be used by any model variant"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "object_change_color_function": {
+      "guid": "7ccb699f584f0dba0ca3ce96289ca8d0",
+      "size": 36,
+      "size_string": "sizeof(struct object_change_color_function)",
+      "flags": 252,
+      "fields": [
+        {
+          "type": "long_flags",
+          "name": "scale flags",
+          "definition": "global_rgb_interpolation_flags"
+        },
+        {
+          "type": "real_rgb_color",
+          "name": "color lower bound"
+        },
+        {
+          "type": "real_rgb_color",
+          "name": "color upper bound"
+        },
+        {
+          "type": "string_id",
+          "name": "darken by"
+        },
+        {
+          "type": "string_id",
+          "name": "scale by"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "multiplayer_object_block": {
+      "guid": "63027b02de4376e96b5373b167e4ae73",
+      "size": 196,
+      "size_string": "sizeof(s_multiplayer_object_properties_definition)",
+      "flags": 370,
+      "fields": [
+        {
+          "type": "explanation",
+          "name": "GAME ENGINE INCLUSION",
+          "definition": "Set which game engines you desire this object to appear in"
+        },
+        {
+          "type": "word_flags",
+          "name": "game engine flags",
+          "definition": "global_game_engine_type_flags"
+        },
+        {
+          "type": "explanation",
+          "name": "TYPE AND FLAGS",
+          "definition": "Type pertains to how you want the game engine to handle this object\r\nCertain flags applicable only to certain object types, should be self evident"
+        },
+        {
+          "type": "char_enum",
+          "name": "type",
+          "definition": "multiplayer_object_type"
+        },
+        {
+          "type": "byte_flags",
+          "name": "teleporter passability:used only for teleporters",
+          "definition": "teleporter_passability_flags"
+        },
+        {
+          "type": "word_flags",
+          "name": "flags",
+          "definition": "multiplayer_object_flags"
+        },
+        {
+          "type": "explanation",
+          "name": "GOAL & RESPAWN ZONE BOUNDARY DATA",
+          "definition": "These fields are only used for goal area objects with boundaries, and for respawn zones"
+        },
+        {
+          "type": "char_enum",
+          "name": "boundary shape",
+          "definition": "multiplayer_object_boundary_shape"
+        },
+        {
+          "type": "explanation",
+          "name": "SPAWNING DATA",
+          "definition": "These fields are used for default spawning times and remapping"
+        },
+        {
+          "type": "char_enum",
+          "name": "spawn timer type",
+          "definition": "multiplayer_object_spawn_timer_types"
+        },
+        {
+          "type": "short_integer",
+          "name": "default spawn time:seconds"
+        },
+        {
+          "type": "short_integer",
+          "name": "default abandonment time:seconds"
+        },
+        {
+          "type": "explanation",
+          "name": "MORE GOAL & RESPAWN ZONE OBJECT BOUNDARY",
+          "definition": "These fields are only used for goal area objects with boundaries, and for respawn zones"
+        },
+        {
+          "type": "real",
+          "name": "boundary width/radius"
+        },
+        {
+          "type": "real",
+          "name": "boundary box length"
+        },
+        {
+          "type": "real",
+          "name": "boundary +height"
+        },
+        {
+          "type": "real",
+          "name": "boundary -height"
+        },
+        {
+          "type": "explanation",
+          "name": "RESPAWN ZONE DATA",
+          "definition": "These are respawn zone weights, used only for respawn zones"
+        },
+        {
+          "type": "real",
+          "name": "normal weight:aka natural weight"
+        },
+        {
+          "type": "real",
+          "name": "flag away weight"
+        },
+        {
+          "type": "real",
+          "name": "flag at home weight"
+        },
+        {
+          "type": "explanation",
+          "name": "MARKER DATA",
+          "definition": "These fields are only used for defining certain, special markers to use for positional locations if the default position (object origin) is not sufficient"
+        },
+        {
+          "type": "string_id",
+          "name": "boundary center marker"
+        },
+        {
+          "type": "string_id",
+          "name": "spawned object marker name"
+        },
+        {
+          "type": "explanation",
+          "name": "SPAWNED OBJECT",
+          "definition": "If this object is intended to spawn something, the object it spawns should be specified here"
+        },
+        {
+          "type": "tag_reference",
+          "name": "spawned object",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "obje"
+            ]
+          }
+        },
+        {
+          "type": "string_id",
+          "name": "NYI boundary material"
+        },
+        {
+          "type": "explanation",
+          "name": "BOUNDARY SHADER - DEFAULT",
+          "definition": "These are default shaders used for boundary geometry"
+        },
+        {
+          "type": "tag_reference",
+          "name": "boundary standard shader",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "rm  "
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "boundary opaque shader",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "rm  "
+            ]
+          }
+        },
+        {
+          "type": "explanation",
+          "name": "BOUNDARY SHADER - SPHERE",
+          "definition": "These are custom shaders used for spherical boundary geometry"
+        },
+        {
+          "type": "tag_reference",
+          "name": "sphere standard shader",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "rm  "
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "sphere opaque shader",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "rm  "
+            ]
+          }
+        },
+        {
+          "type": "explanation",
+          "name": "BOUNDARY SHADER - CYLINDER",
+          "definition": "These are custom shaders used for cylindrical boundary geometry"
+        },
+        {
+          "type": "tag_reference",
+          "name": "cylinder standard shader",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "rm  "
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "cylinder opaque shader",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "rm  "
+            ]
+          }
+        },
+        {
+          "type": "explanation",
+          "name": "BOUNDARY SHADER - BOX",
+          "definition": "These are custom shaders used for box boundary geometry"
+        },
+        {
+          "type": "tag_reference",
+          "name": "box standard shader",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "rm  "
+            ]
+          }
+        },
+        {
+          "type": "tag_reference",
+          "name": "box opaque shader",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "rm  "
+            ]
+          }
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "object_health_pack_block": {
+      "guid": "aecfb808b2434c5a929f0bbef5e9e0a5",
+      "size": 16,
+      "size_string": "sizeof(s_object_health_pack_definition)",
+      "flags": 811,
+      "fields": [
+        {
+          "type": "tag_reference",
+          "name": "health pack equipment",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "eqip"
+            ]
+          }
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\objects\\object_definitions.cpp"
+    },
+    "super_detonation_damage_struct": {
+      "guid": "6e8118a0b3484f4f76ea4a9a3a9f475c",
+      "size": 16,
+      "size_string": "actual_size",
+      "flags": 489,
+      "fields": [
+        {
+          "type": "tag_reference",
+          "name": "super detonation damage",
+          "definition": {
+            "flags": 0,
+            "allowed": [
+              "jpt!"
+            ]
+          }
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\items\\projectile_definitions.cpp"
+    },
+    "angular_velocity_lower_bound_struct": {
+      "guid": "e9b76583f040b5926eed1db73c08921f",
+      "size": 4,
+      "size_string": "actual_size",
+      "flags": 470,
+      "fields": [
+        {
+          "type": "angle",
+          "name": "guided angular velocity (lower):degrees per second"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\items\\projectile_definitions.cpp"
+    },
+    "projectile_material_response_block": {
+      "guid": "1f4f4633674be71b1437918a7285e760",
+      "size": 64,
+      "size_string": "sizeof(s_projectile_material_response_definition)",
+      "flags": 134,
+      "fields": [
+        {
+          "type": "word_flags",
+          "name": "flags",
+          "definition": "projectile_material_response_flags"
+        },
+        {
+          "type": "explanation",
+          "name": "default result",
+          "definition": "(if the potential result, below, fails to happen)"
+        },
+        {
+          "type": "short_enum",
+          "name": "default response",
+          "definition": "material_response"
+        },
+        {
+          "type": "string_id",
+          "name": "material name",
+          "group_tag": "sted"
+        },
+        {
+          "type": "short_integer",
+          "name": "runtime material index!"
+        },
+        {
+          "type": "pad",
+          "name": "JJHT",
+          "definition": 2
+        },
+        {
+          "type": "explanation",
+          "name": "potential result",
+          "definition": ""
+        },
+        {
+          "type": "short_enum",
+          "name": "potential response",
+          "definition": "material_response"
+        },
+        {
+          "type": "word_flags",
+          "name": "response flags",
+          "definition": "material_possible_response_flags"
+        },
+        {
+          "type": "real_fraction",
+          "name": "chance fraction:[0,1]"
+        },
+        {
+          "type": "angle_bounds",
+          "name": "between:degrees"
+        },
+        {
+          "type": "real_bounds",
+          "name": "and:world units per second"
+        },
+        {
+          "type": "explanation",
+          "name": "misc",
+          "definition": ""
+        },
+        {
+          "type": "short_enum",
+          "name": "scale effects by",
+          "definition": "effect_scale_enum"
+        },
+        {
+          "type": "pad",
+          "name": "BDFI",
+          "definition": 2
+        },
+        {
+          "type": "angle",
+          "name": "angular noise:degrees#the angle of incidence is randomly perturbed by at most this amount to simulate irregularity."
+        },
+        {
+          "type": "real",
+          "name": "velocity noise:world units per second#the velocity is randomly perturbed by at most this amount to simulate irregularity."
+        },
+        {
+          "type": "explanation",
+          "name": "penetration",
+          "definition": ""
+        },
+        {
+          "type": "real",
+          "name": "initial friction#the fraction of the projectile's velocity lost on penetration"
+        },
+        {
+          "type": "real",
+          "name": "maximum distance#the maximum distance the projectile can travel through on object of this material"
+        },
+        {
+          "type": "explanation",
+          "name": "reflection",
+          "definition": ""
+        },
+        {
+          "type": "real",
+          "name": "parallel friction#the fraction of the projectile's velocity parallel to the surface lost on impact"
+        },
+        {
+          "type": "real",
+          "name": "perpendicular friction#the fraction of the projectile's velocity perpendicular to the surface lost on impact"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\items\\projectile_definitions.cpp"
+    },
+    "brute_grenade_block": {
+      "guid": "db56fb7c494af5210ddc449398654b0d",
+      "size": 48,
+      "size_string": "sizeof(s_projectile_brute_grenade_definition)",
+      "flags": 97,
+      "fields": [
+        {
+          "type": "angle",
+          "name": "minimum angular vel#degrees/sec"
+        },
+        {
+          "type": "angle",
+          "name": "maximum angular vel#degrees/sec"
+        },
+        {
+          "type": "angle",
+          "name": "spin angular vel#degrees/sec"
+        },
+        {
+          "type": "real",
+          "name": "angular damping#0==nothing 30==almost comlete damping"
+        },
+        {
+          "type": "real",
+          "name": "drag angle k"
+        },
+        {
+          "type": "real",
+          "name": "drag speed k"
+        },
+        {
+          "type": "real",
+          "name": "drag exponent"
+        },
+        {
+          "type": "real",
+          "name": "attach sample radius"
+        },
+        {
+          "type": "real",
+          "name": "attach acc k"
+        },
+        {
+          "type": "real",
+          "name": "attach acc s"
+        },
+        {
+          "type": "real",
+          "name": "attach acc e"
+        },
+        {
+          "type": "real",
+          "name": "attach acc damping"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\items\\projectile_definitions.cpp"
+    },
+    "fire_bomb_grenade_block": {
+      "guid": "004418099e41345a1705fbb438540a99",
+      "size": 4,
+      "size_string": "sizeof(s_projectile_fire_bomb_grenade_definition)",
+      "flags": 115,
+      "fields": [
+        {
+          "type": "real",
+          "name": "projection offset"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\items\\projectile_definitions.cpp"
+    },
+    "conical_projection_block": {
+      "guid": "169d4ac47d4b8588fd31578a5f55f979",
+      "size": 12,
+      "size_string": "sizeof(s_projectile_conical_projection_defintion)",
+      "flags": 122,
+      "fields": [
+        {
+          "type": "explanation",
+          "name": "conical_projection: AKA shotgun",
+          "definition": "projectile_count = yaw_count*pitch_count"
+        },
+        {
+          "type": "short_integer",
+          "name": "yaw count"
+        },
+        {
+          "type": "short_integer",
+          "name": "pitch count"
+        },
+        {
+          "type": "real",
+          "name": "distribution exponent#exp==.5 even distribution, exp==1  halo2 distribution, exp>1== weighted towards center"
+        },
+        {
+          "type": "angle",
+          "name": "spread#degrees"
+        },
+        {
+          "type": "terminator",
+          "name": null
+        }
+      ],
+      "source_file": "c:\\mcc\\release\\h3\\source\\items\\projectile_definitions.cpp"
+    }
+  },
+  "enums_flags": {
+    "object_definition_flags": {
+      "options": [
+        "does not cast shadow",
+        "search cardinal direction lightmaps on failure",
+        "preserves initial damage owner",
+        "not a pathfinding obstacle",
+        "extension of parent#object passes all function values to parent and uses parent's markers",
+        "does not cause collision damage",
+        "early mover",
+        "early mover localized physics",
+        "object scales attachments",
+        "non physical in map editor",
+        "attach to clusters by dynamic sphere#use this for the mac gun on spacestation",
+        "effects created by this object do not spawn objects in multiplayer",
+        "does not collide with camera#specificly the flying observer camera",
+        "damage not blocked by obstructions#AOE damage being applied to this object does not test for obstrutions."
+      ]
+    },
+    "lightmap_shadow_mode_enum": {
+      "options": [
+        "default",
+        "never",
+        "always",
+        "blur"
+      ]
+    },
+    "sweetener_size_enum": {
+      "options": [
+        "default",
+        "small",
+        "medium",
+        "large"
+      ]
+    },
+    "water_density_type_enum": {
+      "options": [
+        "default",
+        "super_floater",
+        "floater",
+        "neutral",
+        "sinker",
+        "super_sinker",
+        "none"
+      ]
+    },
+    "ai_properties_flags": {
+      "options": [
+        "detroyable cover",
+        "pathfinding ignore when dead",
+        "dynamic cover",
+        "non flight-blocking",
+        "dynamic cover from centre",
+        "has corner markers!"
+      ]
+    },
+    "ai_size_enum": {
+      "options": [
+        "default",
+        "tiny",
+        "small",
+        "medium",
+        "large",
+        "huge",
+        "immobile"
+      ]
+    },
+    "global_ai_jump_height_enum": {
+      "options": [
+        "NONE",
+        "down",
+        "step",
+        "crouch",
+        "stand",
+        "storey",
+        "tower",
+        "infinite"
+      ]
+    },
+    "object_function_flags": {
+      "options": [
+        "invert#result of function is one minus actual result",
+        "mapping does not controls active#the curve mapping can make the function active/inactive",
+        "always active#function does not deactivate when at or below lower bound",
+        "random time offset#function offsets periodic function input by random value between 0 and 1",
+        "always exports value#when this function is deactivated, it still exports its value",
+        "turn off with uses magnitude#the function will be turned off if the value of the turns_off_with function is 0"
+      ]
+    },
+    "object_definition_secondary_flags": {
+      "options": [
+        "does not affect projectile aiming"
+      ]
+    },
+    "global_object_change_color_enum": {
+      "options": [
+        "none",
+        "primary",
+        "secondary",
+        "tertiary",
+        "quaternary"
+      ]
+    },
+    "global_rgb_interpolation_flags": {
+      "options": [
+        "blend in hsv#blends colors in hsv rather than rgb space",
+        "...more colors#blends colors through more hues (goes the long way around the color wheel)"
+      ]
+    },
+    "global_game_engine_type_flags": {
+      "options": [
+        "ctf",
+        "slayer",
+        "oddball",
+        "king",
+        "juggernaut",
+        "territories",
+        "assault",
+        "vip",
+        "infection",
+        "target training!"
+      ]
+    },
+    "multiplayer_object_type": {
+      "options": [
+        "ordinary",
+        "weapon",
+        "grenade",
+        "projectile",
+        "powerup",
+        "equipment",
+        "light land vehicle",
+        "heavy land vehicle",
+        "flying vehicle",
+        "teleporter 2way",
+        "teleporter sender",
+        "teleporter receiver",
+        "player spawn location",
+        "player respawn zone",
+        "oddball spawn location",
+        "ctf flag spawn location",
+        "target spawn location",
+        "ctf flag return area",
+        "koth hill area",
+        "infection safe area",
+        "territory area",
+        "vip influence area",
+        "vip destination zone",
+        "juggernaut destination zone"
+      ]
+    },
+    "teleporter_passability_flags": {
+      "options": [
+        "disallow players",
+        "allow light land vehicles",
+        "allow heavy land vehicles",
+        "allow flying vehicles",
+        "allow projectiles"
+      ]
+    },
+    "multiplayer_object_flags": {
+      "options": [
+        "only visible in editor",
+        "valid initial player spawn",
+        "fixed boundary orientation",
+        "candy monitor should ignore"
+      ]
+    },
+    "multiplayer_object_boundary_shape": {
+      "options": [
+        "unused",
+        "sphere",
+        "cylinder",
+        "box"
+      ]
+    },
+    "multiplayer_object_spawn_timer_types": {
+      "options": [
+        "starts on death",
+        "starts on disturbance"
+      ]
+    },
+    "projectile_flags": {
+      "options": [
+        "oriented along velocity",
+        "AI must use ballistic aiming",
+        "detonation max time if attached",
+        "has super combining explosion",
+        "damage scales based on distance",
+        "travels instantaneously",
+        "steering adjusts orientation",
+        "don't noise up steering",
+        "can track behind itself",
+        "ROBOTRON STEERING!",
+        "affected by phantom volumes",
+        "expensive chubby test",
+        "notifies target units",
+        "use ground detonation when attached",
+        "AI minor tracking threat",
+        "dangerous when inactive",
+        "AI stimulus when attached",
+        "OverPeneDetonation",
+        "no impact effects on bounce",
+        "RC1 overpenetration fixes"
+      ]
+    },
+    "projectile_detonation_timer_modes": {
+      "options": [
+        "immediately",
+        "after first bounce",
+        "when at rest",
+        "after first bounce off any surface"
+      ]
+    },
+    "ai_sound_volume_enum": {
+      "options": [
+        "silent",
+        "medium",
+        "loud",
+        "shout",
+        "quiet"
+      ]
+    },
+    "global_damage_reporting_enum_definition": {
+      "options": [
+        "teh guardians!!1!!1!",
+        "falling damage",
+        "generic collision damage",
+        "generic melee damage",
+        "generic explosion",
+        "magnum pistol",
+        "plasma pistol",
+        "needler",
+        "excavator",
+        "smg",
+        "plasma rifle",
+        "battle rifle",
+        "carbine",
+        "shotgun",
+        "sniper rifle",
+        "beam rifle",
+        "assault rifle",
+        "spike rifle",
+        "flak cannon",
+        "missile launcher{missle launcher}",
+        "rocket launcher",
+        "spartan laser",
+        "brute shot",
+        "flame thrower",
+        "sentinal gun",
+        "energy sword",
+        "gravity hammer",
+        "frag grenade",
+        "plasma grenade",
+        "claymore grenade",
+        "firebomb grenade",
+        "flag melee damage",
+        "bomb melee damage",
+        "bomb explosion damage",
+        "ball melee damage",
+        "human turret",
+        "plasma cannon",
+        "plasma mortar",
+        "plasma turret",
+        "banshee",
+        "ghost",
+        "mongoose",
+        "scorpion",
+        "scorpion gunner",
+        "warthog driver",
+        "warthog gunner",
+        "warthog gunner gauss",
+        "wraith",
+        "wraith anti-infantry",
+        "tank",
+        "chopper",
+        "hornet",
+        "mantis",
+        "mauler",
+        "sentinel beam",
+        "sentinel rpg",
+        "teleporter",
+        "prox-mine",
+        "elephant turret",
+        "shade turret",
+        "silenced smg",
+        "automag",
+        "brute plasma rifle"
+      ]
+    },
+    "projectile_material_response_flags": {
+      "options": [
+        "cannot be overpenetrated"
+      ]
+    },
+    "material_response": {
+      "options": [
+        "impact (detonate)",
+        "fizzle",
+        "overpenetrate",
+        "attach",
+        "bounce",
+        "bounce (dud)",
+        "fizzle (ricochet)"
+      ]
+    },
+    "material_possible_response_flags": {
+      "options": [
+        "only against units (except giants){only against units}",
+        "never against units (except giants){never against units}",
+        "never against wuss players"
+      ]
+    },
+    "effect_scale_enum": {
+      "options": [
+        "damage",
+        "angle"
+      ]
+    }
+  },
+  "datas": {
+    "function_definition_data": {
+      "alignment": 4,
+      "flags": 2,
+      "max_size": 872,
+      "max_size_string": "k_max_function_size"
+    }
+  }
+}

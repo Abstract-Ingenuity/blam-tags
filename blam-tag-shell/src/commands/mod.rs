@@ -10,5 +10,7 @@ pub mod header;
 pub mod inspect;
 pub mod layout_diff;
 pub mod list;
+pub mod new;
 pub mod options;
 pub mod set;
+pub mod streams;

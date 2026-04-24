@@ -88,6 +88,15 @@ impl TagStream {
         })
     }
 
+    /// Build a new stream containing the given layout and a root
+    /// block with exactly one zero-filled default element. Used by
+    /// `TagFile::new` when creating a tag from a schema.
+    pub(crate) fn new_default(layout: TagLayout) -> Self {
+        let root_block_index = layout.header.tag_group_block_index;
+        let data = TagBlockData::new_root_default(&layout, root_block_index);
+        Self { layout, data }
+    }
+
     /// Write this stream as a `tag!` / `want` / `info` chunk. The payload is
     /// a `blay` chunk (block layout) followed by a `bdat` chunk (block
     /// data). Both the outer stream chunk and `blay` have version 0;

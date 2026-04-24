@@ -269,6 +269,76 @@ enum Commands {
         /// Optional tag to load at startup
         file: Option<String>,
     },
+
+    /// Create a new tag from a group schema. Reads the schema JSON
+    /// at `definitions/<game>/<group>.json` and writes a
+    /// zero-filled tag to `<group>.<group>` (or `--output`).
+    New {
+        /// Group name (matches the schema filename, e.g. `biped`)
+        group: String,
+        /// Game identifier — subdirectory under `definitions/`
+        game: String,
+        /// Output path (default: `<group>.<group>` in cwd)
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Attach an empty dependency-list stream to a tag
+    AddDependencyList {
+        /// Path to a tag file
+        file: String,
+        /// Game identifier (for locating `tag_dependency_list.json`)
+        game: String,
+        /// Write to a different file
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Drop the dependency-list stream from a tag
+    RemoveDependencyList {
+        file: String,
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Rebuild the dependency-list from the tag's own non-`impo`
+    /// tag_reference fields. Creates the stream if missing.
+    RebuildDependencyList {
+        file: String,
+        game: String,
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Attach an empty import-info stream to a tag
+    AddImportInfo {
+        file: String,
+        game: String,
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Drop the import-info stream from a tag
+    RemoveImportInfo {
+        file: String,
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Attach an empty asset-depot-storage stream to a tag
+    AddAssetDepotStorage {
+        file: String,
+        game: String,
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Drop the asset-depot-storage stream from a tag
+    RemoveAssetDepotStorage {
+        file: String,
+        #[arg(long)]
+        output: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -375,6 +445,45 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
 
         Commands::DataDiff { file_a, file_b, only, json } => {
             commands::data_diff::run(&file_a, &file_b, only.as_deref(), json)
+        }
+
+        Commands::New { group, game, output } => {
+            commands::new::run(&group, &game, output.as_deref())
+        }
+
+        Commands::AddDependencyList { file, game, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::streams::add_dependency_list(ctx, &game, output.as_deref())
+        }
+
+        Commands::RemoveDependencyList { file, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::streams::remove_dependency_list(ctx, output.as_deref())
+        }
+
+        Commands::RebuildDependencyList { file, game, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::streams::rebuild_dependency_list(ctx, &game, output.as_deref())
+        }
+
+        Commands::AddImportInfo { file, game, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::streams::add_import_info(ctx, &game, output.as_deref())
+        }
+
+        Commands::RemoveImportInfo { file, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::streams::remove_import_info(ctx, output.as_deref())
+        }
+
+        Commands::AddAssetDepotStorage { file, game, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::streams::add_asset_depot_storage(ctx, &game, output.as_deref())
+        }
+
+        Commands::RemoveAssetDepotStorage { file, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::streams::remove_asset_depot_storage(ctx, output.as_deref())
         }
     }
 }

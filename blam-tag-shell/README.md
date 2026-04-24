@@ -38,6 +38,14 @@ Every tag-bound command takes a `<FILE>` argument as its first positional. In th
 | `find` | Search a directory of tags for fields whose value matches a query |
 | `export` | Dump a tag's state as replayable `set` commands |
 | `check` | Integrity check — flag enum / flag / real / reference anomalies |
+| `new` | Create a fresh tag from a schema JSON |
+| `add-dependency-list` | Attach an empty dependency-list stream |
+| `remove-dependency-list` | Drop the dependency-list stream |
+| `rebuild-dependency-list` | Repopulate the dependency list from the tag's own tag_references |
+| `add-import-info` | Attach an empty import-info stream |
+| `remove-import-info` | Drop the import-info stream |
+| `add-asset-depot-storage` | Attach an empty asset-depot-storage stream |
+| `remove-asset-depot-storage` | Drop the asset-depot-storage stream |
 | `repl` | Interactive shell against a loaded tag |
 
 ---
@@ -451,6 +459,86 @@ $ blam-tag-shell check floodcombat_elite.biped --tags-root /path/to/tags
 
 # Fail the build if anything shows up
 $ blam-tag-shell check masterchief.biped --tags-root /path/to/tags --strict
+```
+
+---
+
+### `new` — Create a fresh tag from a schema
+
+| Argument | Description |
+|-|-|
+| `<GROUP>` | Group name — matches the JSON filename under `definitions/<GAME>/` (e.g. `biped`, `render_model`, `scenario`). |
+| `<GAME>` | Subdirectory under `definitions/` (e.g. `halo3_mcc`). |
+
+| Long | Description |
+|-|-|
+| `--output <FILE>` | Write to this path. Default: `./<GROUP>.<GROUP>` in the cwd. Refuses to overwrite an existing file. |
+
+Resolves the schema at `definitions/<GAME>/<GROUP>.json`, builds a zero-filled tag (one default-initialized root element, no optional streams), and writes it. Header gets `group_tag` / `group_version` from the schema, `signature = 'BLAM'`, and `checksum = 0`.
+
+Run from the workspace root (or wherever your `definitions/` tree lives) — paths are resolved relative to cwd.
+
+```sh
+$ blam-tag-shell new render_model halo3_mcc
+created render_model.render_model from definitions/halo3_mcc/render_model.json
+
+$ blam-tag-shell new biped halo3_mcc --output characters/chief.biped
+created characters/chief.biped from definitions/halo3_mcc/biped.json
+```
+
+---
+
+### Optional-stream commands
+
+Six commands manage the three optional streams (`want`, `info`, `assd`) that can hang off a tag file after the mandatory `tag!` stream. All follow the same shape: load the tag, attach/remove/rebuild the stream, write back (or to `--output`).
+
+`--game <GAME>` (as the second positional) locates the matching schema under `definitions/<GAME>/`:
+
+- `tag_dependency_list.json` for `want`
+- `tag_import_information.json` for `info`
+- `asset_depot_storage.json` for `assd`
+
+| Command | Positionals | Description |
+|-|-|-|
+| `add-dependency-list` | `<FILE> <GAME>` | Attach an empty `want` stream. No-op if already present. |
+| `remove-dependency-list` | `<FILE>` | Drop `want` if present. |
+| `rebuild-dependency-list` | `<FILE> <GAME>` | Walk the tag's data, collect every non-null non-`impo` `tag_reference`, and write one entry per ref (flags=0) into `want`. Creates the stream first if missing. Matches authoring-toolset output exactly for 98.8% of real tags. |
+| `add-import-info` | `<FILE> <GAME>` | Attach an empty `info` stream. Caller populates build / version / culprit / import date / files / events fields via `set` if needed. |
+| `remove-import-info` | `<FILE>` | Drop `info` if present. |
+| `add-asset-depot-storage` | `<FILE> <GAME>` | Attach an empty `assd` stream (tag-editor icon pixel data). Zero presence in the observed H3/Reach corpus. |
+| `remove-asset-depot-storage` | `<FILE>` | Drop `assd` if present. |
+
+Every command takes `--output <FILE>` to write elsewhere instead of overwriting the source.
+
+```sh
+$ blam-tag-shell new biped halo3_mcc
+created biped.biped from definitions/halo3_mcc/biped.json
+
+$ blam-tag-shell add-dependency-list biped.biped halo3_mcc
+attached empty dependency-list stream
+
+$ blam-tag-shell rebuild-dependency-list biped.biped halo3_mcc
+rebuilt dependency-list (0 entries)
+
+$ blam-tag-shell header biped.biped
+  ...
+  Streams:       tag!, want
+```
+
+Typical authoring flow:
+
+```sh
+# 1. Create the tag.
+blam-tag-shell new biped halo3_mcc --output mychief.biped
+
+# 2. Populate the data via `set` / `flag` / `block`.
+blam-tag-shell set mychief.biped "jump velocity" 3.2
+blam-tag-shell set mychief.biped "unit/integrated light toggle" \
+    "effe:fx/flashlight"
+# …
+
+# 3. Build the dependency list from the references we just wrote.
+blam-tag-shell rebuild-dependency-list mychief.biped halo3_mcc
 ```
 
 ---

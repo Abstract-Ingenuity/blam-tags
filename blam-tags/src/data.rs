@@ -945,3 +945,26 @@ impl TagBlockData {
         })
     }
 }
+
+impl TagBlockData {
+    /// Block with exactly one zero-filled default element. Used as
+    /// the root block of a freshly created tag file so it has a
+    /// single, loadable element out of the box. Nested sub-chunks
+    /// (including any child blocks, which stay empty) are populated
+    /// by [`TagStructData::new_default`].
+    pub(crate) fn new_root_default(layout: &TagLayout, block_index: u32) -> Self {
+        let block_layout = &layout.block_layouts[block_index as usize];
+        let struct_layout = &layout.struct_layouts[block_layout.struct_index as usize];
+        let element_size = struct_layout.size;
+
+        Self {
+            block_index,
+            flags: 0,
+            raw_data: vec![0u8; element_size],
+            elements: vec![TagStructData::new_default(
+                layout,
+                block_layout.struct_index as usize,
+            )],
+        }
+    }
+}

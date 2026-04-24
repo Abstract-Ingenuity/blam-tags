@@ -88,6 +88,17 @@ impl TagFile {
     pub fn import_info_mut(&mut self) -> Option<TagStructMut<'_>> {
         stream_root_mut(self.import_info_stream.as_mut()?)
     }
+
+    /// Root element of the `assd` stream — asset depot storage —
+    /// if this tag has one.
+    pub fn asset_depot_storage(&self) -> Option<TagStruct<'_>> {
+        stream_root(self.asset_depot_storage_stream.as_ref()?)
+    }
+
+    /// Mutable counterpart of [`TagFile::asset_depot_storage`].
+    pub fn asset_depot_storage_mut(&mut self) -> Option<TagStructMut<'_>> {
+        stream_root_mut(self.asset_depot_storage_stream.as_mut()?)
+    }
 }
 
 fn stream_root(stream: &crate::stream::TagStream) -> Option<TagStruct<'_>> {

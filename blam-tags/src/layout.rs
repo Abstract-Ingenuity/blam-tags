@@ -316,6 +316,13 @@ impl TagLayout {
                 size += self.struct_layouts[array_struct_index].size * count as usize;
             } else if field.field_type == TagFieldType::Pad || field.field_type == TagFieldType::Skip {
                 size += field.definition as usize;
+            } else if field.field_type == TagFieldType::Custom {
+                // For `tmpl` customs the JSON importer stashes the
+                // template's parent-chain expansion size into the
+                // `definition` slot (non-zero means bytes to inline
+                // here). Zero for all other custom subtypes (UI-only
+                // hints like `hide`/`edih`/`vert`/etc.).
+                size += field.definition as usize;
             } else {
                 size += self.field_types[field.type_index as usize].size as usize;
             }
@@ -1282,3 +1289,869 @@ impl TagLayout {
     }
 }
 
+//================================================================================
+// JSON schema import
+//
+// Parses the per-group JSON dumped by
+// `h3_guerilla_dump_tag_definitions_json.py` into a TagLayout that
+// matches what `TagLayout::read` would produce from an equivalent blay
+// chunk. The JSON's shape:
+//
+// - Group metadata (name, tag, parent_tag, version, flags) + a
+//   `block` name that points at the root block.
+// - Named registries: `blocks`, `structs`, `arrays`, `enums_flags`,
+//   `datas`, `resources`, `interops`. Each map key is a definition
+//   name; each value is the body (no redundant "name" key).
+// - Fields' `definition` is either a name string into one of the
+//   registries (for struct/block/array/flags/enum/data/etc.), an
+//   integer byte-count (for pad/skip/useless_pad), a text string
+//   (for explanation), or an object `{flags, allowed}` (for
+//   tag_reference).
+//
+// The importer walks the registries, assigns stable indices per kind
+// (alphabetical via BTreeMap for determinism), builds the string_data
+// table dedup'd, resolves name references to indices, populates every
+// TagLayout table, and finally runs `compute_struct_layout` so every
+// struct has its size + per-field offsets set. As a sanity check,
+// each computed struct size is compared against the JSON's dumped
+// `size` field — mismatches bubble up as errors rather than silently
+// producing a broken layout.
+//================================================================================
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use serde::Deserialize;
+
+#[derive(Debug)]
+pub enum FromJsonError {
+    Io(std::io::Error),
+    Json(serde_json::Error),
+    UnknownReference { kind: &'static str, name: String },
+    BadFieldDefinition { field: String, ty: String },
+    UnknownFieldType(String),
+    BadGuid(String),
+    BadGroupTag(String),
+    StructSizeMismatch { name: String, schema: u32, computed: usize },
+}
+
+impl std::fmt::Display for FromJsonError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(e) => write!(f, "I/O error reading schema: {e}"),
+            Self::Json(e) => write!(f, "JSON parse error: {e}"),
+            Self::UnknownReference { kind, name } => {
+                write!(f, "schema references unknown {kind} {name:?}")
+            }
+            Self::BadFieldDefinition { field, ty } => {
+                write!(f, "field {field:?} of type {ty:?} has invalid definition value")
+            }
+            Self::UnknownFieldType(s) => write!(f, "unknown field type {s:?}"),
+            Self::BadGuid(s) => write!(f, "invalid guid {s:?} (expected 32 hex chars)"),
+            Self::BadGroupTag(s) => write!(f, "invalid group tag {s:?} (expected 4 chars)"),
+            Self::StructSizeMismatch { name, schema, computed } => write!(
+                f,
+                "computed size mismatch for struct {name:?}: schema says {schema}, computed {computed}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for FromJsonError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            Self::Json(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for FromJsonError {
+    fn from(e: std::io::Error) -> Self { Self::Io(e) }
+}
+impl From<serde_json::Error> for FromJsonError {
+    fn from(e: serde_json::Error) -> Self { Self::Json(e) }
+}
+
+//
+// Serde shapes for the JSON schema files the dumper produces.
+// Names match the library's Tag* convention + a Schema suffix.
+//
+
+#[derive(Debug, Deserialize)]
+struct TagGroupSchema {
+    tag: String,
+    #[serde(default)] parent_tag: Option<String>,
+    version: u32,
+    flags: u32,
+    block: String,
+    #[serde(default)] blocks: BTreeMap<String, TagBlockSchema>,
+    #[serde(default)] structs: BTreeMap<String, TagStructSchema>,
+    #[serde(default)] arrays: BTreeMap<String, TagArraySchema>,
+    #[serde(default)] enums_flags: BTreeMap<String, TagEnumSchema>,
+    #[serde(default)] datas: BTreeMap<String, TagDataSchema>,
+    #[serde(default)] resources: BTreeMap<String, PageableResourceSchema>,
+    #[serde(default)] interops: BTreeMap<String, ApiInteropSchema>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagBlockSchema {
+    max_count: u32,
+    #[serde(rename = "struct")] struct_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagStructSchema {
+    guid: String,
+    size: u32,
+    fields: Vec<TagFieldSchema>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagFieldSchema {
+    #[serde(rename = "type")] ty: String,
+    #[serde(default)] name: Option<String>,
+    #[serde(default)] definition: serde_json::Value,
+    #[serde(default)] group_tag: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagArraySchema {
+    count: u32,
+    #[serde(rename = "struct")] struct_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagEnumSchema {
+    options: Vec<Option<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagDataSchema {}
+
+#[derive(Debug, Deserialize)]
+struct PageableResourceSchema {
+    flags: u64,
+    #[serde(rename = "struct")] struct_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiInteropSchema {
+    guid: String,
+    #[serde(rename = "struct")] struct_name: String,
+}
+
+//
+// Field-type metadata: canonical on-wire name, byte size, whether the
+// type emits a sub-chunk. Each JSON field's `type` string (snake_case)
+// maps to one of these rows; the (size, needs_sub_chunk) values match
+// what the engine packs into each blay's `tgft` registry.
+//
+// A per-layout `field_types` table is then built incrementally — only
+// types actually referenced by the schema get an entry, mirroring how
+// real tags only carry the types they use.
+//
+
+struct FieldTypeInfo {
+    ty: TagFieldType,
+    canonical: &'static str,
+    size: u32,
+    needs_sub_chunk: u32,
+}
+
+/// JSON `"type": "..."` string → metadata. Snake-case names match what
+/// the dumper emits; `canonical` is the space-separated form that goes
+/// into the blay's string table (matches what `TagFieldType::from_name`
+/// parses).
+fn field_type_info(ty: &str) -> Option<FieldTypeInfo> {
+    use TagFieldType::*;
+    Some(match ty {
+        "string"                   => FieldTypeInfo { ty: String,              canonical: "string",                   size: 32,  needs_sub_chunk: 0 },
+        "long_string"              => FieldTypeInfo { ty: LongString,          canonical: "long string",              size: 256, needs_sub_chunk: 0 },
+        "string_id"                => FieldTypeInfo { ty: StringId,            canonical: "string id",                size: 4,   needs_sub_chunk: 1 },
+        "old_string_id"            => FieldTypeInfo { ty: OldStringId,         canonical: "old string id",            size: 4,   needs_sub_chunk: 1 },
+        "char_integer"             => FieldTypeInfo { ty: CharInteger,         canonical: "char integer",             size: 1,   needs_sub_chunk: 0 },
+        "short_integer"            => FieldTypeInfo { ty: ShortInteger,        canonical: "short integer",            size: 2,   needs_sub_chunk: 0 },
+        "long_integer"             => FieldTypeInfo { ty: LongInteger,         canonical: "long integer",             size: 4,   needs_sub_chunk: 0 },
+        "int64_integer"            => FieldTypeInfo { ty: Int64Integer,        canonical: "int64 integer",            size: 8,   needs_sub_chunk: 0 },
+        "angle"                    => FieldTypeInfo { ty: Angle,               canonical: "angle",                    size: 4,   needs_sub_chunk: 0 },
+        "tag"                      => FieldTypeInfo { ty: Tag,                 canonical: "tag",                      size: 4,   needs_sub_chunk: 0 },
+        "char_enum"                => FieldTypeInfo { ty: CharEnum,            canonical: "char enum",                size: 1,   needs_sub_chunk: 0 },
+        "short_enum"               => FieldTypeInfo { ty: ShortEnum,           canonical: "short enum",               size: 2,   needs_sub_chunk: 0 },
+        "long_enum"                => FieldTypeInfo { ty: LongEnum,            canonical: "long enum",                size: 4,   needs_sub_chunk: 0 },
+        "long_flags"               => FieldTypeInfo { ty: LongFlags,           canonical: "long flags",               size: 4,   needs_sub_chunk: 0 },
+        "word_flags"               => FieldTypeInfo { ty: WordFlags,           canonical: "word flags",               size: 2,   needs_sub_chunk: 0 },
+        "byte_flags"               => FieldTypeInfo { ty: ByteFlags,           canonical: "byte flags",               size: 1,   needs_sub_chunk: 0 },
+        "point_2d"                 => FieldTypeInfo { ty: Point2d,             canonical: "point 2d",                 size: 4,   needs_sub_chunk: 0 },
+        "rectangle_2d"             => FieldTypeInfo { ty: Rectangle2d,         canonical: "rectangle 2d",             size: 8,   needs_sub_chunk: 0 },
+        "rgb_color"                => FieldTypeInfo { ty: RgbColor,            canonical: "rgb color",                size: 4,   needs_sub_chunk: 0 },
+        "argb_color"               => FieldTypeInfo { ty: ArgbColor,           canonical: "argb color",               size: 4,   needs_sub_chunk: 0 },
+        "real"                     => FieldTypeInfo { ty: Real,                canonical: "real",                     size: 4,   needs_sub_chunk: 0 },
+        "real_slider"              => FieldTypeInfo { ty: RealSlider,          canonical: "real slider",              size: 4,   needs_sub_chunk: 0 },
+        "real_fraction"            => FieldTypeInfo { ty: RealFraction,        canonical: "real fraction",            size: 4,   needs_sub_chunk: 0 },
+        "real_point_2d"            => FieldTypeInfo { ty: RealPoint2d,         canonical: "real point 2d",            size: 8,   needs_sub_chunk: 0 },
+        "real_point_3d"            => FieldTypeInfo { ty: RealPoint3d,         canonical: "real point 3d",            size: 12,  needs_sub_chunk: 0 },
+        "real_vector_2d"           => FieldTypeInfo { ty: RealVector2d,        canonical: "real vector 2d",           size: 8,   needs_sub_chunk: 0 },
+        "real_vector_3d"           => FieldTypeInfo { ty: RealVector3d,        canonical: "real vector 3d",           size: 12,  needs_sub_chunk: 0 },
+        "real_quaternion"          => FieldTypeInfo { ty: RealQuaternion,      canonical: "real quaternion",          size: 16,  needs_sub_chunk: 0 },
+        "real_euler_angles_2d"     => FieldTypeInfo { ty: RealEulerAngles2d,   canonical: "real euler angles 2d",     size: 8,   needs_sub_chunk: 0 },
+        "real_euler_angles_3d"     => FieldTypeInfo { ty: RealEulerAngles3d,   canonical: "real euler angles 3d",     size: 12,  needs_sub_chunk: 0 },
+        "real_plane_2d"            => FieldTypeInfo { ty: RealPlane2d,         canonical: "real plane 2d",            size: 12,  needs_sub_chunk: 0 },
+        "real_plane_3d"            => FieldTypeInfo { ty: RealPlane3d,         canonical: "real plane 3d",            size: 16,  needs_sub_chunk: 0 },
+        "real_rgb_color"           => FieldTypeInfo { ty: RealRgbColor,        canonical: "real rgb color",           size: 12,  needs_sub_chunk: 0 },
+        "real_argb_color"          => FieldTypeInfo { ty: RealArgbColor,       canonical: "real argb color",          size: 16,  needs_sub_chunk: 0 },
+        "real_hsv_color"           => FieldTypeInfo { ty: RealHsvColor,        canonical: "real hsv color",           size: 12,  needs_sub_chunk: 0 },
+        "real_ahsv_color"          => FieldTypeInfo { ty: RealAhsvColor,       canonical: "real ahsv color",          size: 16,  needs_sub_chunk: 0 },
+        "short_bounds"             => FieldTypeInfo { ty: ShortIntegerBounds,  canonical: "short integer bounds",     size: 4,   needs_sub_chunk: 0 },
+        "angle_bounds"             => FieldTypeInfo { ty: AngleBounds,         canonical: "angle bounds",             size: 8,   needs_sub_chunk: 0 },
+        "real_bounds"              => FieldTypeInfo { ty: RealBounds,          canonical: "real bounds",              size: 8,   needs_sub_chunk: 0 },
+        "fraction_bounds"          => FieldTypeInfo { ty: FractionBounds,      canonical: "fraction bounds",          size: 8,   needs_sub_chunk: 0 },
+        "tag_reference"            => FieldTypeInfo { ty: TagReference,        canonical: "tag reference",            size: 16,  needs_sub_chunk: 1 },
+        "block"                    => FieldTypeInfo { ty: Block,               canonical: "block",                    size: 12,  needs_sub_chunk: 1 },
+        "long_block_flags"         => FieldTypeInfo { ty: LongBlockFlags,      canonical: "long block flags",         size: 4,   needs_sub_chunk: 0 },
+        "word_block_flags"         => FieldTypeInfo { ty: WordBlockFlags,      canonical: "word block flags",         size: 2,   needs_sub_chunk: 0 },
+        "byte_block_flags"         => FieldTypeInfo { ty: ByteBlockFlags,      canonical: "byte block flags",         size: 1,   needs_sub_chunk: 0 },
+        "char_block_index"         => FieldTypeInfo { ty: CharBlockIndex,      canonical: "char block index",         size: 1,   needs_sub_chunk: 0 },
+        "custom_char_block_index"  => FieldTypeInfo { ty: CustomCharBlockIndex,  canonical: "custom char block index",  size: 1, needs_sub_chunk: 0 },
+        "short_block_index"        => FieldTypeInfo { ty: ShortBlockIndex,     canonical: "short block index",        size: 2,   needs_sub_chunk: 0 },
+        "custom_short_block_index" => FieldTypeInfo { ty: CustomShortBlockIndex, canonical: "custom short block index", size: 2, needs_sub_chunk: 0 },
+        "long_block_index"         => FieldTypeInfo { ty: LongBlockIndex,      canonical: "long block index",         size: 4,   needs_sub_chunk: 0 },
+        "custom_long_block_index"  => FieldTypeInfo { ty: CustomLongBlockIndex,  canonical: "custom long block index",  size: 4, needs_sub_chunk: 0 },
+        "data"                     => FieldTypeInfo { ty: Data,                canonical: "data",                     size: 20,  needs_sub_chunk: 1 },
+        "vertex_buffer"            => FieldTypeInfo { ty: VertexBuffer,        canonical: "vertex buffer",            size: 32,  needs_sub_chunk: 0 },
+        "pad"                      => FieldTypeInfo { ty: Pad,                 canonical: "pad",                      size: 0,   needs_sub_chunk: 0 },
+        "useless_pad"              => FieldTypeInfo { ty: UselessPad,          canonical: "useless pad",              size: 0,   needs_sub_chunk: 0 },
+        "skip"                     => FieldTypeInfo { ty: Skip,                canonical: "skip",                     size: 0,   needs_sub_chunk: 0 },
+        "explanation"              => FieldTypeInfo { ty: Explanation,         canonical: "explanation",              size: 0,   needs_sub_chunk: 0 },
+        "custom"                   => FieldTypeInfo { ty: Custom,              canonical: "custom",                   size: 0,   needs_sub_chunk: 0 },
+        "struct"                   => FieldTypeInfo { ty: Struct,              canonical: "struct",                   size: 0,   needs_sub_chunk: 1 },
+        "array"                    => FieldTypeInfo { ty: Array,               canonical: "array",                    size: 0,   needs_sub_chunk: 0 },
+        "tag_resource"             => FieldTypeInfo { ty: PageableResource,    canonical: "pageable resource",        size: 8,   needs_sub_chunk: 1 },
+        "tag_interop"              => FieldTypeInfo { ty: ApiInterop,          canonical: "api interop",              size: 12,  needs_sub_chunk: 1 },
+        "terminator"               => FieldTypeInfo { ty: Terminator,          canonical: "terminator X",             size: 0,   needs_sub_chunk: 0 },
+        _ => return None,
+    })
+}
+
+//
+// String table builder — dedups identical strings so `name_offset`
+// values in the layout point at shared bytes.
+//
+
+#[derive(Default)]
+struct StringTable {
+    bytes: Vec<u8>,
+    offsets: std::collections::HashMap<String, u32>,
+}
+
+impl StringTable {
+    fn new() -> Self {
+        // An empty string at offset 0 is free and gives a canonical
+        // "nameless" target for fields without a name.
+        let mut me = Self::default();
+        me.offsets.insert(String::new(), 0);
+        me.bytes.push(0);
+        me
+    }
+    fn intern(&mut self, s: &str) -> u32 {
+        if let Some(&off) = self.offsets.get(s) {
+            return off;
+        }
+        let off = self.bytes.len() as u32;
+        self.bytes.extend_from_slice(s.as_bytes());
+        self.bytes.push(0);
+        self.offsets.insert(s.to_owned(), off);
+        off
+    }
+}
+
+fn parse_group_tag(s: &str) -> Result<u32, FromJsonError> {
+    let bytes = s.as_bytes();
+    if bytes.len() != 4 {
+        return Err(FromJsonError::BadGroupTag(s.to_owned()));
+    }
+    Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+fn parse_guid(s: &str) -> Result<[u8; 16], FromJsonError> {
+    if s.len() != 32 {
+        return Err(FromJsonError::BadGuid(s.to_owned()));
+    }
+    let mut out = [0u8; 16];
+    for i in 0..16 {
+        out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
+            .map_err(|_| FromJsonError::BadGuid(s.to_owned()))?;
+    }
+    Ok(out)
+}
+
+/// Group-level metadata extracted from a schema JSON file. Not part
+/// of `TagLayout` (blay doesn't carry it) but needed by `TagFile`
+/// to populate its header.
+#[derive(Debug, Clone)]
+pub struct TagGroupMeta {
+    pub tag: u32,
+    pub version: u32,
+    pub flags: u32,
+    pub parent_tag: Option<u32>,
+}
+
+impl TagLayout {
+    /// Build a TagLayout from a JSON schema file (per-group output of
+    /// `h3_guerilla_dump_tag_definitions_json.py`). The result matches
+    /// what `TagLayout::read` would produce from an equivalent blay
+    /// chunk: same string_data/string_offsets/string_lists,
+    /// struct_layouts/block_layouts/etc. with consistent indices, and
+    /// every struct's size + field offsets computed.
+    ///
+    /// Returns `FromJsonError::StructSizeMismatch` if the computed
+    /// size of any struct disagrees with what the JSON's `size` field
+    /// claims — that's our cross-check against `field_type_info`'s
+    /// size column being wrong.
+    pub fn from_json(path: impl AsRef<Path>) -> Result<Self, FromJsonError> {
+        Self::from_json_with_meta(path).map(|(l, _)| l)
+    }
+
+    /// Like [`TagLayout::from_json`] but also returns the group-level
+    /// metadata (group tag, version, flags, parent_tag) that the JSON
+    /// carries but blay doesn't. Needed when creating a new tag file
+    /// from scratch — the file header needs `group_tag` /
+    /// `group_version`.
+    pub fn from_json_with_meta(
+        path: impl AsRef<Path>,
+    ) -> Result<(Self, TagGroupMeta), FromJsonError> {
+        let path = path.as_ref();
+        let file = std::fs::File::open(path)?;
+        let schema: TagGroupSchema = serde_json::from_reader(std::io::BufReader::new(file))?;
+        let meta = TagGroupMeta {
+            tag: parse_group_tag(&schema.tag)?,
+            version: schema.version,
+            flags: schema.flags,
+            parent_tag: schema.parent_tag.as_deref().map(parse_group_tag).transpose()?,
+        };
+        // `tmpl` custom expansion sizes are resolved by loading the
+        // sibling group JSONs from the same directory on demand.
+        let defs_dir = path.parent().unwrap_or(Path::new("."));
+        let layout = build_layout_from_schema(schema, defs_dir)?;
+        Ok((layout, meta))
+    }
+}
+
+/// Walk a `tmpl` target's parent chain and return the cumulative
+/// root-struct size. The target itself is *excluded* — its own fields
+/// are serialized via the sibling `struct` field that follows the
+/// tmpl custom. Returns 0 if the target can't be resolved (dead
+/// templates like `ssfx` with no `_meta.json` entry).
+///
+/// Loads `_meta.json` to map 4cc → filename, then walks up the chain
+/// reading each ancestor's JSON on demand.
+fn tmpl_expansion_size(defs_dir: &Path, target_tag: &str) -> u32 {
+    let Ok(meta_bytes) = std::fs::read(defs_dir.join("_meta.json")) else { return 0 };
+    let Ok(meta): Result<serde_json::Value, _> = serde_json::from_slice(&meta_bytes) else {
+        return 0;
+    };
+    let Some(tag_index) = meta.get("tag_index").and_then(|v| v.as_object()) else { return 0 };
+
+    let mut sum: u32 = 0;
+    let mut cur = target_tag.to_owned();
+    for _ in 0..32 {
+        let Some(name) = tag_index.get(&cur).and_then(|v| v.as_str()) else { break };
+        let Ok(bytes) = std::fs::read(defs_dir.join(format!("{name}.json"))) else { break };
+        let Ok(schema): Result<TagGroupSchema, _> = serde_json::from_slice(&bytes) else { break };
+        // Skip the target itself — we only add parent chain sizes.
+        if cur != target_tag {
+            let Some(block) = schema.blocks.get(&schema.block) else { break };
+            let Some(rs) = schema.structs.get(&block.struct_name) else { break };
+            sum = sum.saturating_add(rs.size);
+        }
+        let Some(parent) = schema.parent_tag else { break };
+        cur = parent;
+    }
+    sum
+}
+
+fn build_layout_from_schema(
+    schema: TagGroupSchema,
+    defs_dir: &Path,
+) -> Result<TagLayout, FromJsonError> {
+    let _ = parse_group_tag(&schema.tag)?; // validate early
+
+    let mut strings = StringTable::new();
+
+    // Index assignment (stable, alphabetical via BTreeMap iteration).
+    let struct_index: BTreeMap<&str, u32> = schema
+        .structs
+        .keys()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i as u32))
+        .collect();
+    let block_index: BTreeMap<&str, u32> = schema
+        .blocks
+        .keys()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i as u32))
+        .collect();
+    let array_index: BTreeMap<&str, u32> = schema
+        .arrays
+        .keys()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i as u32))
+        .collect();
+    let enum_index: BTreeMap<&str, u32> = schema
+        .enums_flags
+        .keys()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i as u32))
+        .collect();
+    let data_index: BTreeMap<&str, u32> = schema
+        .datas
+        .keys()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i as u32))
+        .collect();
+    let resource_index: BTreeMap<&str, u32> = schema
+        .resources
+        .keys()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i as u32))
+        .collect();
+    let interop_index: BTreeMap<&str, u32> = schema
+        .interops
+        .keys()
+        .enumerate()
+        .map(|(i, n)| (n.as_str(), i as u32))
+        .collect();
+
+    // field_types registry — grown on-demand as fields are emitted.
+    let mut field_types: Vec<TagFieldTypeLayout> = Vec::new();
+    let mut field_type_index_by_name: std::collections::HashMap<&'static str, u32> = Default::default();
+    let mut intern_field_type = |canonical: &'static str, size: u32, needs_sub: u32,
+                                 strings: &mut StringTable|
+     -> u32 {
+        if let Some(&i) = field_type_index_by_name.get(canonical) {
+            return i;
+        }
+        let name_offset = strings.intern(canonical);
+        let i = field_types.len() as u32;
+        field_types.push(TagFieldTypeLayout {
+            name_offset,
+            size,
+            needs_sub_chunk: needs_sub,
+        });
+        field_type_index_by_name.insert(canonical, i);
+        i
+    };
+
+    // Build custom_block_index_search_names_offsets — one entry per
+    // *distinct* search-name string seen on custom_*_block_index
+    // fields. Fields' `definition` becomes the index into here.
+    // (Our JSON doesn't currently carry search names, so this stays
+    // empty unless the dumper starts emitting them.)
+    let custom_block_index_search_names_offsets: Vec<u32> = Vec::new();
+
+    // Build data_definition_name_offsets from `datas` keys.
+    let data_definition_name_offsets: Vec<u32> = schema
+        .datas
+        .keys()
+        .map(|n| strings.intern(n))
+        .collect();
+
+    // Build string_lists (enums/flags). Each enum's options go into
+    // string_offsets contiguously; string_lists[i] points at that
+    // slice.
+    let mut string_offsets: Vec<u32> = Vec::new();
+    let mut string_lists: Vec<TagStringList> = Vec::new();
+    for (name, enum_schema) in &schema.enums_flags {
+        let list_name_offset = strings.intern(name);
+        let first = string_offsets.len() as u32;
+        for opt in &enum_schema.options {
+            let off = match opt {
+                Some(s) => strings.intern(s),
+                None => 0, // null option slot → empty string at offset 0
+            };
+            string_offsets.push(off);
+        }
+        string_lists.push(TagStringList {
+            offset: list_name_offset,
+            count: enum_schema.options.len() as u32,
+            first,
+        });
+    }
+
+    // Build array_layouts (resolve each array's struct by name).
+    let mut array_layouts: Vec<TagArrayLayout> = Vec::with_capacity(schema.arrays.len());
+    for (name, array) in &schema.arrays {
+        let si = *struct_index.get(array.struct_name.as_str()).ok_or_else(|| {
+            FromJsonError::UnknownReference { kind: "struct", name: array.struct_name.clone() }
+        })?;
+        array_layouts.push(TagArrayLayout {
+            name_offset: strings.intern(name),
+            count: array.count,
+            struct_index: si,
+        });
+    }
+
+    // Build resource_layouts.
+    let mut resource_layouts: Vec<TagResourceLayout> = Vec::with_capacity(schema.resources.len());
+    for (name, resource) in &schema.resources {
+        let si = *struct_index.get(resource.struct_name.as_str()).ok_or_else(|| {
+            FromJsonError::UnknownReference { kind: "struct", name: resource.struct_name.clone() }
+        })?;
+        resource_layouts.push(TagResourceLayout {
+            name_offset: strings.intern(name),
+            unknown: resource.flags as u32,
+            struct_index: si,
+        });
+    }
+
+    // Build interop_layouts.
+    let mut interop_layouts: Vec<TagInteropLayout> = Vec::with_capacity(schema.interops.len());
+    for (name, interop) in &schema.interops {
+        let si = *struct_index.get(interop.struct_name.as_str()).ok_or_else(|| {
+            FromJsonError::UnknownReference { kind: "struct", name: interop.struct_name.clone() }
+        })?;
+        interop_layouts.push(TagInteropLayout {
+            name_offset: strings.intern(name),
+            struct_index: si,
+            guid: parse_guid(&interop.guid)?,
+        });
+    }
+
+    // Build block_layouts.
+    let mut block_layouts: Vec<TagBlockLayout> = Vec::with_capacity(schema.blocks.len());
+    for (i, (name, block)) in schema.blocks.iter().enumerate() {
+        let si = *struct_index.get(block.struct_name.as_str()).ok_or_else(|| {
+            FromJsonError::UnknownReference { kind: "struct", name: block.struct_name.clone() }
+        })?;
+        block_layouts.push(TagBlockLayout {
+            index: i as u32,
+            name_offset: strings.intern(name),
+            max_count: block.max_count,
+            struct_index: si,
+        });
+    }
+
+    // Build struct_layouts + the flat `fields` array. For each struct,
+    // remember its `first_field_index` before pushing its fields.
+    let mut struct_layouts: Vec<TagStructLayout> = Vec::with_capacity(schema.structs.len());
+    let mut fields: Vec<TagFieldLayout> = Vec::new();
+    for (i, (name, struct_schema)) in schema.structs.iter().enumerate() {
+        let first = fields.len() as u32;
+
+        for field in &struct_schema.fields {
+            let info = field_type_info(&field.ty)
+                .ok_or_else(|| FromJsonError::UnknownFieldType(field.ty.clone()))?;
+
+            let type_index = intern_field_type(
+                info.canonical,
+                info.size,
+                info.needs_sub_chunk,
+                &mut strings,
+            );
+
+            let field_name_offset = match &field.name {
+                Some(n) => strings.intern(n),
+                None => 0,
+            };
+
+            let definition = resolve_field_definition(
+                field,
+                info.ty,
+                &struct_index,
+                &block_index,
+                &array_index,
+                &enum_index,
+                &data_index,
+                &resource_index,
+                &interop_index,
+            )?;
+
+            fields.push(TagFieldLayout {
+                name_offset: field_name_offset,
+                type_index,
+                definition,
+                field_type: info.ty,
+                offset: 0, // computed later by compute_struct_layout
+            });
+        }
+
+        struct_layouts.push(TagStructLayout {
+            index: i as u32,
+            guid: parse_guid(&struct_schema.guid)?,
+            name_offset: strings.intern(name),
+            first_field_index: first,
+            size: 0, // computed later
+            version: 0,
+        });
+    }
+
+    // Pull root-block index. Its struct's guid/size become the layout-
+    // level guid/root_data_size (matching `TagLayout::read`).
+    let root_block_index = *block_index.get(schema.block.as_str()).ok_or_else(|| {
+        FromJsonError::UnknownReference { kind: "block", name: schema.block.clone() }
+    })?;
+    let root_struct_index = block_layouts[root_block_index as usize].struct_index as usize;
+    let root_struct = &struct_layouts[root_struct_index];
+    let layout_guid = root_struct.guid;
+    let schema_root_size = schema.structs.iter().nth(root_struct_index).map(|(_, s)| s.size).unwrap_or(0);
+
+    let header = TagLayoutHeader {
+        tag_group_block_index: root_block_index,
+        string_data_size: 0, // filled in below
+        string_offset_count: string_offsets.len() as u32,
+        string_list_count: string_lists.len() as u32,
+        custom_block_index_search_names_count: custom_block_index_search_names_offsets.len() as u32,
+        data_definition_name_count: data_definition_name_offsets.len() as u32,
+        array_layout_count: array_layouts.len() as u32,
+        field_type_count: field_types.len() as u32,
+        field_count: fields.len() as u32,
+        aggregate_layout_count: 0,
+        struct_layout_count: struct_layouts.len() as u32,
+        block_layout_count: block_layouts.len() as u32,
+        resource_layout_count: resource_layouts.len() as u32,
+        interop_layout_count: interop_layouts.len() as u32,
+    };
+
+    let mut result = TagLayout {
+        root_data_size: schema_root_size,
+        guid: layout_guid,
+        version: 3, // H3 MCC — layout payload version 3
+        header: TagLayoutHeader {
+            string_data_size: strings.bytes.len() as u32,
+            ..header
+        },
+        string_data: strings.bytes,
+        string_offsets,
+        string_lists,
+        custom_block_index_search_names_offsets,
+        data_definition_name_offsets,
+        array_layouts,
+        field_types,
+        fields,
+        block_layouts,
+        resource_layouts,
+        interop_layouts,
+        struct_layouts,
+    };
+
+    // Compute struct sizes + field offsets. First pass with tmpl
+    // customs stored at 0 (no expansion) — matches how H3 schemas lay
+    // out (common shader fields are inlined directly in the struct
+    // field that follows the tmpl).
+    let tmpl_expansions: Vec<(usize, u32)> = {
+        let mut out = Vec::new();
+        let mut global_field_idx = 0usize;
+        for (_, struct_schema) in schema.structs.iter() {
+            for field in &struct_schema.fields {
+                if field.ty == "custom"
+                    && field.group_tag.as_deref() == Some("tmpl")
+                {
+                    if let Some(target) = field.definition.as_str() {
+                        let exp = tmpl_expansion_size(defs_dir, target);
+                        if exp > 0 {
+                            out.push((global_field_idx, exp));
+                        }
+                    }
+                }
+                global_field_idx += 1;
+            }
+        }
+        out
+    };
+
+    for i in 0..result.struct_layouts.len() {
+        result.compute_struct_layout(i);
+    }
+
+    // Cross-check computed sizes against the schema's stated sizes.
+    // If declared > computed and this struct has tmpl customs, apply
+    // their expansion (Reach-style: parent-chain inlined here) and
+    // recompute. If declared still doesn't match — or we're > declared
+    // — it's a genuine mismatch.
+    for (i, (name, struct_schema)) in schema.structs.iter().enumerate() {
+        let computed = result.struct_layouts[i].size;
+        let declared = struct_schema.size as usize;
+        if computed == declared {
+            continue;
+        }
+        if computed < declared {
+            // Try tmpl expansion for this struct's fields.
+            let first = result.struct_layouts[i].first_field_index as usize;
+            let mut field_idx = first;
+            let mut applied = 0usize;
+            while result.fields[field_idx].field_type != TagFieldType::Terminator {
+                if let Some(&(_, exp)) = tmpl_expansions.iter().find(|&&(fi, _)| fi == field_idx) {
+                    result.fields[field_idx].definition = exp;
+                    applied += exp as usize;
+                }
+                field_idx += 1;
+            }
+            if applied > 0 {
+                // Reset the struct's size so compute_struct_layout runs again.
+                result.struct_layouts[i].size = 0;
+                result.compute_struct_layout(i);
+            }
+        }
+        let computed = result.struct_layouts[i].size;
+        if computed != declared {
+            return Err(FromJsonError::StructSizeMismatch {
+                name: name.clone(),
+                schema: struct_schema.size,
+                computed,
+            });
+        }
+    }
+
+    // Update header size-counts that depend on final string_data size.
+    result.header.string_data_size = result.string_data.len() as u32;
+
+    Ok(result)
+}
+
+/// Translate a field schema's `definition` value into the `u32` that
+/// goes into the corresponding `TagFieldLayout`. The interpretation
+/// depends on the field type:
+///
+/// - named-registry types (struct/block/array/flags/enum/data/
+///   resource/interop): string → index into the matching table.
+/// - `pad`/`useless_pad`/`skip`: integer → byte count (stored in the
+///   `definition` slot verbatim).
+/// - `tag_reference`: object → would normally store flags+allowed,
+///   but blay only stores flags here (just flags slot).
+/// - `explanation`: string → stored as a string offset into
+///   string_data.
+/// - primitives / `terminator`: 0.
+fn resolve_field_definition(
+    field: &TagFieldSchema,
+    ty: TagFieldType,
+    struct_index: &BTreeMap<&str, u32>,
+    block_index: &BTreeMap<&str, u32>,
+    array_index: &BTreeMap<&str, u32>,
+    enum_index: &BTreeMap<&str, u32>,
+    data_index: &BTreeMap<&str, u32>,
+    resource_index: &BTreeMap<&str, u32>,
+    interop_index: &BTreeMap<&str, u32>,
+) -> Result<u32, FromJsonError> {
+    use TagFieldType::*;
+
+    let def = &field.definition;
+
+    // `custom` fields contribute 0 bytes by default. `tmpl`-typed
+    // customs inline their target group's parent-chain size only
+    // when the containing struct's declared size is larger than the
+    // sum of plain field sizes — that post-hoc patch happens in
+    // `build_layout_from_schema`, not here.
+    if matches!(ty, Custom) {
+        return Ok(0);
+    }
+
+    // Primitives & no-definition types: return 0.
+    if matches!(
+        ty,
+        Unknown
+            | String
+            | LongString
+            | StringId
+            | OldStringId
+            | CharInteger
+            | ShortInteger
+            | LongInteger
+            | Int64Integer
+            | Angle
+            | Tag
+            | Point2d
+            | Rectangle2d
+            | RgbColor
+            | ArgbColor
+            | Real
+            | RealSlider
+            | RealFraction
+            | RealPoint2d
+            | RealPoint3d
+            | RealVector2d
+            | RealVector3d
+            | RealQuaternion
+            | RealEulerAngles2d
+            | RealEulerAngles3d
+            | RealPlane2d
+            | RealPlane3d
+            | RealRgbColor
+            | RealArgbColor
+            | RealHsvColor
+            | RealAhsvColor
+            | ShortIntegerBounds
+            | AngleBounds
+            | RealBounds
+            | FractionBounds
+            | VertexBuffer
+            | CustomCharBlockIndex
+            | CustomShortBlockIndex
+            | CustomLongBlockIndex
+            | Terminator,
+    ) {
+        return Ok(0);
+    }
+
+    // Pad/skip/useless_pad: definition is a byte count integer.
+    if matches!(ty, Pad | UselessPad | Skip) {
+        return def
+            .as_u64()
+            .map(|v| v as u32)
+            .ok_or_else(|| FromJsonError::BadFieldDefinition {
+                field: field.name.clone().unwrap_or_default(),
+                ty: field.ty.clone(),
+            });
+    }
+
+    // Explanation: store as 0 in the layout (blay's `definition` slot
+    // holds the string offset at runtime via a separate mechanism).
+    // Preserving the text in string_data is out-of-scope for now.
+    if matches!(ty, Explanation) {
+        return Ok(0);
+    }
+
+    // tag_reference: blay's `definition` holds flags. `allowed` list
+    // isn't part of blay's field record.
+    if matches!(ty, TagReference) {
+        let flags = def
+            .as_object()
+            .and_then(|m| m.get("flags"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        return Ok(flags as u32);
+    }
+
+    // Named-registry types: resolve by name.
+    let name = def.as_str().ok_or_else(|| FromJsonError::BadFieldDefinition {
+        field: field.name.clone().unwrap_or_default(),
+        ty: field.ty.clone(),
+    })?;
+    let lookup = match ty {
+        Struct => struct_index.get(name).copied(),
+        Block | LongBlockFlags | WordBlockFlags | ByteBlockFlags | CharBlockIndex
+        | ShortBlockIndex | LongBlockIndex => block_index.get(name).copied(),
+        Array => array_index.get(name).copied(),
+        CharEnum | ShortEnum | LongEnum | LongFlags | WordFlags | ByteFlags => {
+            enum_index.get(name).copied()
+        }
+        Data => data_index.get(name).copied(),
+        PageableResource => resource_index.get(name).copied(),
+        ApiInterop => interop_index.get(name).copied(),
+        _ => None,
+    };
+    lookup.ok_or_else(|| FromJsonError::UnknownReference {
+        kind: match ty {
+            Struct => "struct",
+            Block | LongBlockFlags | WordBlockFlags | ByteBlockFlags | CharBlockIndex
+            | ShortBlockIndex | LongBlockIndex => "block",
+            Array => "array",
+            CharEnum | ShortEnum | LongEnum | LongFlags | WordFlags | ByteFlags => "enum_or_flags",
+            Data => "data",
+            PageableResource => "resource",
+            ApiInterop => "interop",
+            _ => "?",
+        },
+        name: name.to_owned(),
+    })
+}
