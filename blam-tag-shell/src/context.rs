@@ -3,13 +3,15 @@
 //! [`CliContext`] is threaded through every command's `run`. For
 //! tag-bound commands the driver loads the target tag into
 //! [`CliContext::loaded`] before dispatching; commands mutate through
-//! the façade and set [`LoadedTag::dirty`]; the driver or the command
+//! the facade and set [`LoadedTag::dirty`]; the driver or the command
 //! decides when to persist.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use blam_tags::TagFile;
+
+use crate::tag_index::TagIndex;
 
 pub struct CliContext {
     pub loaded: Option<LoadedTag>,
@@ -18,6 +20,14 @@ pub struct CliContext {
     /// the Tag context in the REPL. Commands concatenate this with
     /// the user-supplied path to produce the actual field-path.
     pub nav: Vec<String>,
+    /// Game identifier (e.g. `"haloreach_mcc"`). Set once at startup
+    /// from the global `--game` flag and used to scope schema lookups
+    /// and the [`TagIndex`].
+    pub game: String,
+    /// group_tag ↔ group-name index loaded from
+    /// `definitions/<game>/_meta.json`. Used by every command that
+    /// renders or parses tag references.
+    pub tag_index: TagIndex,
 }
 
 pub struct LoadedTag {
@@ -27,8 +37,13 @@ pub struct LoadedTag {
 }
 
 impl CliContext {
-    pub fn new() -> Self {
-        Self { loaded: None, nav: Vec::new() }
+    /// Build a context for the given game. Eagerly loads
+    /// `definitions/<game>/_meta.json` — errors if that file is
+    /// missing or malformed.
+    pub fn new(game: impl Into<String>) -> Result<Self> {
+        let game = game.into();
+        let tag_index = TagIndex::load(Path::new("definitions"), &game)?;
+        Ok(Self { loaded: None, nav: Vec::new(), game, tag_index })
     }
 
     /// Load `path` into [`Self::loaded`] and reset [`Self::nav`] to

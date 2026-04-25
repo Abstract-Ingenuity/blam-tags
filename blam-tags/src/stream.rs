@@ -3,10 +3,10 @@
 //! layout and a `bdat` root block data chunk — same structure, different
 //! content (main data, dependency list, import info).
 
-use std::error::Error;
 use std::io::{Read, Seek, Write};
 
 use crate::data::TagBlockData;
+use crate::error::TagReadError;
 use crate::io::*;
 use crate::layout::TagLayout;
 
@@ -27,21 +27,32 @@ pub(crate) struct TagStream {
 
 impl TagStream {
     /// Read a stream chunk. Caller supplies the expected outer signature
-    /// (`b"tag!"`, `b"want"`, or `b"info"`); the function asserts it and
-    /// parses the `blay` + `bdat` body.
+    /// (`b"tag!"`, `b"want"`, `b"info"`, or `b"assd"`); the function
+    /// validates it and parses the `blay` + `bdat` body.
     pub(crate) fn read<R: Seek + Read>(
         chunk_signature: u32,
         reader: &mut std::io::BufReader<R>,
-    ) -> Result<Self, Box<dyn Error>> {
-        // Read the chunk header
-        let chunk_header = read_tag_chunk_header(reader)?;
-        assert!(chunk_header.signature == chunk_signature);
-        // HYPOTHESIS: outer tag! / want / info chunk version is always 0.
-        assert_eq!(
-            chunk_header.version, 0,
-            "outer stream chunk version ({}) != 0",
-            chunk_header.version,
-        );
+    ) -> Result<Self, TagReadError> {
+        // Outer chunk: signature is dynamic (one of tag!/want/info/
+        // assd), so we can't use the validating helper — inline the
+        // signature/version checks. Stream-level error context uses
+        // the static name "tag stream" since we can't materialise the
+        // dynamic name as a `&'static str`.
+        let chunk_header_offset = reader.stream_position()?;
+        let chunk_header = read_chunk_header(reader)?;
+        if chunk_header.signature != chunk_signature {
+            return Err(TagReadError::BadChunkSignature {
+                offset: chunk_header_offset,
+                expected: chunk_signature.to_be_bytes(),
+                got: chunk_header.signature.to_be_bytes(),
+            });
+        }
+        if chunk_header.version != 0 {
+            return Err(TagReadError::BadChunkVersion {
+                chunk: "tag stream",
+                version: chunk_header.version,
+            });
+        }
         let chunk_offset = reader.stream_position()?;
 
         //
@@ -50,37 +61,34 @@ impl TagStream {
 
         let layout = TagLayout::read(reader)?;
         let root_block_layout = &layout.block_layouts[layout.header.tag_group_block_index as usize];
-        // layout.display_block(layout.header.tag_group_block_index as usize, 0);
 
         //
-        // Read the 'bdat' chunk
+        // Read the 'bdat' chunk — version is 1 (not 0), so we use
+        // the unvalidated header reader and check the version
+        // ourselves.
         //
 
-        let block_data_header = read_tag_chunk_header(reader)?;
-        assert!(block_data_header.signature == u32::from_be_bytes(*b"bdat"));
-        // HYPOTHESIS: bdat version is always 1.
-        assert_eq!(
-            block_data_header.version, 1,
-            "bdat version ({}) != 1", block_data_header.version,
-        );
+        let bdat_offset = reader.stream_position()?;
+        let block_data_header = read_chunk_header(reader)?;
+        if block_data_header.signature != u32::from_be_bytes(*b"bdat") {
+            return Err(TagReadError::BadChunkSignature {
+                offset: bdat_offset,
+                expected: *b"bdat",
+                got: block_data_header.signature.to_be_bytes(),
+            });
+        }
+        if block_data_header.version != 1 {
+            return Err(TagReadError::BadChunkVersion {
+                chunk: "bdat",
+                version: block_data_header.version,
+            });
+        }
         let block_data_offset = reader.stream_position()?;
 
         let tag_block_data = TagBlockData::read(&layout, root_block_layout, reader)?;
 
-        let end_offset = reader.stream_position()?;
-        let expected_offset = block_data_offset + block_data_header.size as u64;
-        if end_offset != expected_offset {
-            panic!("failed to read 'bdat': started at 0x{block_data_offset:X}, ended at 0x{end_offset:X}, expected 0x{expected_offset:X}");
-        }
-
-        let end_offset = reader.stream_position()?;
-        let expected_offset = chunk_offset + chunk_header.size as u64;
-        if end_offset != expected_offset {
-            panic!(
-                "failed to read '{}': started at 0x{chunk_offset:X}, ended at 0x{end_offset:X}, expected 0x{expected_offset:X}",
-                str::from_utf8(&chunk_signature.to_be_bytes()).unwrap(),
-            );
-        }
+        check_chunk_end(reader, "bdat", block_data_offset, block_data_header.size)?;
+        check_chunk_end(reader, "tag stream", chunk_offset, chunk_header.size)?;
 
         Ok(Self {
             layout,

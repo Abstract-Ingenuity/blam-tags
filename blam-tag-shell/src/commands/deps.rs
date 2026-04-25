@@ -8,15 +8,16 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result};
-use blam_tags::{TagField, TagFieldData};
+use blam_tags::{TagField, TagFieldData, TagReferenceData};
 use serde_json::json;
 
 use crate::context::CliContext;
+use crate::format::write_tag_reference;
 use crate::walk::{walk, FieldVisitor};
 
 pub fn run(ctx: &mut CliContext, unique: bool, json_output: bool) -> Result<()> {
     let nav_path = ctx.nav.join("/");
-    let loaded = ctx.loaded("deps")?;
+    let loaded = ctx.loaded.as_ref().context("`deps` needs a loaded tag")?;
 
     let start = if nav_path.is_empty() {
         loaded.tag.root()
@@ -28,45 +29,47 @@ pub fn run(ctx: &mut CliContext, unique: bool, json_output: bool) -> Result<()> 
             .with_context(|| format!("nav path '{}' does not resolve to a struct", nav_path))?
     };
 
-    let mut visitor = DepsVisitor { refs: Vec::new() };
+    let mut visitor = DepsVisitor { ctx, refs: Vec::new() };
     walk(start, &mut visitor);
 
     let mut refs = visitor.refs;
     if unique {
-        let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
-        refs.retain(|(_, g, p)| seen.insert((g.clone(), p.clone())));
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        refs.retain(|(_, rendered)| seen.insert(rendered.clone()));
     }
 
     if json_output {
         let arr: Vec<_> = refs.iter()
-            .map(|(field_path, group, path)| json!({
+            .map(|(field_path, rendered)| json!({
                 "field_path": field_path,
-                "group": group,
-                "path": path,
+                "reference": rendered,
             }))
             .collect();
         println!("{}", serde_json::to_string_pretty(&arr)?);
     } else {
-        for (field_path, group, path) in refs {
-            println!("{field_path}: {group}:{path}");
+        for (field_path, rendered) in refs {
+            println!("{field_path}: {rendered}");
         }
     }
 
     Ok(())
 }
 
-struct DepsVisitor {
-    refs: Vec<(String, String, String)>,
+struct DepsVisitor<'a> {
+    ctx: &'a CliContext,
+    refs: Vec<(String, String)>,
 }
 
-impl FieldVisitor for DepsVisitor {
+impl FieldVisitor for DepsVisitor<'_> {
     fn visit_leaf(&mut self, path: &str, _depth: usize, field: TagField<'_>) {
         let Some(TagFieldData::TagReference(r)) = field.value() else { return };
-        let Some((group_tag, tag_path)) = r.group_tag_and_name else { return };
-        self.refs.push((
-            path.to_string(),
-            blam_tags::format_group_tag(group_tag),
-            tag_path,
-        ));
+        if r.group_tag_and_name.is_none() { return; }
+        let mut rendered = String::new();
+        write_tag_reference(
+            self.ctx,
+            &mut rendered,
+            &TagReferenceData { group_tag_and_name: r.group_tag_and_name.clone() },
+        );
+        self.refs.push((path.to_string(), rendered));
     }
 }

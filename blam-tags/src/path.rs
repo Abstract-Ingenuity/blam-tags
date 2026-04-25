@@ -37,7 +37,7 @@ pub(crate) struct TagFieldCursor<'a> {
 }
 
 /// Mutable cursor. Same shape as [`TagFieldCursor`] but with mutable
-/// references, so the façade's write-side handles (`TagStructMut`,
+/// references, so the facade's write-side handles (`TagStructMut`,
 /// `TagFieldMut`, …) can split-borrow into it to mutate in place.
 pub(crate) struct TagFieldCursorMut<'a> {
     pub struct_raw: &'a mut [u8],
@@ -46,7 +46,7 @@ pub(crate) struct TagFieldCursorMut<'a> {
 }
 
 /// Resolve `path` against a starting struct + raw slice and return a
-/// [`TagFieldCursor`] at the final field. Used by the façade's
+/// [`TagFieldCursor`] at the final field. Used by the facade's
 /// [`crate::api::TagStruct::field_path`]; callers at the tag root
 /// pass `tag.tag_stream.data.elements[0]` and `element_raw(0)`.
 pub(crate) fn lookup_from_struct<'a>(
@@ -110,7 +110,7 @@ pub(crate) fn lookup_from_struct<'a>(
 ///
 /// Unlike [`lookup_from_struct`], there's no "final-segment lookup" —
 /// the caller just wants to *reach* a struct, not the field that
-/// points to it. Used by the façade's [`crate::api::TagStruct::descend`].
+/// points to it. Used by the facade's [`crate::api::TagStruct::descend`].
 pub(crate) fn descend_from_struct<'a>(
     layout: &'a TagLayout,
     start_struct: &'a TagStructData,
@@ -255,15 +255,14 @@ fn find_field_in_struct(
     type_filter: Option<&str>,
 ) -> Option<usize> {
     // No type filter → delegate to the by-name helper.
-    if type_filter.is_none() {
+    let Some(filter) = type_filter else {
         return struct_data.find_field_by_name(layout, name);
-    }
+    };
 
     // Filtered walk: accept the first name match whose field-type
     // name matches the filter case-insensitively.
     let struct_layout = &layout.struct_layouts[struct_data.struct_index as usize];
     let mut field_index = struct_layout.first_field_index as usize;
-    let filter = type_filter.unwrap();
 
     loop {
         let field = &layout.fields[field_index];
@@ -328,7 +327,7 @@ fn descend_block_data_mut(
     }
 }
 
-fn descend_array<'a>(struct_data: &'a TagStructData, field_index: usize) -> Option<&'a [TagStructData]> {
+fn descend_array(struct_data: &TagStructData, field_index: usize) -> Option<&[TagStructData]> {
     let entry = struct_data
         .sub_chunks
         .iter()
@@ -339,10 +338,10 @@ fn descend_array<'a>(struct_data: &'a TagStructData, field_index: usize) -> Opti
     }
 }
 
-fn descend_array_mut<'a>(
-    struct_data: &'a mut TagStructData,
+fn descend_array_mut(
+    struct_data: &mut TagStructData,
     field_index: usize,
-) -> Option<&'a mut [TagStructData]> {
+) -> Option<&mut [TagStructData]> {
     let entry = struct_data
         .sub_chunks
         .iter_mut()

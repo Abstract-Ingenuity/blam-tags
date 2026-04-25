@@ -7,9 +7,9 @@
 //! [`crate::data`], which dispatches on the [`TagFieldType`] resolved on
 //! each [`TagFieldLayout`] during layout read.
 
-use std::error::Error;
 use std::io::{Read, Seek, Write};
 
+use crate::error::TagReadError;
 use crate::fields::TagFieldType;
 use crate::io::*;
 
@@ -252,7 +252,7 @@ impl TagLayout {
             end_offset += 1;
         }
 
-        Some(str::from_utf8(&self.string_data[start_offset..end_offset]).unwrap())
+        str::from_utf8(&self.string_data[start_offset..end_offset]).ok()
     }
 
     /// Number of direct child chunks a struct produces when serialized — i.e. how many
@@ -344,13 +344,32 @@ impl TagLayout {
     /// so the data-layer parsing can dispatch cheaply.
     pub fn read<R: Seek + Read>(
         reader: &mut std::io::BufReader<R>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, TagReadError> {
         //================================================================================
-        // Outer blay chunk header + 24-byte payload header
+        // Outer blay chunk header + 24-byte payload header.
+        //
+        // The blay chunk-header version is always 2 (a wire-format
+        // version distinct from the payload version we read below).
+        // Use the unvalidated header reader because
+        // `read_validated_chunk_header` checks for version == 0, which
+        // doesn't apply here.
         //================================================================================
 
-        let blay_header = read_tag_chunk_header(reader)?;
-        assert!(blay_header.signature == u32::from_be_bytes(*b"blay"));
+        let blay_header_offset = reader.stream_position()?;
+        let blay_header = read_chunk_header(reader)?;
+        if blay_header.signature != u32::from_be_bytes(*b"blay") {
+            return Err(TagReadError::BadChunkSignature {
+                offset: blay_header_offset,
+                expected: *b"blay",
+                got: blay_header.signature.to_be_bytes(),
+            });
+        }
+        if blay_header.version != 2 {
+            return Err(TagReadError::BadChunkVersion {
+                chunk: "blay",
+                version: blay_header.version,
+            });
+        }
 
         let blay_offset = reader.stream_position()?;
 
@@ -359,13 +378,9 @@ impl TagLayout {
         let version = read_u32_le(reader)?;
         let block_layout_version = version;
 
-        // HYPOTHESIS: the outer blay chunk-header version is always 2 (even
-        // when the payload version — 1/2/3/4 — differs).
-        assert_eq!(
-            blay_header.version, 2,
-            "blay chunk-header version ({}) != 2 (payload version = {})",
-            blay_header.version, version,
-        );
+        if !matches!(block_layout_version, 1..=4) {
+            return Err(TagReadError::UnsupportedLayoutVersion(block_layout_version));
+        }
 
         let mut string_data;
         let mut string_offsets;
@@ -385,7 +400,7 @@ impl TagLayout {
         //================================================================================
 
         let header = TagLayoutHeader {
-            tag_group_block_index: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
+            tag_group_block_index: if matches!(block_layout_version, 2..=4) { read_u32_le(reader)? } else { 0 },
             string_data_size: read_u32_le(reader)?,
             string_offset_count: read_u32_le(reader)?,
             string_list_count: read_u32_le(reader)?,
@@ -395,25 +410,35 @@ impl TagLayout {
             field_type_count: read_u32_le(reader)?,
             field_count: read_u32_le(reader)?,
             aggregate_layout_count: if block_layout_version == 1 { read_u32_le(reader)? } else { 0 },
-            struct_layout_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
-            block_layout_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
-            resource_layout_count: if matches!(block_layout_version, 2 | 3 | 4) { read_u32_le(reader)? } else { 0 },
+            struct_layout_count: if matches!(block_layout_version, 2..=4) { read_u32_le(reader)? } else { 0 },
+            block_layout_count: if matches!(block_layout_version, 2..=4) { read_u32_le(reader)? } else { 0 },
+            resource_layout_count: if matches!(block_layout_version, 2..=4) { read_u32_le(reader)? } else { 0 },
             interop_layout_count: if matches!(block_layout_version, 3 | 4) { read_u32_le(reader)? } else { 0 },
         };
 
         //================================================================================
-        // Read the tag layout chunk header (if present)
+        // Read the tag layout chunk header (if present).
+        //
+        // tgly's chunk-header version field carries the layout version
+        // (2/3/4), not 0, so we can't use `read_validated_chunk_header`.
         //================================================================================
 
         let tag_layout_header_and_offset = if block_layout_version > 1 {
-            let tag_layout_header = read_tag_chunk_header(reader)?;
-            assert!(tag_layout_header.signature == u32::from_be_bytes(*b"tgly"));
-            // HYPOTHESIS: tgly.version equals the blay layout version (2, 3, or 4).
-            assert_eq!(
-                tag_layout_header.version, block_layout_version,
-                "tgly version ({}) != block_layout_version ({})",
-                tag_layout_header.version, block_layout_version,
-            );
+            let tgly_offset = reader.stream_position()?;
+            let tag_layout_header = read_chunk_header(reader)?;
+            if tag_layout_header.signature != u32::from_be_bytes(*b"tgly") {
+                return Err(TagReadError::BadChunkSignature {
+                    offset: tgly_offset,
+                    expected: *b"tgly",
+                    got: tag_layout_header.signature.to_be_bytes(),
+                });
+            }
+            if tag_layout_header.version != block_layout_version {
+                return Err(TagReadError::BadChunkVersion {
+                    chunk: "tgly",
+                    version: tag_layout_header.version,
+                });
+            }
             Some((tag_layout_header, reader.stream_position()?))
         } else {
             None
@@ -424,11 +449,14 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let string_data_header = read_tag_chunk_header(reader)?;
-            assert!(string_data_header.signature == u32::from_be_bytes(*b"str*"));
-            // HYPOTHESIS: str* version is always 0.
-            assert_eq!(string_data_header.version, 0, "str* version ({}) != 0", string_data_header.version);
-            assert!(header.string_data_size == string_data_header.size);
+            let string_data_header = read_validated_chunk_header(reader, *b"str*", "str*")?;
+            if header.string_data_size != string_data_header.size {
+                return Err(TagReadError::CountMismatch {
+                    chunk: "str*",
+                    header_count: header.string_data_size,
+                    derived_count: string_data_header.size,
+                });
+            }
         }
 
         string_data = vec![0u8; header.string_data_size as _];
@@ -439,17 +467,19 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let string_offsets_header = read_tag_chunk_header(reader)?;
-            assert!(string_offsets_header.signature == u32::from_be_bytes(*b"sz+x"));
-            // HYPOTHESIS: sz+x version is always 0.
-            assert_eq!(string_offsets_header.version, 0, "sz+x version ({}) != 0", string_offsets_header.version);
-            assert!(header.string_offset_count as usize == string_offsets_header.size as usize / std::mem::size_of::<u32>());
+            let string_offsets_header = read_validated_chunk_header(reader, *b"sz+x", "sz+x")?;
+            check_count_matches_size(
+                "sz+x",
+                header.string_offset_count,
+                string_offsets_header.size,
+                std::mem::size_of::<u32>() as u32,
+            )?;
         }
 
         string_offsets = vec![0; header.string_offset_count as usize];
 
-        for i in 0..header.string_offset_count as usize {
-            string_offsets[i] = read_u32_le(reader)?;
+        for slot in &mut string_offsets {
+            *slot = read_u32_le(reader)?;
         }
 
         //================================================================================
@@ -457,11 +487,8 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let string_lists_header = read_tag_chunk_header(reader)?;
-            assert!(string_lists_header.signature == u32::from_be_bytes(*b"sz[]"));
-            // HYPOTHESIS: sz[] version is always 0.
-            assert_eq!(string_lists_header.version, 0, "sz[] version ({}) != 0", string_lists_header.version);
-            assert!(header.string_list_count as usize == string_lists_header.size as usize / 12);
+            let string_lists_header = read_validated_chunk_header(reader, *b"sz[]", "sz[]")?;
+            check_count_matches_size("sz[]", header.string_list_count, string_lists_header.size, 12)?;
         }
 
         string_lists = Vec::with_capacity(header.string_list_count as usize);
@@ -479,11 +506,13 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let custom_block_search_index_names_header = read_tag_chunk_header(reader)?;
-            assert!(custom_block_search_index_names_header.signature == u32::from_be_bytes(*b"csbn"));
-            // HYPOTHESIS: csbn version is always 0.
-            assert_eq!(custom_block_search_index_names_header.version, 0, "csbn version ({}) != 0", custom_block_search_index_names_header.version);
-            assert!(header.custom_block_index_search_names_count as usize == custom_block_search_index_names_header.size as usize / std::mem::size_of::<u32>());
+            let csbn_header = read_validated_chunk_header(reader, *b"csbn", "csbn")?;
+            check_count_matches_size(
+                "csbn",
+                header.custom_block_index_search_names_count,
+                csbn_header.size,
+                std::mem::size_of::<u32>() as u32,
+            )?;
         }
 
         custom_block_index_search_names_offsets = Vec::with_capacity(header.custom_block_index_search_names_count as usize);
@@ -497,17 +526,19 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let data_definition_names_header = read_tag_chunk_header(reader)?;
-            assert!(data_definition_names_header.signature == u32::from_be_bytes(*b"dtnm"));
-            // HYPOTHESIS: dtnm version is always 0.
-            assert_eq!(data_definition_names_header.version, 0, "dtnm version ({}) != 0", data_definition_names_header.version);
-            assert!(header.data_definition_name_count as usize == data_definition_names_header.size as usize / std::mem::size_of::<u32>());
+            let dtnm_header = read_validated_chunk_header(reader, *b"dtnm", "dtnm")?;
+            check_count_matches_size(
+                "dtnm",
+                header.data_definition_name_count,
+                dtnm_header.size,
+                std::mem::size_of::<u32>() as u32,
+            )?;
         }
 
         data_definition_name_offsets = vec![0; header.data_definition_name_count as usize];
 
-        for i in 0..header.data_definition_name_count as usize {
-            data_definition_name_offsets[i] = read_u32_le(reader)?;
+        for slot in &mut data_definition_name_offsets {
+            *slot = read_u32_le(reader)?;
         }
 
         //================================================================================
@@ -515,11 +546,8 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let array_layouts_header = read_tag_chunk_header(reader)?;
-            assert!(array_layouts_header.signature == u32::from_be_bytes(*b"arr!"));
-            // HYPOTHESIS: arr! version is always 0.
-            assert_eq!(array_layouts_header.version, 0, "arr! version ({}) != 0", array_layouts_header.version);
-            assert!(header.array_layout_count as usize == array_layouts_header.size as usize / 12);
+            let arr_header = read_validated_chunk_header(reader, *b"arr!", "arr!")?;
+            check_count_matches_size("arr!", header.array_layout_count, arr_header.size, 12)?;
         }
 
         array_layouts = Vec::with_capacity(header.array_layout_count as usize);
@@ -537,11 +565,8 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let field_types_header = read_tag_chunk_header(reader)?;
-            assert!(field_types_header.signature == u32::from_be_bytes(*b"tgft"));
-            // HYPOTHESIS: tgft version is always 0.
-            assert_eq!(field_types_header.version, 0, "tgft version ({}) != 0", field_types_header.version);
-            assert!(header.field_type_count as usize == field_types_header.size as usize / 12);
+            let tgft_header = read_validated_chunk_header(reader, *b"tgft", "tgft")?;
+            check_count_matches_size("tgft", header.field_type_count, tgft_header.size, 12)?;
         }
 
         field_types = Vec::with_capacity(header.field_type_count as usize);
@@ -559,11 +584,8 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let fields_header = read_tag_chunk_header(reader)?;
-            assert!(fields_header.signature == u32::from_be_bytes(*b"gras"));
-            // HYPOTHESIS: gras version is always 0.
-            assert_eq!(fields_header.version, 0, "gras version ({}) != 0", fields_header.version);
-            assert!(header.field_count as usize == fields_header.size as usize / 12);
+            let gras_header = read_validated_chunk_header(reader, *b"gras", "gras")?;
+            check_count_matches_size("gras", header.field_count, gras_header.size, 12)?;
         }
 
         field_layouts = Vec::with_capacity(header.field_count as usize);
@@ -616,18 +638,12 @@ impl TagLayout {
             resource_layouts = vec![];
             interop_layouts = vec![];
         } else {
-            assert!(matches!(block_layout_version, 2 | 3 | 4));
-
             //================================================================================
             // Read the block definitions
             //================================================================================
 
-            let block_layout_header = read_tag_chunk_header(reader)?;
-
-            assert!(block_layout_header.signature == u32::from_be_bytes(*b"blv2"));
-            // HYPOTHESIS: blv2 version is always 0.
-            assert_eq!(block_layout_header.version, 0, "blv2 version ({}) != 0", block_layout_header.version);
-            assert!(header.block_layout_count as usize == block_layout_header.size as usize / 12);
+            let block_layout_header = read_validated_chunk_header(reader, *b"blv2", "blv2")?;
+            check_count_matches_size("blv2", header.block_layout_count, block_layout_header.size, 12)?;
 
             block_layouts = Vec::with_capacity(header.block_layout_count as usize);
 
@@ -644,12 +660,8 @@ impl TagLayout {
             // Read the resource definitions
             //================================================================================
 
-            let resource_layouts_header = read_tag_chunk_header(reader)?;
-
-            assert!(resource_layouts_header.signature == u32::from_be_bytes(*b"rcv2"));
-            // HYPOTHESIS: rcv2 version is always 0.
-            assert_eq!(resource_layouts_header.version, 0, "rcv2 version ({}) != 0", resource_layouts_header.version);
-            assert!(header.resource_layout_count as usize == resource_layouts_header.size as usize / 12);
+            let rcv2_header = read_validated_chunk_header(reader, *b"rcv2", "rcv2")?;
+            check_count_matches_size("rcv2", header.resource_layout_count, rcv2_header.size, 12)?;
 
             resource_layouts = Vec::with_capacity(header.resource_layout_count as usize);
 
@@ -668,12 +680,8 @@ impl TagLayout {
             interop_layouts = vec![];
 
             if matches!(block_layout_version, 3 | 4) {
-                let interop_layouts_header = read_tag_chunk_header(reader)?;
-
-                assert!(interop_layouts_header.signature == u32::from_be_bytes(*b"]==["));
-                // HYPOTHESIS: ]==[ version is always 0.
-                assert_eq!(interop_layouts_header.version, 0, "]==[ version ({}) != 0", interop_layouts_header.version);
-                assert!(header.interop_layout_count as usize == interop_layouts_header.size as usize / 24);
+                let interop_header = read_validated_chunk_header(reader, *b"]==[", "]==[")?;
+                check_count_matches_size("]==[", header.interop_layout_count, interop_header.size, 24)?;
 
                 interop_layouts.reserve(header.interop_layout_count as usize);
 
@@ -692,17 +700,20 @@ impl TagLayout {
             // stv2 is 24 bytes.
             //================================================================================
 
-            let struct_layouts_header = read_tag_chunk_header(reader)?;
-            let (expected_struct_sig, struct_record_size) = if block_layout_version == 4 {
-                (u32::from_be_bytes(*b"stv4"), 28usize)
+            let (expected_struct_sig, struct_chunk_name, struct_record_size) = if block_layout_version == 4 {
+                (*b"stv4", "stv4", 28u32)
             } else {
-                (u32::from_be_bytes(*b"stv2"), 24usize)
+                (*b"stv2", "stv2", 24u32)
             };
 
-            assert!(struct_layouts_header.signature == expected_struct_sig);
-            // HYPOTHESIS: stv2/stv4 version is always 0.
-            assert_eq!(struct_layouts_header.version, 0, "stv2/stv4 version ({}) != 0", struct_layouts_header.version);
-            assert!(header.struct_layout_count as usize == struct_layouts_header.size as usize / struct_record_size);
+            let struct_layouts_header =
+                read_validated_chunk_header(reader, expected_struct_sig, struct_chunk_name)?;
+            check_count_matches_size(
+                struct_chunk_name,
+                header.struct_layout_count,
+                struct_layouts_header.size,
+                struct_record_size,
+            )?;
 
             struct_layouts = Vec::with_capacity(header.struct_layout_count as usize);
 
@@ -727,17 +738,10 @@ impl TagLayout {
         //================================================================================
 
         if let Some((tag_layout_header, tag_layout_offset)) = tag_layout_header_and_offset {
-            assert!(reader.stream_position()? == tag_layout_offset + tag_layout_header.size as u64);
+            check_chunk_end(reader, "tgly", tag_layout_offset, tag_layout_header.size)?;
         }
 
-        // Outer blay chunk's end must match its declared size.
-        let blay_end = reader.stream_position()?;
-        let blay_expected_end = blay_offset + blay_header.size as u64;
-        if blay_end != blay_expected_end {
-            panic!(
-                "blay chunk: ended at 0x{blay_end:X}, expected 0x{blay_expected_end:X}",
-            );
-        }
+        check_chunk_end(reader, "blay", blay_offset, blay_header.size)?;
 
         let mut result = Self {
             root_data_size,
@@ -766,7 +770,9 @@ impl TagLayout {
 
         for i in 0..result.fields.len() {
             let type_name_offset = result.field_types[result.fields[i].type_index as usize].name_offset;
-            let name = result.get_string(type_name_offset).unwrap();
+            let name = result.get_string(type_name_offset).ok_or(TagReadError::InvalidUtf8 {
+                context: "layout field type name",
+            })?;
             result.fields[i].field_type = TagFieldType::from_name(name);
         }
 
@@ -775,169 +781,6 @@ impl TagLayout {
         }
 
         Ok(result)
-    }
-
-    /// Debug/pretty-print a block definition and its element struct,
-    /// recursively. Writes to stdout with two-space indent per depth
-    /// level. Intended for investigation, not production output.
-    pub fn display_block(&self, block_index: usize, depth: usize) {
-        let block = &self.block_layouts[block_index];
-
-        let block_name = self.get_string(block.name_offset).unwrap();
-        println!("block: {} (index {})", block_name, block_index);
-
-        (0..depth + 1).for_each(|_| print!("  "));
-        self.display_struct(block.struct_index as usize, depth + 1);
-    }
-
-    /// Debug/pretty-print a struct definition and all of its fields,
-    /// recursing into nested struct/block/array/resource/interop fields.
-    /// Writes to stdout; for investigation only.
-    pub fn display_struct(&self, struct_index: usize, depth: usize) {
-        let struct_layout = &self.struct_layouts[struct_index];
-        let struct_name = self.get_string(struct_layout.name_offset).unwrap();
-        println!("struct: {} (index {})", struct_name, struct_index);
-
-        let mut field_offset = 0;
-
-        for field in &self.fields[struct_layout.first_field_index as usize ..] {
-            let field_type = &self.field_types[field.type_index as usize];
-            let field_type_name = self.get_string(field_type.name_offset).unwrap();
-            let field_name = self.get_string(field.name_offset).unwrap();
-
-            match field.field_type {
-                TagFieldType::Terminator => break,
-
-                TagFieldType::Pad | TagFieldType::Skip => {
-                    (0..depth + 1).for_each(|_| print!("  "));
-                    println!("field: \"{}\" - \"{}\" - \"{}\" - offset 0x{:X}", field_name, field_type_name, field.definition, field_offset);
-                    field_offset += field.definition;
-                    continue;
-                }
-
-                TagFieldType::CharInteger | TagFieldType::ShortInteger | TagFieldType::LongInteger | TagFieldType::Int64Integer => {}
-
-                TagFieldType::CharEnum | TagFieldType::ShortEnum | TagFieldType::LongEnum
-                | TagFieldType::ByteFlags | TagFieldType::WordFlags | TagFieldType::LongFlags => {
-                    let string_list = &self.string_lists[field.definition as usize];
-
-                    (0..depth + 1).for_each(|_| print!("  "));
-                    println!("field: \"{}\" - \"{}\" - \"{}\" - offset 0x{:X}:", field_name, field_type_name, self.get_string(string_list.offset).unwrap(), field_offset);
-
-                    for &string_offset in &self.string_offsets[string_list.first as usize .. (string_list.first + string_list.count) as usize] {
-                        let item = self.get_string(string_offset).unwrap();
-                        (0..depth + 2).for_each(|_| print!("  "));
-                        println!("\"{}\"", item);
-                    }
-
-                    field_offset += field_type.size;
-                    continue;
-                }
-
-                TagFieldType::CharBlockIndex | TagFieldType::ShortBlockIndex | TagFieldType::LongBlockIndex => {}
-                TagFieldType::CustomCharBlockIndex | TagFieldType::CustomShortBlockIndex | TagFieldType::CustomLongBlockIndex => {}
-
-                TagFieldType::ByteBlockFlags | TagFieldType::WordBlockFlags | TagFieldType::LongBlockFlags => {}
-
-                TagFieldType::String => {}
-                TagFieldType::LongString => {}
-
-                TagFieldType::Tag => {}
-
-                TagFieldType::RgbColor => {}
-                TagFieldType::ArgbColor => {}
-                TagFieldType::Point2d => {}
-                TagFieldType::Rectangle2d => {}
-
-                TagFieldType::Angle => {}
-                TagFieldType::AngleBounds => {}
-
-                TagFieldType::Real => {}
-                TagFieldType::RealBounds => {}
-
-                TagFieldType::RealFraction => {}
-                TagFieldType::FractionBounds => {}
-
-                TagFieldType::ShortIntegerBounds => {}
-
-                TagFieldType::RealPoint2d => {}
-                TagFieldType::RealPoint3d => {}
-                TagFieldType::RealVector2d => {}
-                TagFieldType::RealVector3d => {}
-                TagFieldType::RealEulerAngles2d => {}
-                TagFieldType::RealEulerAngles3d => {}
-                TagFieldType::RealPlane2d => {}
-                TagFieldType::RealPlane3d => {}
-                TagFieldType::RealQuaternion => {}
-                TagFieldType::RealRgbColor => {}
-                TagFieldType::RealArgbColor => {}
-                TagFieldType::RealHsvColor => {}
-                TagFieldType::RealAhsvColor => {}
-                TagFieldType::RealSlider => {}
-
-                TagFieldType::Custom => {}
-                TagFieldType::TagReference => {}
-                TagFieldType::StringId => {}
-                TagFieldType::OldStringId => {}
-                TagFieldType::Explanation => {}
-                TagFieldType::UselessPad => {}
-
-                TagFieldType::Struct => {
-                    (0..depth + 1).for_each(|_| print!("  "));
-                    print!("field: \"{}\" - offset 0x{:X} - ", field_name, field_offset);
-                    self.display_struct(field.definition as usize, depth + 1);
-                    let struct_layout = &self.struct_layouts[field.definition as usize];
-                    field_offset += struct_layout.size as u32;
-                    continue;
-                }
-
-                TagFieldType::Block => {
-                    (0..depth + 1).for_each(|_| print!("  "));
-                    print!("field: \"{}\" - offset 0x{:X} - ", field_name, field_offset);
-                    self.display_block(field.definition as usize, depth + 1);
-                    field_offset += field_type.size;
-                    continue;
-                }
-
-                TagFieldType::Data => {}
-
-                TagFieldType::VertexBuffer => {}
-
-                TagFieldType::Array => {
-                    let array_layout = &self.array_layouts[field.definition as usize];
-                    (0..depth + 1).for_each(|_| print!("  "));
-                    print!("field: \"{}\" - \"{}\" - \"{}\" - offset 0x{:X} - ", field_name, field_type_name, array_layout.count, field_offset);
-                    self.display_struct(array_layout.struct_index as usize, depth + 1);
-                    let struct_layout = &self.struct_layouts[array_layout.struct_index as usize];
-                    field_offset += struct_layout.size as u32 * array_layout.count;
-                    continue;
-                }
-
-                TagFieldType::PageableResource => {
-                    let resource_layout = &self.resource_layouts[field.definition as usize];
-                    (0..depth + 1).for_each(|_| print!("  "));
-                    print!("field: \"{}\" - \"{}\" - offset 0x{:X} - ", field_name, field_type_name, field_offset);
-                    self.display_struct(resource_layout.struct_index as usize, depth + 1);
-                    field_offset += field_type.size;
-                    continue;
-                }
-
-                TagFieldType::ApiInterop => {
-                    let interop_layout = &self.interop_layouts[field.definition as usize];
-                    (0..depth + 1).for_each(|_| print!("  "));
-                    print!("field: \"{}\" - \"{}\" - offset 0x{:X} - ", field_name, field_type_name, field_offset);
-                    self.display_struct(interop_layout.struct_index as usize, depth + 1);
-                    field_offset += field_type.size;
-                    continue;
-                }
-
-                _ => panic!("unhandled field type: \"{}\"", field_type_name),
-            }
-
-            (0..depth + 1).for_each(|_| print!("  "));
-            println!("field: \"{}\" - \"{}\" - \"{}\" - offset 0x{:X}", field_name, field_type_name, field.definition, field_offset);
-            field_offset += field_type.size;
-        }
     }
 
     /// Write this layout as a `blay` chunk. Mirrors [`TagLayout::read`]:
@@ -971,7 +814,7 @@ impl TagLayout {
         // Layout header
         //============================================================
 
-        if matches!(block_layout_version, 2 | 3 | 4) {
+        if matches!(block_layout_version, 2..=4) {
             writer.write_all(&self.header.tag_group_block_index.to_le_bytes())?;
         }
         writer.write_all(&self.header.string_data_size.to_le_bytes())?;
@@ -985,7 +828,7 @@ impl TagLayout {
         if block_layout_version == 1 {
             writer.write_all(&self.header.aggregate_layout_count.to_le_bytes())?;
         }
-        if matches!(block_layout_version, 2 | 3 | 4) {
+        if matches!(block_layout_version, 2..=4) {
             writer.write_all(&self.header.struct_layout_count.to_le_bytes())?;
             writer.write_all(&self.header.block_layout_count.to_le_bytes())?;
             writer.write_all(&self.header.resource_layout_count.to_le_bytes())?;
@@ -1010,7 +853,7 @@ impl TagLayout {
         // (hypothesis-verified on read).
         //============================================================
 
-        assert!(matches!(block_layout_version, 2 | 3 | 4));
+        assert!(matches!(block_layout_version, 2..=4));
 
         write_tag_chunk_header(
             writer,
@@ -1030,7 +873,7 @@ impl TagLayout {
     /// struct-definitions section is 24 bytes/record in `stv2` (v2/v3)
     /// and 28 bytes/record in `stv4` (v4).
     fn compute_layout_size(&self, block_layout_version: u32) -> u32 {
-        assert!(matches!(block_layout_version, 2 | 3 | 4));
+        assert!(matches!(block_layout_version, 2..=4));
 
         let section_size = |chunk_count: usize, chunk_size: usize| -> u32 {
             (12 + chunk_count * chunk_size) as u32
@@ -1064,7 +907,7 @@ impl TagLayout {
         block_layout_version: u32,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let wrap_sections = matches!(block_layout_version, 2 | 3 | 4);
+        let wrap_sections = matches!(block_layout_version, 2..=4);
 
         //------------------------------------------------------------
         // str*  — string data
@@ -1287,932 +1130,4 @@ impl TagLayout {
 
         Ok(())
     }
-}
-
-//================================================================================
-// JSON schema import
-//
-// Parses the per-group JSON dumped by
-// `h3_guerilla_dump_tag_definitions_json.py` into a TagLayout that
-// matches what `TagLayout::read` would produce from an equivalent blay
-// chunk. The JSON's shape:
-//
-// - Group metadata (name, tag, parent_tag, version, flags) + a
-//   `block` name that points at the root block.
-// - Named registries: `blocks`, `structs`, `arrays`, `enums_flags`,
-//   `datas`, `resources`, `interops`. Each map key is a definition
-//   name; each value is the body (no redundant "name" key).
-// - Fields' `definition` is either a name string into one of the
-//   registries (for struct/block/array/flags/enum/data/etc.), an
-//   integer byte-count (for pad/skip/useless_pad), a text string
-//   (for explanation), or an object `{flags, allowed}` (for
-//   tag_reference).
-//
-// The importer walks the registries, assigns stable indices per kind
-// (alphabetical via BTreeMap for determinism), builds the string_data
-// table dedup'd, resolves name references to indices, populates every
-// TagLayout table, and finally runs `compute_struct_layout` so every
-// struct has its size + per-field offsets set. As a sanity check,
-// each computed struct size is compared against the JSON's dumped
-// `size` field — mismatches bubble up as errors rather than silently
-// producing a broken layout.
-//================================================================================
-
-use std::collections::BTreeMap;
-use std::path::Path;
-
-use serde::Deserialize;
-
-#[derive(Debug)]
-pub enum FromJsonError {
-    Io(std::io::Error),
-    Json(serde_json::Error),
-    UnknownReference { kind: &'static str, name: String },
-    BadFieldDefinition { field: String, ty: String },
-    UnknownFieldType(String),
-    BadGuid(String),
-    BadGroupTag(String),
-    StructSizeMismatch { name: String, schema: u32, computed: usize },
-}
-
-impl std::fmt::Display for FromJsonError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "I/O error reading schema: {e}"),
-            Self::Json(e) => write!(f, "JSON parse error: {e}"),
-            Self::UnknownReference { kind, name } => {
-                write!(f, "schema references unknown {kind} {name:?}")
-            }
-            Self::BadFieldDefinition { field, ty } => {
-                write!(f, "field {field:?} of type {ty:?} has invalid definition value")
-            }
-            Self::UnknownFieldType(s) => write!(f, "unknown field type {s:?}"),
-            Self::BadGuid(s) => write!(f, "invalid guid {s:?} (expected 32 hex chars)"),
-            Self::BadGroupTag(s) => write!(f, "invalid group tag {s:?} (expected 4 chars)"),
-            Self::StructSizeMismatch { name, schema, computed } => write!(
-                f,
-                "computed size mismatch for struct {name:?}: schema says {schema}, computed {computed}"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for FromJsonError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            Self::Json(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl From<std::io::Error> for FromJsonError {
-    fn from(e: std::io::Error) -> Self { Self::Io(e) }
-}
-impl From<serde_json::Error> for FromJsonError {
-    fn from(e: serde_json::Error) -> Self { Self::Json(e) }
-}
-
-//
-// Serde shapes for the JSON schema files the dumper produces.
-// Names match the library's Tag* convention + a Schema suffix.
-//
-
-#[derive(Debug, Deserialize)]
-struct TagGroupSchema {
-    tag: String,
-    #[serde(default)] parent_tag: Option<String>,
-    version: u32,
-    flags: u32,
-    block: String,
-    #[serde(default)] blocks: BTreeMap<String, TagBlockSchema>,
-    #[serde(default)] structs: BTreeMap<String, TagStructSchema>,
-    #[serde(default)] arrays: BTreeMap<String, TagArraySchema>,
-    #[serde(default)] enums_flags: BTreeMap<String, TagEnumSchema>,
-    #[serde(default)] datas: BTreeMap<String, TagDataSchema>,
-    #[serde(default)] resources: BTreeMap<String, PageableResourceSchema>,
-    #[serde(default)] interops: BTreeMap<String, ApiInteropSchema>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TagBlockSchema {
-    max_count: u32,
-    #[serde(rename = "struct")] struct_name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct TagStructSchema {
-    guid: String,
-    size: u32,
-    fields: Vec<TagFieldSchema>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TagFieldSchema {
-    #[serde(rename = "type")] ty: String,
-    #[serde(default)] name: Option<String>,
-    #[serde(default)] definition: serde_json::Value,
-    #[serde(default)] group_tag: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TagArraySchema {
-    count: u32,
-    #[serde(rename = "struct")] struct_name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct TagEnumSchema {
-    options: Vec<Option<String>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TagDataSchema {}
-
-#[derive(Debug, Deserialize)]
-struct PageableResourceSchema {
-    flags: u64,
-    #[serde(rename = "struct")] struct_name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ApiInteropSchema {
-    guid: String,
-    #[serde(rename = "struct")] struct_name: String,
-}
-
-//
-// Field-type metadata: canonical on-wire name, byte size, whether the
-// type emits a sub-chunk. Each JSON field's `type` string (snake_case)
-// maps to one of these rows; the (size, needs_sub_chunk) values match
-// what the engine packs into each blay's `tgft` registry.
-//
-// A per-layout `field_types` table is then built incrementally — only
-// types actually referenced by the schema get an entry, mirroring how
-// real tags only carry the types they use.
-//
-
-struct FieldTypeInfo {
-    ty: TagFieldType,
-    canonical: &'static str,
-    size: u32,
-    needs_sub_chunk: u32,
-}
-
-/// JSON `"type": "..."` string → metadata. Snake-case names match what
-/// the dumper emits; `canonical` is the space-separated form that goes
-/// into the blay's string table (matches what `TagFieldType::from_name`
-/// parses).
-fn field_type_info(ty: &str) -> Option<FieldTypeInfo> {
-    use TagFieldType::*;
-    Some(match ty {
-        "string"                   => FieldTypeInfo { ty: String,              canonical: "string",                   size: 32,  needs_sub_chunk: 0 },
-        "long_string"              => FieldTypeInfo { ty: LongString,          canonical: "long string",              size: 256, needs_sub_chunk: 0 },
-        "string_id"                => FieldTypeInfo { ty: StringId,            canonical: "string id",                size: 4,   needs_sub_chunk: 1 },
-        "old_string_id"            => FieldTypeInfo { ty: OldStringId,         canonical: "old string id",            size: 4,   needs_sub_chunk: 1 },
-        "char_integer"             => FieldTypeInfo { ty: CharInteger,         canonical: "char integer",             size: 1,   needs_sub_chunk: 0 },
-        "short_integer"            => FieldTypeInfo { ty: ShortInteger,        canonical: "short integer",            size: 2,   needs_sub_chunk: 0 },
-        "long_integer"             => FieldTypeInfo { ty: LongInteger,         canonical: "long integer",             size: 4,   needs_sub_chunk: 0 },
-        "int64_integer"            => FieldTypeInfo { ty: Int64Integer,        canonical: "int64 integer",            size: 8,   needs_sub_chunk: 0 },
-        "angle"                    => FieldTypeInfo { ty: Angle,               canonical: "angle",                    size: 4,   needs_sub_chunk: 0 },
-        "tag"                      => FieldTypeInfo { ty: Tag,                 canonical: "tag",                      size: 4,   needs_sub_chunk: 0 },
-        "char_enum"                => FieldTypeInfo { ty: CharEnum,            canonical: "char enum",                size: 1,   needs_sub_chunk: 0 },
-        "short_enum"               => FieldTypeInfo { ty: ShortEnum,           canonical: "short enum",               size: 2,   needs_sub_chunk: 0 },
-        "long_enum"                => FieldTypeInfo { ty: LongEnum,            canonical: "long enum",                size: 4,   needs_sub_chunk: 0 },
-        "long_flags"               => FieldTypeInfo { ty: LongFlags,           canonical: "long flags",               size: 4,   needs_sub_chunk: 0 },
-        "word_flags"               => FieldTypeInfo { ty: WordFlags,           canonical: "word flags",               size: 2,   needs_sub_chunk: 0 },
-        "byte_flags"               => FieldTypeInfo { ty: ByteFlags,           canonical: "byte flags",               size: 1,   needs_sub_chunk: 0 },
-        "point_2d"                 => FieldTypeInfo { ty: Point2d,             canonical: "point 2d",                 size: 4,   needs_sub_chunk: 0 },
-        "rectangle_2d"             => FieldTypeInfo { ty: Rectangle2d,         canonical: "rectangle 2d",             size: 8,   needs_sub_chunk: 0 },
-        "rgb_color"                => FieldTypeInfo { ty: RgbColor,            canonical: "rgb color",                size: 4,   needs_sub_chunk: 0 },
-        "argb_color"               => FieldTypeInfo { ty: ArgbColor,           canonical: "argb color",               size: 4,   needs_sub_chunk: 0 },
-        "real"                     => FieldTypeInfo { ty: Real,                canonical: "real",                     size: 4,   needs_sub_chunk: 0 },
-        "real_slider"              => FieldTypeInfo { ty: RealSlider,          canonical: "real slider",              size: 4,   needs_sub_chunk: 0 },
-        "real_fraction"            => FieldTypeInfo { ty: RealFraction,        canonical: "real fraction",            size: 4,   needs_sub_chunk: 0 },
-        "real_point_2d"            => FieldTypeInfo { ty: RealPoint2d,         canonical: "real point 2d",            size: 8,   needs_sub_chunk: 0 },
-        "real_point_3d"            => FieldTypeInfo { ty: RealPoint3d,         canonical: "real point 3d",            size: 12,  needs_sub_chunk: 0 },
-        "real_vector_2d"           => FieldTypeInfo { ty: RealVector2d,        canonical: "real vector 2d",           size: 8,   needs_sub_chunk: 0 },
-        "real_vector_3d"           => FieldTypeInfo { ty: RealVector3d,        canonical: "real vector 3d",           size: 12,  needs_sub_chunk: 0 },
-        "real_quaternion"          => FieldTypeInfo { ty: RealQuaternion,      canonical: "real quaternion",          size: 16,  needs_sub_chunk: 0 },
-        "real_euler_angles_2d"     => FieldTypeInfo { ty: RealEulerAngles2d,   canonical: "real euler angles 2d",     size: 8,   needs_sub_chunk: 0 },
-        "real_euler_angles_3d"     => FieldTypeInfo { ty: RealEulerAngles3d,   canonical: "real euler angles 3d",     size: 12,  needs_sub_chunk: 0 },
-        "real_plane_2d"            => FieldTypeInfo { ty: RealPlane2d,         canonical: "real plane 2d",            size: 12,  needs_sub_chunk: 0 },
-        "real_plane_3d"            => FieldTypeInfo { ty: RealPlane3d,         canonical: "real plane 3d",            size: 16,  needs_sub_chunk: 0 },
-        "real_rgb_color"           => FieldTypeInfo { ty: RealRgbColor,        canonical: "real rgb color",           size: 12,  needs_sub_chunk: 0 },
-        "real_argb_color"          => FieldTypeInfo { ty: RealArgbColor,       canonical: "real argb color",          size: 16,  needs_sub_chunk: 0 },
-        "real_hsv_color"           => FieldTypeInfo { ty: RealHsvColor,        canonical: "real hsv color",           size: 12,  needs_sub_chunk: 0 },
-        "real_ahsv_color"          => FieldTypeInfo { ty: RealAhsvColor,       canonical: "real ahsv color",          size: 16,  needs_sub_chunk: 0 },
-        "short_bounds"             => FieldTypeInfo { ty: ShortIntegerBounds,  canonical: "short integer bounds",     size: 4,   needs_sub_chunk: 0 },
-        "angle_bounds"             => FieldTypeInfo { ty: AngleBounds,         canonical: "angle bounds",             size: 8,   needs_sub_chunk: 0 },
-        "real_bounds"              => FieldTypeInfo { ty: RealBounds,          canonical: "real bounds",              size: 8,   needs_sub_chunk: 0 },
-        "fraction_bounds"          => FieldTypeInfo { ty: FractionBounds,      canonical: "fraction bounds",          size: 8,   needs_sub_chunk: 0 },
-        "tag_reference"            => FieldTypeInfo { ty: TagReference,        canonical: "tag reference",            size: 16,  needs_sub_chunk: 1 },
-        "block"                    => FieldTypeInfo { ty: Block,               canonical: "block",                    size: 12,  needs_sub_chunk: 1 },
-        "long_block_flags"         => FieldTypeInfo { ty: LongBlockFlags,      canonical: "long block flags",         size: 4,   needs_sub_chunk: 0 },
-        "word_block_flags"         => FieldTypeInfo { ty: WordBlockFlags,      canonical: "word block flags",         size: 2,   needs_sub_chunk: 0 },
-        "byte_block_flags"         => FieldTypeInfo { ty: ByteBlockFlags,      canonical: "byte block flags",         size: 1,   needs_sub_chunk: 0 },
-        "char_block_index"         => FieldTypeInfo { ty: CharBlockIndex,      canonical: "char block index",         size: 1,   needs_sub_chunk: 0 },
-        "custom_char_block_index"  => FieldTypeInfo { ty: CustomCharBlockIndex,  canonical: "custom char block index",  size: 1, needs_sub_chunk: 0 },
-        "short_block_index"        => FieldTypeInfo { ty: ShortBlockIndex,     canonical: "short block index",        size: 2,   needs_sub_chunk: 0 },
-        "custom_short_block_index" => FieldTypeInfo { ty: CustomShortBlockIndex, canonical: "custom short block index", size: 2, needs_sub_chunk: 0 },
-        "long_block_index"         => FieldTypeInfo { ty: LongBlockIndex,      canonical: "long block index",         size: 4,   needs_sub_chunk: 0 },
-        "custom_long_block_index"  => FieldTypeInfo { ty: CustomLongBlockIndex,  canonical: "custom long block index",  size: 4, needs_sub_chunk: 0 },
-        "data"                     => FieldTypeInfo { ty: Data,                canonical: "data",                     size: 20,  needs_sub_chunk: 1 },
-        "vertex_buffer"            => FieldTypeInfo { ty: VertexBuffer,        canonical: "vertex buffer",            size: 32,  needs_sub_chunk: 0 },
-        "pad"                      => FieldTypeInfo { ty: Pad,                 canonical: "pad",                      size: 0,   needs_sub_chunk: 0 },
-        "useless_pad"              => FieldTypeInfo { ty: UselessPad,          canonical: "useless pad",              size: 0,   needs_sub_chunk: 0 },
-        "skip"                     => FieldTypeInfo { ty: Skip,                canonical: "skip",                     size: 0,   needs_sub_chunk: 0 },
-        "explanation"              => FieldTypeInfo { ty: Explanation,         canonical: "explanation",              size: 0,   needs_sub_chunk: 0 },
-        "custom"                   => FieldTypeInfo { ty: Custom,              canonical: "custom",                   size: 0,   needs_sub_chunk: 0 },
-        "struct"                   => FieldTypeInfo { ty: Struct,              canonical: "struct",                   size: 0,   needs_sub_chunk: 1 },
-        "array"                    => FieldTypeInfo { ty: Array,               canonical: "array",                    size: 0,   needs_sub_chunk: 0 },
-        "tag_resource"             => FieldTypeInfo { ty: PageableResource,    canonical: "pageable resource",        size: 8,   needs_sub_chunk: 1 },
-        "tag_interop"              => FieldTypeInfo { ty: ApiInterop,          canonical: "api interop",              size: 12,  needs_sub_chunk: 1 },
-        "terminator"               => FieldTypeInfo { ty: Terminator,          canonical: "terminator X",             size: 0,   needs_sub_chunk: 0 },
-        _ => return None,
-    })
-}
-
-//
-// String table builder — dedups identical strings so `name_offset`
-// values in the layout point at shared bytes.
-//
-
-#[derive(Default)]
-struct StringTable {
-    bytes: Vec<u8>,
-    offsets: std::collections::HashMap<String, u32>,
-}
-
-impl StringTable {
-    fn new() -> Self {
-        // An empty string at offset 0 is free and gives a canonical
-        // "nameless" target for fields without a name.
-        let mut me = Self::default();
-        me.offsets.insert(String::new(), 0);
-        me.bytes.push(0);
-        me
-    }
-    fn intern(&mut self, s: &str) -> u32 {
-        if let Some(&off) = self.offsets.get(s) {
-            return off;
-        }
-        let off = self.bytes.len() as u32;
-        self.bytes.extend_from_slice(s.as_bytes());
-        self.bytes.push(0);
-        self.offsets.insert(s.to_owned(), off);
-        off
-    }
-}
-
-fn parse_group_tag(s: &str) -> Result<u32, FromJsonError> {
-    let bytes = s.as_bytes();
-    if bytes.len() != 4 {
-        return Err(FromJsonError::BadGroupTag(s.to_owned()));
-    }
-    Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-}
-
-fn parse_guid(s: &str) -> Result<[u8; 16], FromJsonError> {
-    if s.len() != 32 {
-        return Err(FromJsonError::BadGuid(s.to_owned()));
-    }
-    let mut out = [0u8; 16];
-    for i in 0..16 {
-        out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
-            .map_err(|_| FromJsonError::BadGuid(s.to_owned()))?;
-    }
-    Ok(out)
-}
-
-/// Group-level metadata extracted from a schema JSON file. Not part
-/// of `TagLayout` (blay doesn't carry it) but needed by `TagFile`
-/// to populate its header.
-#[derive(Debug, Clone)]
-pub struct TagGroupMeta {
-    pub tag: u32,
-    pub version: u32,
-    pub flags: u32,
-    pub parent_tag: Option<u32>,
-}
-
-impl TagLayout {
-    /// Build a TagLayout from a JSON schema file (per-group output of
-    /// `h3_guerilla_dump_tag_definitions_json.py`). The result matches
-    /// what `TagLayout::read` would produce from an equivalent blay
-    /// chunk: same string_data/string_offsets/string_lists,
-    /// struct_layouts/block_layouts/etc. with consistent indices, and
-    /// every struct's size + field offsets computed.
-    ///
-    /// Returns `FromJsonError::StructSizeMismatch` if the computed
-    /// size of any struct disagrees with what the JSON's `size` field
-    /// claims — that's our cross-check against `field_type_info`'s
-    /// size column being wrong.
-    pub fn from_json(path: impl AsRef<Path>) -> Result<Self, FromJsonError> {
-        Self::from_json_with_meta(path).map(|(l, _)| l)
-    }
-
-    /// Like [`TagLayout::from_json`] but also returns the group-level
-    /// metadata (group tag, version, flags, parent_tag) that the JSON
-    /// carries but blay doesn't. Needed when creating a new tag file
-    /// from scratch — the file header needs `group_tag` /
-    /// `group_version`.
-    pub fn from_json_with_meta(
-        path: impl AsRef<Path>,
-    ) -> Result<(Self, TagGroupMeta), FromJsonError> {
-        let path = path.as_ref();
-        let file = std::fs::File::open(path)?;
-        let mut schema: TagGroupSchema = serde_json::from_reader(std::io::BufReader::new(file))?;
-        let meta = TagGroupMeta {
-            tag: parse_group_tag(&schema.tag)?,
-            version: schema.version,
-            flags: schema.flags,
-            parent_tag: schema.parent_tag.as_deref().map(parse_group_tag).transpose()?,
-        };
-        // `tmpl` custom expansion sizes are resolved by loading the
-        // sibling group JSONs from the same directory on demand.
-        let defs_dir = path.parent().unwrap_or(Path::new("."));
-
-        // Schemas only carry their *own* registry entries — anything
-        // inherited from `parent_tag`'s chain (e.g. `biped` → `unit` →
-        // `object` for shared structs like `mapping_function`) lives in
-        // the ancestor JSONs. Walk the chain via `_meta.json` and merge
-        // ancestor registries into the child so cross-parent references
-        // resolve. Child wins on key collision (defensive — the dedupe
-        // tool guarantees no overlap, but if a future override appears
-        // we don't silently drop it).
-        merge_parent_schemas(&mut schema, defs_dir);
-
-        let layout = build_layout_from_schema(schema, defs_dir)?;
-        Ok((layout, meta))
-    }
-}
-
-/// Walk `schema.parent_tag` recursively (via `_meta.json` for the 4cc →
-/// filename mapping) and merge each ancestor's registries into
-/// `schema`. Child entries take precedence; ancestor entries fill in
-/// the gaps. Tolerates missing `_meta.json`, missing parent files, or
-/// bogus 4ccs by silently treating them as "no parent" — same posture
-/// as `tmpl_expansion_size`.
-fn merge_parent_schemas(schema: &mut TagGroupSchema, defs_dir: &Path) {
-    let Ok(meta_bytes) = std::fs::read(defs_dir.join("_meta.json")) else { return };
-    let Ok(meta_value): Result<serde_json::Value, _> = serde_json::from_slice(&meta_bytes) else {
-        return;
-    };
-    let Some(tag_index) = meta_value.get("tag_index").and_then(|v| v.as_object()) else {
-        return;
-    };
-
-    let mut current_parent = schema.parent_tag.clone();
-    for _ in 0..32 {
-        let Some(pt) = current_parent.take() else { break };
-        let Some(name) = tag_index.get(&pt).and_then(|v| v.as_str()) else { break };
-        let Ok(bytes) = std::fs::read(defs_dir.join(format!("{name}.json"))) else { break };
-        let Ok(parent_schema): Result<TagGroupSchema, _> = serde_json::from_slice(&bytes) else {
-            break;
-        };
-
-        for (k, v) in parent_schema.blocks {
-            schema.blocks.entry(k).or_insert(v);
-        }
-        for (k, v) in parent_schema.structs {
-            schema.structs.entry(k).or_insert(v);
-        }
-        for (k, v) in parent_schema.arrays {
-            schema.arrays.entry(k).or_insert(v);
-        }
-        for (k, v) in parent_schema.enums_flags {
-            schema.enums_flags.entry(k).or_insert(v);
-        }
-        for (k, v) in parent_schema.datas {
-            schema.datas.entry(k).or_insert(v);
-        }
-        for (k, v) in parent_schema.resources {
-            schema.resources.entry(k).or_insert(v);
-        }
-        for (k, v) in parent_schema.interops {
-            schema.interops.entry(k).or_insert(v);
-        }
-
-        current_parent = parent_schema.parent_tag;
-    }
-}
-
-/// Walk a `tmpl` target's parent chain and return the cumulative
-/// root-struct size. The target itself is *excluded* — its own fields
-/// are serialized via the sibling `struct` field that follows the
-/// tmpl custom. Returns 0 if the target can't be resolved (dead
-/// templates like `ssfx` with no `_meta.json` entry).
-///
-/// Loads `_meta.json` to map 4cc → filename, then walks up the chain
-/// reading each ancestor's JSON on demand.
-fn tmpl_expansion_size(defs_dir: &Path, target_tag: &str) -> u32 {
-    let Ok(meta_bytes) = std::fs::read(defs_dir.join("_meta.json")) else { return 0 };
-    let Ok(meta): Result<serde_json::Value, _> = serde_json::from_slice(&meta_bytes) else {
-        return 0;
-    };
-    let Some(tag_index) = meta.get("tag_index").and_then(|v| v.as_object()) else { return 0 };
-
-    let mut sum: u32 = 0;
-    let mut cur = target_tag.to_owned();
-    for _ in 0..32 {
-        let Some(name) = tag_index.get(&cur).and_then(|v| v.as_str()) else { break };
-        let Ok(bytes) = std::fs::read(defs_dir.join(format!("{name}.json"))) else { break };
-        let Ok(schema): Result<TagGroupSchema, _> = serde_json::from_slice(&bytes) else { break };
-        // Skip the target itself — we only add parent chain sizes.
-        if cur != target_tag {
-            let Some(block) = schema.blocks.get(&schema.block) else { break };
-            let Some(rs) = schema.structs.get(&block.struct_name) else { break };
-            sum = sum.saturating_add(rs.size);
-        }
-        let Some(parent) = schema.parent_tag else { break };
-        cur = parent;
-    }
-    sum
-}
-
-fn build_layout_from_schema(
-    schema: TagGroupSchema,
-    defs_dir: &Path,
-) -> Result<TagLayout, FromJsonError> {
-    let _ = parse_group_tag(&schema.tag)?; // validate early
-
-    let mut strings = StringTable::new();
-
-    // Index assignment (stable, alphabetical via BTreeMap iteration).
-    let struct_index: BTreeMap<&str, u32> = schema
-        .structs
-        .keys()
-        .enumerate()
-        .map(|(i, n)| (n.as_str(), i as u32))
-        .collect();
-    let block_index: BTreeMap<&str, u32> = schema
-        .blocks
-        .keys()
-        .enumerate()
-        .map(|(i, n)| (n.as_str(), i as u32))
-        .collect();
-    let array_index: BTreeMap<&str, u32> = schema
-        .arrays
-        .keys()
-        .enumerate()
-        .map(|(i, n)| (n.as_str(), i as u32))
-        .collect();
-    let enum_index: BTreeMap<&str, u32> = schema
-        .enums_flags
-        .keys()
-        .enumerate()
-        .map(|(i, n)| (n.as_str(), i as u32))
-        .collect();
-    let data_index: BTreeMap<&str, u32> = schema
-        .datas
-        .keys()
-        .enumerate()
-        .map(|(i, n)| (n.as_str(), i as u32))
-        .collect();
-    let resource_index: BTreeMap<&str, u32> = schema
-        .resources
-        .keys()
-        .enumerate()
-        .map(|(i, n)| (n.as_str(), i as u32))
-        .collect();
-    let interop_index: BTreeMap<&str, u32> = schema
-        .interops
-        .keys()
-        .enumerate()
-        .map(|(i, n)| (n.as_str(), i as u32))
-        .collect();
-
-    // field_types registry — grown on-demand as fields are emitted.
-    let mut field_types: Vec<TagFieldTypeLayout> = Vec::new();
-    let mut field_type_index_by_name: std::collections::HashMap<&'static str, u32> = Default::default();
-    let mut intern_field_type = |canonical: &'static str, size: u32, needs_sub: u32,
-                                 strings: &mut StringTable|
-     -> u32 {
-        if let Some(&i) = field_type_index_by_name.get(canonical) {
-            return i;
-        }
-        let name_offset = strings.intern(canonical);
-        let i = field_types.len() as u32;
-        field_types.push(TagFieldTypeLayout {
-            name_offset,
-            size,
-            needs_sub_chunk: needs_sub,
-        });
-        field_type_index_by_name.insert(canonical, i);
-        i
-    };
-
-    // Build custom_block_index_search_names_offsets — one entry per
-    // *distinct* search-name string seen on custom_*_block_index
-    // fields. Fields' `definition` becomes the index into here.
-    // (Our JSON doesn't currently carry search names, so this stays
-    // empty unless the dumper starts emitting them.)
-    let custom_block_index_search_names_offsets: Vec<u32> = Vec::new();
-
-    // Build data_definition_name_offsets from `datas` keys.
-    let data_definition_name_offsets: Vec<u32> = schema
-        .datas
-        .keys()
-        .map(|n| strings.intern(n))
-        .collect();
-
-    // Build string_lists (enums/flags). Each enum's options go into
-    // string_offsets contiguously; string_lists[i] points at that
-    // slice.
-    let mut string_offsets: Vec<u32> = Vec::new();
-    let mut string_lists: Vec<TagStringList> = Vec::new();
-    for (name, enum_schema) in &schema.enums_flags {
-        let list_name_offset = strings.intern(name);
-        let first = string_offsets.len() as u32;
-        for opt in &enum_schema.options {
-            let off = match opt {
-                Some(s) => strings.intern(s),
-                None => 0, // null option slot → empty string at offset 0
-            };
-            string_offsets.push(off);
-        }
-        string_lists.push(TagStringList {
-            offset: list_name_offset,
-            count: enum_schema.options.len() as u32,
-            first,
-        });
-    }
-
-    // Build array_layouts (resolve each array's struct by name).
-    let mut array_layouts: Vec<TagArrayLayout> = Vec::with_capacity(schema.arrays.len());
-    for (name, array) in &schema.arrays {
-        let si = *struct_index.get(array.struct_name.as_str()).ok_or_else(|| {
-            FromJsonError::UnknownReference { kind: "struct", name: array.struct_name.clone() }
-        })?;
-        array_layouts.push(TagArrayLayout {
-            name_offset: strings.intern(name),
-            count: array.count,
-            struct_index: si,
-        });
-    }
-
-    // Build resource_layouts.
-    let mut resource_layouts: Vec<TagResourceLayout> = Vec::with_capacity(schema.resources.len());
-    for (name, resource) in &schema.resources {
-        let si = *struct_index.get(resource.struct_name.as_str()).ok_or_else(|| {
-            FromJsonError::UnknownReference { kind: "struct", name: resource.struct_name.clone() }
-        })?;
-        resource_layouts.push(TagResourceLayout {
-            name_offset: strings.intern(name),
-            unknown: resource.flags as u32,
-            struct_index: si,
-        });
-    }
-
-    // Build interop_layouts.
-    let mut interop_layouts: Vec<TagInteropLayout> = Vec::with_capacity(schema.interops.len());
-    for (name, interop) in &schema.interops {
-        let si = *struct_index.get(interop.struct_name.as_str()).ok_or_else(|| {
-            FromJsonError::UnknownReference { kind: "struct", name: interop.struct_name.clone() }
-        })?;
-        interop_layouts.push(TagInteropLayout {
-            name_offset: strings.intern(name),
-            struct_index: si,
-            guid: parse_guid(&interop.guid)?,
-        });
-    }
-
-    // Build block_layouts.
-    let mut block_layouts: Vec<TagBlockLayout> = Vec::with_capacity(schema.blocks.len());
-    for (i, (name, block)) in schema.blocks.iter().enumerate() {
-        let si = *struct_index.get(block.struct_name.as_str()).ok_or_else(|| {
-            FromJsonError::UnknownReference { kind: "struct", name: block.struct_name.clone() }
-        })?;
-        block_layouts.push(TagBlockLayout {
-            index: i as u32,
-            name_offset: strings.intern(name),
-            max_count: block.max_count,
-            struct_index: si,
-        });
-    }
-
-    // Build struct_layouts + the flat `fields` array. For each struct,
-    // remember its `first_field_index` before pushing its fields.
-    let mut struct_layouts: Vec<TagStructLayout> = Vec::with_capacity(schema.structs.len());
-    let mut fields: Vec<TagFieldLayout> = Vec::new();
-    for (i, (name, struct_schema)) in schema.structs.iter().enumerate() {
-        let first = fields.len() as u32;
-
-        for field in &struct_schema.fields {
-            let info = field_type_info(&field.ty)
-                .ok_or_else(|| FromJsonError::UnknownFieldType(field.ty.clone()))?;
-
-            let type_index = intern_field_type(
-                info.canonical,
-                info.size,
-                info.needs_sub_chunk,
-                &mut strings,
-            );
-
-            let field_name_offset = match &field.name {
-                Some(n) => strings.intern(n),
-                None => 0,
-            };
-
-            let definition = resolve_field_definition(
-                field,
-                info.ty,
-                &struct_index,
-                &block_index,
-                &array_index,
-                &enum_index,
-                &data_index,
-                &resource_index,
-                &interop_index,
-            )?;
-
-            fields.push(TagFieldLayout {
-                name_offset: field_name_offset,
-                type_index,
-                definition,
-                field_type: info.ty,
-                offset: 0, // computed later by compute_struct_layout
-            });
-        }
-
-        struct_layouts.push(TagStructLayout {
-            index: i as u32,
-            guid: parse_guid(&struct_schema.guid)?,
-            name_offset: strings.intern(name),
-            first_field_index: first,
-            size: 0, // computed later
-            version: 0,
-        });
-    }
-
-    // Pull root-block index. Its struct's guid/size become the layout-
-    // level guid/root_data_size (matching `TagLayout::read`).
-    let root_block_index = *block_index.get(schema.block.as_str()).ok_or_else(|| {
-        FromJsonError::UnknownReference { kind: "block", name: schema.block.clone() }
-    })?;
-    let root_struct_index = block_layouts[root_block_index as usize].struct_index as usize;
-    let root_struct = &struct_layouts[root_struct_index];
-    let layout_guid = root_struct.guid;
-    let schema_root_size = schema.structs.iter().nth(root_struct_index).map(|(_, s)| s.size).unwrap_or(0);
-
-    let header = TagLayoutHeader {
-        tag_group_block_index: root_block_index,
-        string_data_size: 0, // filled in below
-        string_offset_count: string_offsets.len() as u32,
-        string_list_count: string_lists.len() as u32,
-        custom_block_index_search_names_count: custom_block_index_search_names_offsets.len() as u32,
-        data_definition_name_count: data_definition_name_offsets.len() as u32,
-        array_layout_count: array_layouts.len() as u32,
-        field_type_count: field_types.len() as u32,
-        field_count: fields.len() as u32,
-        aggregate_layout_count: 0,
-        struct_layout_count: struct_layouts.len() as u32,
-        block_layout_count: block_layouts.len() as u32,
-        resource_layout_count: resource_layouts.len() as u32,
-        interop_layout_count: interop_layouts.len() as u32,
-    };
-
-    let mut result = TagLayout {
-        root_data_size: schema_root_size,
-        guid: layout_guid,
-        version: 3, // H3 MCC — layout payload version 3
-        header: TagLayoutHeader {
-            string_data_size: strings.bytes.len() as u32,
-            ..header
-        },
-        string_data: strings.bytes,
-        string_offsets,
-        string_lists,
-        custom_block_index_search_names_offsets,
-        data_definition_name_offsets,
-        array_layouts,
-        field_types,
-        fields,
-        block_layouts,
-        resource_layouts,
-        interop_layouts,
-        struct_layouts,
-    };
-
-    // Compute struct sizes + field offsets. First pass with tmpl
-    // customs stored at 0 (no expansion) — matches how H3 schemas lay
-    // out (common shader fields are inlined directly in the struct
-    // field that follows the tmpl).
-    let tmpl_expansions: Vec<(usize, u32)> = {
-        let mut out = Vec::new();
-        let mut global_field_idx = 0usize;
-        for (_, struct_schema) in schema.structs.iter() {
-            for field in &struct_schema.fields {
-                if field.ty == "custom"
-                    && field.group_tag.as_deref() == Some("tmpl")
-                {
-                    if let Some(target) = field.definition.as_str() {
-                        let exp = tmpl_expansion_size(defs_dir, target);
-                        if exp > 0 {
-                            out.push((global_field_idx, exp));
-                        }
-                    }
-                }
-                global_field_idx += 1;
-            }
-        }
-        out
-    };
-
-    for i in 0..result.struct_layouts.len() {
-        result.compute_struct_layout(i);
-    }
-
-    // Cross-check computed sizes against the schema's stated sizes.
-    // If declared > computed and this struct has tmpl customs, apply
-    // their expansion (Reach-style: parent-chain inlined here) and
-    // recompute. If declared still doesn't match — or we're > declared
-    // — it's a genuine mismatch.
-    for (i, (name, struct_schema)) in schema.structs.iter().enumerate() {
-        let computed = result.struct_layouts[i].size;
-        let declared = struct_schema.size as usize;
-        if computed == declared {
-            continue;
-        }
-        if computed < declared {
-            // Try tmpl expansion for this struct's fields.
-            let first = result.struct_layouts[i].first_field_index as usize;
-            let mut field_idx = first;
-            let mut applied = 0usize;
-            while result.fields[field_idx].field_type != TagFieldType::Terminator {
-                if let Some(&(_, exp)) = tmpl_expansions.iter().find(|&&(fi, _)| fi == field_idx) {
-                    result.fields[field_idx].definition = exp;
-                    applied += exp as usize;
-                }
-                field_idx += 1;
-            }
-            if applied > 0 {
-                // Reset the struct's size so compute_struct_layout runs again.
-                result.struct_layouts[i].size = 0;
-                result.compute_struct_layout(i);
-            }
-        }
-        let computed = result.struct_layouts[i].size;
-        if computed != declared {
-            return Err(FromJsonError::StructSizeMismatch {
-                name: name.clone(),
-                schema: struct_schema.size,
-                computed,
-            });
-        }
-    }
-
-    // Update header size-counts that depend on final string_data size.
-    result.header.string_data_size = result.string_data.len() as u32;
-
-    Ok(result)
-}
-
-/// Translate a field schema's `definition` value into the `u32` that
-/// goes into the corresponding `TagFieldLayout`. The interpretation
-/// depends on the field type:
-///
-/// - named-registry types (struct/block/array/flags/enum/data/
-///   resource/interop): string → index into the matching table.
-/// - `pad`/`useless_pad`/`skip`: integer → byte count (stored in the
-///   `definition` slot verbatim).
-/// - `tag_reference`: object → would normally store flags+allowed,
-///   but blay only stores flags here (just flags slot).
-/// - `explanation`: string → stored as a string offset into
-///   string_data.
-/// - primitives / `terminator`: 0.
-fn resolve_field_definition(
-    field: &TagFieldSchema,
-    ty: TagFieldType,
-    struct_index: &BTreeMap<&str, u32>,
-    block_index: &BTreeMap<&str, u32>,
-    array_index: &BTreeMap<&str, u32>,
-    enum_index: &BTreeMap<&str, u32>,
-    data_index: &BTreeMap<&str, u32>,
-    resource_index: &BTreeMap<&str, u32>,
-    interop_index: &BTreeMap<&str, u32>,
-) -> Result<u32, FromJsonError> {
-    use TagFieldType::*;
-
-    let def = &field.definition;
-
-    // `custom` fields contribute 0 bytes by default. `tmpl`-typed
-    // customs inline their target group's parent-chain size only
-    // when the containing struct's declared size is larger than the
-    // sum of plain field sizes — that post-hoc patch happens in
-    // `build_layout_from_schema`, not here.
-    if matches!(ty, Custom) {
-        return Ok(0);
-    }
-
-    // Primitives & no-definition types: return 0.
-    if matches!(
-        ty,
-        Unknown
-            | String
-            | LongString
-            | StringId
-            | OldStringId
-            | CharInteger
-            | ShortInteger
-            | LongInteger
-            | Int64Integer
-            | Angle
-            | Tag
-            | Point2d
-            | Rectangle2d
-            | RgbColor
-            | ArgbColor
-            | Real
-            | RealSlider
-            | RealFraction
-            | RealPoint2d
-            | RealPoint3d
-            | RealVector2d
-            | RealVector3d
-            | RealQuaternion
-            | RealEulerAngles2d
-            | RealEulerAngles3d
-            | RealPlane2d
-            | RealPlane3d
-            | RealRgbColor
-            | RealArgbColor
-            | RealHsvColor
-            | RealAhsvColor
-            | ShortIntegerBounds
-            | AngleBounds
-            | RealBounds
-            | FractionBounds
-            | VertexBuffer
-            | CustomCharBlockIndex
-            | CustomShortBlockIndex
-            | CustomLongBlockIndex
-            | Terminator,
-    ) {
-        return Ok(0);
-    }
-
-    // Pad/skip/useless_pad: definition is a byte count integer.
-    if matches!(ty, Pad | UselessPad | Skip) {
-        return def
-            .as_u64()
-            .map(|v| v as u32)
-            .ok_or_else(|| FromJsonError::BadFieldDefinition {
-                field: field.name.clone().unwrap_or_default(),
-                ty: field.ty.clone(),
-            });
-    }
-
-    // Explanation: store as 0 in the layout (blay's `definition` slot
-    // holds the string offset at runtime via a separate mechanism).
-    // Preserving the text in string_data is out-of-scope for now.
-    if matches!(ty, Explanation) {
-        return Ok(0);
-    }
-
-    // tag_reference: blay's `definition` holds flags. `allowed` list
-    // isn't part of blay's field record.
-    if matches!(ty, TagReference) {
-        let flags = def
-            .as_object()
-            .and_then(|m| m.get("flags"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        return Ok(flags as u32);
-    }
-
-    // Named-registry types: resolve by name.
-    let name = def.as_str().ok_or_else(|| FromJsonError::BadFieldDefinition {
-        field: field.name.clone().unwrap_or_default(),
-        ty: field.ty.clone(),
-    })?;
-    let lookup = match ty {
-        Struct => struct_index.get(name).copied(),
-        Block | LongBlockFlags | WordBlockFlags | ByteBlockFlags | CharBlockIndex
-        | ShortBlockIndex | LongBlockIndex => block_index.get(name).copied(),
-        Array => array_index.get(name).copied(),
-        CharEnum | ShortEnum | LongEnum | LongFlags | WordFlags | ByteFlags => {
-            enum_index.get(name).copied()
-        }
-        Data => data_index.get(name).copied(),
-        PageableResource => resource_index.get(name).copied(),
-        ApiInterop => interop_index.get(name).copied(),
-        _ => None,
-    };
-    lookup.ok_or_else(|| FromJsonError::UnknownReference {
-        kind: match ty {
-            Struct => "struct",
-            Block | LongBlockFlags | WordBlockFlags | ByteBlockFlags | CharBlockIndex
-            | ShortBlockIndex | LongBlockIndex => "block",
-            Array => "array",
-            CharEnum | ShortEnum | LongEnum | LongFlags | WordFlags | ByteFlags => "enum_or_flags",
-            Data => "data",
-            PageableResource => "resource",
-            ApiInterop => "interop",
-            _ => "?",
-        },
-        name: name.to_owned(),
-    })
 }

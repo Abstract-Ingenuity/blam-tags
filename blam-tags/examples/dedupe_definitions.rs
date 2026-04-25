@@ -1,8 +1,9 @@
 //! Strip parent-inherited definitions from each game's tag-schema JSON.
 //!
 //! For each `<defs_dir>/*.json` (excluding `_meta.json`):
-//! - If `parent_tag` is set but the 4cc isn't in `_meta.json`, the field
-//!   is removed (treated as garbage data — e.g. `tag_dependency_list`).
+//! - If `parent_tag` is set but its group tag isn't in `_meta.json`,
+//!   the field is removed (treated as garbage data — e.g.
+//!   `tag_dependency_list`).
 //! - Otherwise the file's full ancestor chain is walked and any entry
 //!   in the registries (`blocks`, `structs`, `arrays`, `enums_flags`,
 //!   `datas`, `resources`, `interops`) whose key is also present in
@@ -78,7 +79,7 @@ fn process_dir(defs_dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let mut modified: HashSet<String> = HashSet::new();
 
-    // Drop bogus parent_tag (4cc not in tag_index).
+    // Drop bogus parent_tag (group tag not in tag_index).
     for (fname, value) in files.iter_mut() {
         let Some(obj) = value.as_object_mut() else { continue };
         let bogus = matches!(

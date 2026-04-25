@@ -12,8 +12,6 @@
 //! stripped of their outer chunk header, so the parse functions here
 //! operate on payload bytes rather than readers.
 
-use std::fmt;
-
 use crate::data::TagSubChunkContent;
 use crate::layout::{TagFieldLayout, TagLayout};
 use crate::math;
@@ -192,13 +190,16 @@ pub struct TagReferenceData {
 }
 
 impl TagReferenceData {
-    /// Parse a `tgrf` payload (header already consumed).
+    /// Parse a `tgrf` payload (header already consumed). Bad UTF-8 in
+    /// the path is decoded lossily (U+FFFD replacement) — preserves
+    /// well-formed-input roundtrip while making the parser safe to
+    /// feed corrupt bytes.
     pub fn from_bytes(payload: &[u8]) -> Self {
         if payload.len() < 4 {
             return Self { group_tag_and_name: None };
         }
         let group_tag = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
-        let name = std::str::from_utf8(&payload[4..]).unwrap().to_string();
+        let name = String::from_utf8_lossy(&payload[4..]).into_owned();
         Self { group_tag_and_name: Some((group_tag, name)) }
     }
 
@@ -469,140 +470,6 @@ impl TagFieldData {
 // Display
 //================================================================================
 
-/// Render a `tgrf` payload as `"GROUP:path"`, or `"NONE"` for a null
-/// reference.
-impl fmt::Display for TagReferenceData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.group_tag_and_name {
-            None => f.write_str("NONE"),
-            Some((tag, path)) => write!(f, "{}:{}", format_group_tag(*tag), path),
-        }
-    }
-}
-
-/// Render a `tgsi` payload as the quoted string `"name"`, or `"NONE"`
-/// for an empty (sentinel) string-id.
-impl fmt::Display for StringIdData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.string.is_empty() {
-            f.write_str("NONE")
-        } else {
-            write!(f, "\"{}\"", self.string)
-        }
-    }
-}
-
-/// Default rendering of a field value. The `{:#}` alternate flag
-/// switches the four plain integer variants (`CharInteger`,
-/// `ShortInteger`, `LongInteger`, `Int64Integer`) to fixed-width hex
-/// (`0xNN` / `0xNNNN` / `0xNNNNNNNN` / `0xNNNNNNNNNNNNNNNN`).
-/// Block-flags, colors, and block-index sentinels always render in
-/// their canonical form regardless of the flag.
-impl fmt::Display for TagFieldData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let hex = f.alternate();
-        match self {
-            TagFieldData::String(s) | TagFieldData::LongString(s) => write!(f, "\"{}\"", s),
-
-            TagFieldData::StringId(s) | TagFieldData::OldStringId(s) => write!(f, "{}", s),
-            TagFieldData::TagReference(r) => write!(f, "{}", r),
-            TagFieldData::Data(d) => write!(f, "data [{} bytes]", d.len()),
-            TagFieldData::ApiInterop(i) => match (i.descriptor(), i.address(), i.definition_address()) {
-                (Some(d), Some(a), Some(da)) => write!(
-                    f,
-                    "api_interop {{ descriptor=0x{:08X}, address=0x{:08X}, definition_address=0x{:08X} }}",
-                    d, a, da,
-                ),
-                _ => write!(f, "api_interop [{} bytes]", i.raw.len()),
-            },
-
-            TagFieldData::CharInteger(v) => {
-                if hex { write!(f, "0x{:02X}", *v as u8) } else { write!(f, "{}", v) }
-            }
-            TagFieldData::ShortInteger(v) => {
-                if hex { write!(f, "0x{:04X}", *v as u16) } else { write!(f, "{}", v) }
-            }
-            TagFieldData::LongInteger(v) => {
-                if hex { write!(f, "0x{:08X}", *v as u32) } else { write!(f, "{}", v) }
-            }
-            TagFieldData::Int64Integer(v) => {
-                if hex { write!(f, "0x{:016X}", *v as u64) } else { write!(f, "{}", v) }
-            }
-            TagFieldData::Tag(v) => f.write_str(&format_group_tag(*v)),
-
-            TagFieldData::CharEnum { value, name } => write_enum(f, *value as i64, name.as_deref()),
-            TagFieldData::ShortEnum { value, name } => write_enum(f, *value as i64, name.as_deref()),
-            TagFieldData::LongEnum { value, name } => write_enum(f, *value as i64, name.as_deref()),
-
-            TagFieldData::ByteFlags { value, names } => write_flags(f, *value as u64, names, 2),
-            TagFieldData::WordFlags { value, names } => write_flags(f, *value as u64, names, 4),
-            TagFieldData::LongFlags { value, names } => write_flags(f, *value as u32 as u64, names, 8),
-
-            TagFieldData::ByteBlockFlags(v) => write!(f, "0x{:02X}", v),
-            TagFieldData::WordBlockFlags(v) => write!(f, "0x{:04X}", v),
-            TagFieldData::LongBlockFlags(v) => write!(f, "0x{:08X}", *v as u32),
-
-            TagFieldData::CharBlockIndex(v) | TagFieldData::CustomCharBlockIndex(v) => write_block_index(f, *v as i64),
-            TagFieldData::ShortBlockIndex(v) | TagFieldData::CustomShortBlockIndex(v) => write_block_index(f, *v as i64),
-            TagFieldData::LongBlockIndex(v) | TagFieldData::CustomLongBlockIndex(v) => write_block_index(f, *v as i64),
-
-            TagFieldData::Angle(v) => write!(f, "{:.4} rad ({:.2} deg)", v, v.to_degrees()),
-            TagFieldData::Real(v) | TagFieldData::RealSlider(v) | TagFieldData::RealFraction(v) => write!(f, "{}", v),
-
-            TagFieldData::Point2d(p) => write!(f, "{}, {}", p.x, p.y),
-            TagFieldData::Rectangle2d(r) => write!(f, "{}, {}, {}, {}", r.top, r.left, r.bottom, r.right),
-            TagFieldData::RealPoint2d(p) => write!(f, "x={}, y={}", p.x, p.y),
-            TagFieldData::RealPoint3d(p) => write!(f, "x={}, y={}, z={}", p.x, p.y, p.z),
-            TagFieldData::RealVector2d(v) => write!(f, "i={}, j={}", v.i, v.j),
-            TagFieldData::RealVector3d(v) => write!(f, "i={}, j={}, k={}", v.i, v.j, v.k),
-            TagFieldData::RealQuaternion(q) => write!(f, "i={}, j={}, k={}, w={}", q.i, q.j, q.k, q.w),
-            TagFieldData::RealEulerAngles2d(e) => write!(f, "yaw={}, pitch={}", e.yaw, e.pitch),
-            TagFieldData::RealEulerAngles3d(e) => write!(f, "yaw={}, pitch={}, roll={}", e.yaw, e.pitch, e.roll),
-            TagFieldData::RealPlane2d(p) => write!(f, "i={}, j={}, d={}", p.i, p.j, p.d),
-            TagFieldData::RealPlane3d(p) => write!(f, "i={}, j={}, k={}, d={}", p.i, p.j, p.k, p.d),
-
-            TagFieldData::RgbColor(c) => write!(f, "0x{:08X}", c.0),
-            TagFieldData::ArgbColor(c) => write!(f, "0x{:08X}", c.0),
-            TagFieldData::RealRgbColor(c) => write!(f, "r={}, g={}, b={}", c.red, c.green, c.blue),
-            TagFieldData::RealArgbColor(c) => write!(f, "a={}, r={}, g={}, b={}", c.alpha, c.red, c.green, c.blue),
-            TagFieldData::RealHsvColor(c) => write!(f, "h={}, s={}, v={}", c.hue, c.saturation, c.value),
-            TagFieldData::RealAhsvColor(c) => write!(f, "a={}, h={}, s={}, v={}", c.alpha, c.hue, c.saturation, c.value),
-
-            TagFieldData::ShortIntegerBounds(b) => write!(f, "{}..{}", b.lower, b.upper),
-            TagFieldData::AngleBounds(b) | TagFieldData::RealBounds(b) | TagFieldData::FractionBounds(b) => {
-                write!(f, "{}..{}", b.lower, b.upper)
-            }
-
-            TagFieldData::Custom(d) => write!(f, "custom [{} bytes]", d.len()),
-        }
-    }
-}
-
-fn write_enum(f: &mut fmt::Formatter<'_>, value: i64, name: Option<&str>) -> fmt::Result {
-    match name {
-        Some(n) => write!(f, "{} ({})", value, n),
-        None => write!(f, "{}", value),
-    }
-}
-
-fn write_flags(
-    f: &mut fmt::Formatter<'_>,
-    value: u64,
-    names: &[(u32, String)],
-    hex_width: usize,
-) -> fmt::Result {
-    if names.is_empty() {
-        write!(f, "0x{:0width$X} (none set)", value, width = hex_width)
-    } else {
-        let joined = names.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>().join(", ");
-        write!(f, "0x{:0width$X} [{}]", value, joined, width = hex_width)
-    }
-}
-
-fn write_block_index(f: &mut fmt::Formatter<'_>, value: i64) -> fmt::Result {
-    if value == -1 { f.write_str("NONE") } else { write!(f, "{}", value) }
-}
-
 //================================================================================
 // Raw-data read/write helpers (LE).
 //================================================================================
@@ -701,44 +568,22 @@ pub(crate) fn find_flag_bit(layout: &TagLayout, field: &TagFieldLayout, name: &s
     None
 }
 
-/// Look up an enum variant's index by name against the field's
-/// string list. Case-insensitive. Returns `None` if the field has
-/// no string list or no matching option. Companion to
-/// [`find_flag_bit`].
-pub(crate) fn find_enum_option_index(
-    layout: &TagLayout,
-    field: &TagFieldLayout,
-    name: &str,
-) -> Option<u32> {
-    let string_list = layout.string_lists.get(field.definition as usize)?;
-    for i in 0..string_list.count {
-        let offset_index = (string_list.first + i) as usize;
-        let Some(&string_offset) = layout.string_offsets.get(offset_index) else { continue };
-        let Some(candidate) = layout.get_string(string_offset) else { continue };
-        if candidate.eq_ignore_ascii_case(name) {
-            return Some(i);
-        }
-    }
-    None
-}
-
 /// Render a 4-byte group tag (stored as a BE-packed `u32` with
 /// trailing-space padding for short tags) as its ASCII form, with
 /// trailing spaces and NULs stripped. Matches the convention used
-/// throughout the tag-file wire format. Inverse of
-/// [`parse_group_tag`].
+/// throughout the tag-file wire format. Inverse of [`parse_group_tag`].
 pub fn format_group_tag(tag: u32) -> String {
     let bytes = tag.to_be_bytes();
     String::from_utf8_lossy(&bytes)
-        .trim_end_matches(|c: char| c == '\0' || c == ' ')
+        .trim_end_matches(['\0', ' '])
         .to_string()
 }
 
 /// Parse an ASCII group-tag string (1-4 chars, e.g. `"bipd"` or
-/// `"mo"`) into the BE-packed `u32` form used on disk. Short tags
-/// are right-padded with spaces to 4 bytes. Returns `None` if the
-/// input is longer than 4 bytes. Inverse of [`format_group_tag`].
-pub(crate) fn parse_group_tag(s: &str) -> Option<u32> {
+/// `"mo"`) into the BE-packed `u32` form used on disk. Short tags are
+/// right-padded with spaces to 4 bytes. Returns `None` if the input
+/// is longer than 4 bytes. Inverse of [`format_group_tag`].
+pub fn parse_group_tag(s: &str) -> Option<u32> {
     let bytes = s.as_bytes();
     if bytes.len() > 4 {
         return None;
@@ -1012,35 +857,42 @@ pub(crate) fn deserialize_field(
             Some(TagFieldData::Custom(raw_struct[offset..offset + size].to_vec()))
         }
 
-        // Sub-chunk leaves.
-        TagFieldType::StringId => match sub_chunk {
-            Some(TagSubChunkContent::StringId(payload)) => {
-                Some(TagFieldData::StringId(StringIdData::from_bytes(payload)))
-            }
-            _ => panic!("deserialize_field: StringId field missing sub_chunk payload"),
-        },
-        TagFieldType::OldStringId => match sub_chunk {
-            Some(TagSubChunkContent::OldStringId(payload)) => {
-                Some(TagFieldData::OldStringId(StringIdData::from_bytes(payload)))
-            }
-            _ => panic!("deserialize_field: OldStringId field missing sub_chunk payload"),
-        },
-        TagFieldType::TagReference => match sub_chunk {
-            Some(TagSubChunkContent::TagReference(payload)) => {
-                Some(TagFieldData::TagReference(TagReferenceData::from_bytes(payload)))
-            }
-            _ => panic!("deserialize_field: TagReference field missing sub_chunk payload"),
-        },
-        TagFieldType::Data => match sub_chunk {
-            Some(TagSubChunkContent::Data(payload)) => Some(TagFieldData::Data(payload.clone())),
-            _ => panic!("deserialize_field: Data field missing sub_chunk payload"),
-        },
-        TagFieldType::ApiInterop => match sub_chunk {
-            Some(TagSubChunkContent::ApiInterop(payload)) => {
-                Some(TagFieldData::ApiInterop(ApiInteropData::from_bytes(payload)))
-            }
-            _ => panic!("deserialize_field: ApiInterop field missing sub_chunk payload"),
-        },
+        // Sub-chunk leaves. The fall-through arms below are
+        // unreachable on any tree produced by `read_sub_chunks`: the
+        // read path emits a matching `TagSubChunkContent` variant for
+        // every sub-chunk-bearing field type, so reaching the `_` arm
+        // means the in-memory tree was constructed inconsistently
+        // (a programming bug, not a malformed input).
+        TagFieldType::StringId => Some(TagFieldData::StringId(StringIdData::from_bytes(
+            match sub_chunk {
+                Some(TagSubChunkContent::StringId(payload)) => payload,
+                _ => unreachable!("StringId field missing matching sub_chunk"),
+            },
+        ))),
+        TagFieldType::OldStringId => Some(TagFieldData::OldStringId(StringIdData::from_bytes(
+            match sub_chunk {
+                Some(TagSubChunkContent::OldStringId(payload)) => payload,
+                _ => unreachable!("OldStringId field missing matching sub_chunk"),
+            },
+        ))),
+        TagFieldType::TagReference => Some(TagFieldData::TagReference(TagReferenceData::from_bytes(
+            match sub_chunk {
+                Some(TagSubChunkContent::TagReference(payload)) => payload,
+                _ => unreachable!("TagReference field missing matching sub_chunk"),
+            },
+        ))),
+        TagFieldType::Data => Some(TagFieldData::Data(
+            match sub_chunk {
+                Some(TagSubChunkContent::Data(payload)) => payload.clone(),
+                _ => unreachable!("Data field missing matching sub_chunk"),
+            },
+        )),
+        TagFieldType::ApiInterop => Some(TagFieldData::ApiInterop(ApiInteropData::from_bytes(
+            match sub_chunk {
+                Some(TagSubChunkContent::ApiInterop(payload)) => payload,
+                _ => unreachable!("ApiInterop field missing matching sub_chunk"),
+            },
+        ))),
     }
 }
 

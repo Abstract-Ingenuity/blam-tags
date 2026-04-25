@@ -17,9 +17,12 @@ use blam_tags::TagFile;
 
 let mut tag = TagFile::read("masterchief.biped")?;
 
-// Read a field by slash-separated path.
+// Read a field by slash-separated path. `value()` returns the
+// per-variant `TagFieldData` enum — pattern-match on it for typed
+// access, or use `{:?}` for a Debug dump. The library does **not**
+// ship a Display impl; UI rendering is the caller's job.
 let jump = tag.root().field_path("jump velocity").unwrap();
-println!("{} = {}", jump.name(), jump.value().unwrap());
+println!("{} ({}): {:?}", jump.name(), jump.type_name(), jump.value().unwrap());
 
 // Toggle a flag by name.
 tag.root_mut()
@@ -35,6 +38,8 @@ tag.write("masterchief.biped.edited")?;
 ### Read a field
 
 ```rust
+use blam_tags::TagFieldData;
+
 let tag = TagFile::read("path/to/tag.biped")?;
 let field = tag.root().field_path("jump velocity").unwrap();
 
@@ -42,9 +47,13 @@ let field = tag.root().field_path("jump velocity").unwrap();
 println!("{} : {}", field.name(), field.type_name());
 
 // Parsed value. Returns None for container / padding fields.
-if let Some(value) = field.value() {
-    println!("  value = {}", value);        // Display impl does the formatting.
-    println!("  hex   = {:#}", value);      // Alternate flag → hex for int variants.
+// The library has no Display impl on TagFieldData — pattern-match
+// for typed access, or use `{:?}` for a Debug dump.
+match field.value() {
+    Some(TagFieldData::Real(v)) => println!("  value = {v}"),
+    Some(TagFieldData::LongInteger(v)) => println!("  value = {v} (0x{v:08X})"),
+    Some(other) => println!("  value = {other:?}"),
+    None => println!("  (container or padding)"),
 }
 ```
 
@@ -71,14 +80,6 @@ tag.root_mut()
 tag.write("edited.biped")?;
 ```
 
-### Parse a value from a string (CLI-style)
-
-```rust
-tag.root_mut()
-    .field_path_mut("unit/default_team").unwrap()
-    .parse_and_set("red")?;   // handles enums, ints (incl. hex), reals, tag refs, etc.
-```
-
 ### Toggle, set, and read flag bits by name
 
 ```rust
@@ -103,13 +104,13 @@ let mut seats = tag.root_mut()
     .field_path_mut("unit/seats").unwrap()
     .as_block_mut().unwrap();
 
-let new_index = seats.add();             // append default-initialized element
-seats.insert(0)?;                        // insert default element at index 0
-seats.duplicate(0)?;                     // copy element 0, placed at index 1
-seats.swap(0, 3)?;                       // exchange elements 0 and 3
-seats.move_to(5, 1)?;                    // relocate element 5 to index 1
-seats.delete(2)?;                        // remove element 2
-seats.clear();                           // remove all
+let new_index = seats.add_element();        // append default-initialized element
+seats.insert_element(0)?;                   // insert default element at index 0
+seats.duplicate_element(0)?;                // copy element 0, placed at index 1
+seats.swap_elements(0, 3)?;                 // exchange elements 0 and 3
+seats.move_element(5, 1)?;                  // relocate element 5 to index 1
+seats.delete_element(2)?;                   // remove element 2
+seats.clear();                              // remove all
 println!("now have {} seats", seats.len());
 ```
 
@@ -220,9 +221,10 @@ tag.rebuild_dependency_list("definitions/halo3_mcc/tag_dependency_list.json")?;
 tag.remove_import_info();
 tag.remove_asset_depot_storage();
 
-// Read the root element of each stream via the façade:
+// Read the root element of each stream via the facade:
 if let Some(info) = tag.import_info() {
-    println!("build: {}", info.field_path("build").unwrap().value().unwrap());
+    let build = info.field_path("build").unwrap().value().unwrap();
+    println!("build: {build:?}");
 }
 ```
 
@@ -241,6 +243,16 @@ let round  = std::fs::read("path/to/temp.biped")?;
 assert_eq!(md5::compute(&source), md5::compute(&round));
 ```
 
+For in-memory pipelines (fuzzing, archive embedding, tests), use the
+byte-buffer entry points instead of touching the filesystem:
+
+```rust
+let bytes = std::fs::read("path/to/source.biped")?;
+let tag = TagFile::read_from_bytes(&bytes)?;
+let round_bytes = tag.write_to_bytes()?;
+assert_eq!(bytes, round_bytes);
+```
+
 The corpus-wide sweep lives in [`examples/roundtrip.rs`](examples/roundtrip.rs).
 Run against one or more tag roots:
 
@@ -248,6 +260,30 @@ Run against one or more tag roots:
 cargo run --release -p blam-tags --example roundtrip -- \
     /path/to/halo3_mcc/tags /path/to/haloreach_mcc/tags
 ```
+
+### Error handling on the read path
+
+Every wire-format failure surfaces as a typed [`TagReadError`](src/error.rs) — never a panic. The variants carry enough context to diagnose a malformed tag without re-running with prints:
+
+```rust
+use blam_tags::{TagFile, TagReadError};
+
+match TagFile::read("path/to/tag.biped") {
+    Ok(tag) => { /* … */ }
+    Err(TagReadError::BadChunkSignature { offset, expected, got }) => {
+        eprintln!("bad signature at 0x{offset:X}: expected {expected:?}, got {got:?}");
+    }
+    Err(TagReadError::ChunkSizeMismatch { chunk, started_at, ended_at, expected_end }) => {
+        eprintln!("{chunk} ran from 0x{started_at:X} to 0x{ended_at:X}, expected 0x{expected_end:X}");
+    }
+    Err(TagReadError::Io(e)) => eprintln!("I/O error: {e}"),
+    Err(other) => eprintln!("read failed: {other}"),
+}
+```
+
+`TagReadError` is `#[non_exhaustive]` — match with a catch-all arm so adding new variants in future versions doesn't break callers. Schema-import errors (JSON shape, parent-chain resolution) live separately in [`TagSchemaError`](src/schema.rs).
+
+The corruption test suite at [`tests/corruption.rs`](tests/corruption.rs) covers the major variants by feeding deliberately malformed bytes through `TagFile::read_from_bytes`.
 
 ## Architecture
 
@@ -265,6 +301,11 @@ Two facades sit on top of the raw storage types:
 
 Everything the user-facing code should need is one or the other.
 Lower-level modules (`data`, `path`, `stream`, `io`, `layout::TagLayout`) are available but no user code in this workspace (CLI, examples) reaches into them.
+
+Error types:
+
+- **[`error::TagReadError`]** — every failure on the binary read path. Carries chunk names, byte offsets, expected vs. actual values.
+- **[`schema::TagSchemaError`]** — JSON-schema import failures (parse errors, missing parent chain, struct-size mismatches).
 
 ## Field paths
 

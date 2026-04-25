@@ -6,6 +6,7 @@ use std::error::Error;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
+use crate::error::TagReadError;
 use crate::io::*;
 use crate::layout::TagLayout;
 use crate::stream::TagStream;
@@ -41,7 +42,7 @@ impl TagFileHeader {
     /// panicking) when the `BLAM` signature doesn't match, so callers
     /// walking directories full of non-tag files can filter them out
     /// cleanly.
-    pub fn read<R: Seek + Read>(reader: &mut std::io::BufReader<R>) -> Result<Self, Box<dyn Error>> {
+    pub fn read<R: Seek + Read>(reader: &mut std::io::BufReader<R>) -> Result<Self, TagReadError> {
         let pad = read_u8_array(reader)?;
         let build_version = read_u32_le(reader)? as i32;
         let build_number = read_u32_le(reader)? as i32;
@@ -49,13 +50,14 @@ impl TagFileHeader {
         let group_tag = read_u32_le(reader)?;
         let group_version = read_u32_le(reader)?;
         let checksum = read_u32_le(reader)?;
+        let signature_offset = reader.stream_position()?;
         let signature = read_u32_le(reader)?;
         if signature != u32::from_be_bytes(*b"BLAM") {
-            return Err(format!(
-                "not a tag file: expected 'BLAM' signature, got {:#010x}",
-                signature,
-            )
-            .into());
+            return Err(TagReadError::BadChunkSignature {
+                offset: signature_offset,
+                expected: *b"BLAM",
+                got: signature.to_be_bytes(),
+            });
         }
 
         Ok(Self {
@@ -129,7 +131,7 @@ impl TagFile {
     ///
     /// Fails if the schema JSON doesn't parse or any struct's
     /// computed size doesn't match the schema's stated size
-    /// (both surfaced as `blam_tags::layout::FromJsonError`).
+    /// (both surfaced as `blam_tags::TagSchemaError`).
     pub fn new<P: AsRef<Path>>(schema_path: P) -> Result<Self, Box<dyn Error>> {
         let (layout, meta) = TagLayout::from_json_with_meta(schema_path)?;
         let tag_stream = TagStream::new_default(layout);
@@ -154,10 +156,21 @@ impl TagFile {
 
     /// Open `path` and parse a complete tag file. The read asserts that
     /// the file ends exactly at the last consumed stream, so trailing
-    /// garbage will panic rather than be silently dropped.
-    pub fn read<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn Error>> {
-        let mut reader = std::io::BufReader::with_capacity(64 * 1024, std::fs::File::open(path)?);
+    /// garbage surfaces as [`TagReadError::ChunkSizeMismatch`].
+    pub fn read<P: AsRef<Path>>(path: P) -> Result<Self, TagReadError> {
+        let reader = std::io::BufReader::with_capacity(64 * 1024, std::fs::File::open(path)?);
+        Self::read_from(reader)
+    }
 
+    /// Parse a complete tag file from any [`Read`] + [`Seek`] source —
+    /// wrapped in a [`std::io::BufReader`] internally if not already
+    /// one. Useful for fuzzing, in-memory tag manipulation, and
+    /// embedding tag bytes in archives.
+    pub fn read_from_bytes(bytes: &[u8]) -> Result<Self, TagReadError> {
+        Self::read_from(std::io::BufReader::new(std::io::Cursor::new(bytes)))
+    }
+
+    fn read_from<R: Read + Seek>(mut reader: std::io::BufReader<R>) -> Result<Self, TagReadError> {
         // Get the size of the file
         reader.seek(SeekFrom::End(0))?;
         let tag_file_size = reader.stream_position()?;
@@ -181,36 +194,42 @@ impl TagFile {
 
             match &chunk_signature.to_be_bytes() {
                 b"want" => {
-                    assert!(dependency_list_stream.is_none());
+                    if dependency_list_stream.is_some() {
+                        return Err(TagReadError::DuplicateOptionalStream { signature: *b"want" });
+                    }
                     dependency_list_stream = Some(TagStream::read(chunk_signature, &mut reader)?);
                 }
 
                 b"info" => {
-                    assert!(import_info_stream.is_none());
+                    if import_info_stream.is_some() {
+                        return Err(TagReadError::DuplicateOptionalStream { signature: *b"info" });
+                    }
                     import_info_stream = Some(TagStream::read(chunk_signature, &mut reader)?);
                 }
 
                 b"assd" => {
-                    assert!(asset_depot_storage_stream.is_none());
+                    if asset_depot_storage_stream.is_some() {
+                        return Err(TagReadError::DuplicateOptionalStream { signature: *b"assd" });
+                    }
                     asset_depot_storage_stream = Some(TagStream::read(chunk_signature, &mut reader)?);
                 }
 
-                _ => {
-                    let sig_bytes = chunk_signature.to_be_bytes();
-                    let as_ascii = String::from_utf8_lossy(&sig_bytes);
-                    return Err(format!(
-                        "unhandled chunk signature '{}' at 0x{:X}",
-                        as_ascii, chunk_header_offset,
-                    ).into());
+                signature => {
+                    return Err(TagReadError::UnknownSubChunkSignature {
+                        context: "tag-file top-level",
+                        signature: *signature,
+                    });
                 }
             }
         }
 
         if reader.stream_position()? != tag_file_size {
-            return Err(format!(
-                "trailing bytes after last chunk (stream at 0x{:X}, file size 0x{:X})",
-                reader.stream_position()?, tag_file_size,
-            ).into());
+            return Err(TagReadError::ChunkSizeMismatch {
+                chunk: "tag file",
+                started_at: 0,
+                ended_at: reader.stream_position()?,
+                expected_end: tag_file_size,
+            });
         }
 
         Ok(Self {
@@ -229,18 +248,29 @@ impl TagFile {
     pub fn write<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
         let file = std::fs::File::create(path)?;
         let mut writer = std::io::BufWriter::with_capacity(64 * 1024, file);
+        self.write_to(&mut writer)
+    }
 
-        self.header.write(&mut writer)?;
-        self.tag_stream.write(u32::from_be_bytes(*b"tag!"), &mut writer)?;
+    /// Serialize this tag to a `Vec<u8>`. Mirrors [`TagFile::write`];
+    /// useful for fuzzing roundtrips and in-memory tag pipelines.
+    pub fn write_to_bytes(&self) -> std::io::Result<Vec<u8>> {
+        let mut buf = Vec::new();
+        self.write_to(&mut buf)?;
+        Ok(buf)
+    }
+
+    fn write_to<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        self.header.write(writer)?;
+        self.tag_stream.write(u32::from_be_bytes(*b"tag!"), writer)?;
 
         if let Some(dependency_list_stream) = &self.dependency_list_stream {
-            dependency_list_stream.write(u32::from_be_bytes(*b"want"), &mut writer)?;
+            dependency_list_stream.write(u32::from_be_bytes(*b"want"), writer)?;
         }
         if let Some(import_info_stream) = &self.import_info_stream {
-            import_info_stream.write(u32::from_be_bytes(*b"info"), &mut writer)?;
+            import_info_stream.write(u32::from_be_bytes(*b"info"), writer)?;
         }
         if let Some(asset_depot_storage_stream) = &self.asset_depot_storage_stream {
-            asset_depot_storage_stream.write(u32::from_be_bytes(*b"assd"), &mut writer)?;
+            asset_depot_storage_stream.write(u32::from_be_bytes(*b"assd"), writer)?;
         }
 
         Ok(())
@@ -298,7 +328,7 @@ impl TagFile {
 
     /// Attach an empty `assd` (asset depot storage) stream — tag-
     /// editor icon pixel data. One zero-filled root element; icon
-    /// data field empty. Callers populate via the façade if needed.
+    /// data field empty. Callers populate via the facade if needed.
     /// No-op if already present.
     pub fn add_asset_depot_storage<P: AsRef<Path>>(
         &mut self,
@@ -387,7 +417,7 @@ impl TagFile {
             .ok_or("`dependencies` is not a block")?;
         deps.clear();
         for (g, p) in refs {
-            let i = deps.add();
+            let i = deps.add_element();
             let mut elem = deps
                 .element_mut(i)
                 .expect("newly added element should be accessible");
@@ -433,9 +463,8 @@ fn collect_from_field(f: &crate::TagField<'_>, out: &mut Vec<(u32, String)>) {
         }
         return;
     }
-    if let Some(crate::TagFieldData::TagReference(r)) = f.value() {
-        if let Some((g, p)) = r.group_tag_and_name {
+    if let Some(crate::TagFieldData::TagReference(r)) = f.value()
+        && let Some((g, p)) = r.group_tag_and_name {
             out.push((g, p));
         }
-    }
 }

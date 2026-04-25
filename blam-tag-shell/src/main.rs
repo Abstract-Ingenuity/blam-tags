@@ -6,12 +6,21 @@ use context::CliContext;
 mod commands;
 mod context;
 mod format;
+mod parse;
 mod repl;
+mod suggest;
+mod tag_index;
 mod walk;
 
 #[derive(Parser)]
 #[command(name = "blam-tag-shell", about = "Halo tag file inspector and editor")]
 struct Cli {
+    /// Game whose schemas / `_meta.json` tag index this invocation
+    /// operates against. Resolves to `definitions/<GAME>/`. Required
+    /// — schemas and group-name resolution can't work without it.
+    #[arg(long, short = 'g', global = true)]
+    game: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -271,13 +280,12 @@ enum Commands {
     },
 
     /// Create a new tag from a group schema. Reads the schema JSON
-    /// at `definitions/<game>/<group>.json` and writes a
-    /// zero-filled tag to `<group>.<group>` (or `--output`).
+    /// at `definitions/<game>/<group>.json` (game from the global
+    /// `--game` flag) and writes a zero-filled tag to
+    /// `<group>.<group>` (or `--output`).
     New {
         /// Group name (matches the schema filename, e.g. `biped`)
         group: String,
-        /// Game identifier — subdirectory under `definitions/`
-        game: String,
         /// Output path (default: `<group>.<group>` in cwd)
         #[arg(long)]
         output: Option<String>,
@@ -287,8 +295,6 @@ enum Commands {
     AddDependencyList {
         /// Path to a tag file
         file: String,
-        /// Game identifier (for locating `tag_dependency_list.json`)
-        game: String,
         /// Write to a different file
         #[arg(long)]
         output: Option<String>,
@@ -305,7 +311,6 @@ enum Commands {
     /// tag_reference fields. Creates the stream if missing.
     RebuildDependencyList {
         file: String,
-        game: String,
         #[arg(long)]
         output: Option<String>,
     },
@@ -313,7 +318,6 @@ enum Commands {
     /// Attach an empty import-info stream to a tag
     AddImportInfo {
         file: String,
-        game: String,
         #[arg(long)]
         output: Option<String>,
     },
@@ -328,7 +332,6 @@ enum Commands {
     /// Attach an empty asset-depot-storage stream to a tag
     AddAssetDepotStorage {
         file: String,
-        game: String,
         #[arg(long)]
         output: Option<String>,
     },
@@ -343,7 +346,12 @@ enum Commands {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut ctx = CliContext::new();
+    let game = cli.game.as_deref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "missing required --game/-g flag (e.g. `--game haloreach_mcc`)",
+        )
+    })?;
+    let mut ctx = CliContext::new(game)?;
 
     match cli.command {
         Commands::Repl { file } => repl::run(&mut ctx, file.as_deref()),
@@ -388,7 +396,7 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
                 depth,
                 all,
                 json,
-                commands::inspect::Filters {
+                commands::inspect::InspectFilters {
                     names: filter,
                     excludes: filter_not,
                     value: filter_value,
@@ -430,7 +438,7 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
 
         Commands::Find { dir, value, group, field_name, regex, json, strict } => {
             let filters = commands::find::FindFilters { group, field_name, regex, json, strict };
-            commands::find::run(&dir, &value, filters)
+            commands::find::run(ctx, &dir, &value, filters)
         }
 
         Commands::Export { file, subtree, output } => {
@@ -444,16 +452,16 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
         }
 
         Commands::DataDiff { file_a, file_b, only, json } => {
-            commands::data_diff::run(&file_a, &file_b, only.as_deref(), json)
+            commands::data_diff::run(ctx, &file_a, &file_b, only.as_deref(), json)
         }
 
-        Commands::New { group, game, output } => {
-            commands::new::run(&group, &game, output.as_deref())
+        Commands::New { group, output } => {
+            commands::new::run(ctx, &group, output.as_deref())
         }
 
-        Commands::AddDependencyList { file, game, output } => {
+        Commands::AddDependencyList { file, output } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::streams::add_dependency_list(ctx, &game, output.as_deref())
+            commands::streams::add_dependency_list(ctx, output.as_deref())
         }
 
         Commands::RemoveDependencyList { file, output } => {
@@ -461,14 +469,14 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::streams::remove_dependency_list(ctx, output.as_deref())
         }
 
-        Commands::RebuildDependencyList { file, game, output } => {
+        Commands::RebuildDependencyList { file, output } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::streams::rebuild_dependency_list(ctx, &game, output.as_deref())
+            commands::streams::rebuild_dependency_list(ctx, output.as_deref())
         }
 
-        Commands::AddImportInfo { file, game, output } => {
+        Commands::AddImportInfo { file, output } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::streams::add_import_info(ctx, &game, output.as_deref())
+            commands::streams::add_import_info(ctx, output.as_deref())
         }
 
         Commands::RemoveImportInfo { file, output } => {
@@ -476,9 +484,9 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::streams::remove_import_info(ctx, output.as_deref())
         }
 
-        Commands::AddAssetDepotStorage { file, game, output } => {
+        Commands::AddAssetDepotStorage { file, output } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::streams::add_asset_depot_storage(ctx, &game, output.as_deref())
+            commands::streams::add_asset_depot_storage(ctx, output.as_deref())
         }
 
         Commands::RemoveAssetDepotStorage { file, output } => {

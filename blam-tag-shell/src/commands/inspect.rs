@@ -14,14 +14,14 @@ use crate::format::{format_value, value_to_json};
 use crate::walk::{walk, FieldVisitor, VisitControl};
 
 /// Name / value filtering options accepted by the `inspect` subcommand.
-/// An empty [`Filters`] matches every field.
-pub struct Filters {
+/// An empty [`InspectFilters`] matches every field.
+pub struct InspectFilters {
     pub names: Vec<String>,
     pub excludes: Vec<String>,
     pub value: Option<String>,
 }
 
-impl Filters {
+impl InspectFilters {
     fn is_active(&self) -> bool {
         !self.names.is_empty() || !self.excludes.is_empty() || self.value.is_some()
     }
@@ -51,9 +51,11 @@ pub fn run(
     depth: usize,
     show_all: bool,
     json_output: bool,
-    filters: Filters,
+    filters: InspectFilters,
 ) -> Result<()> {
-    let loaded = ctx.loaded("inspect")?;
+    let nav_path = ctx.nav.join("/");
+    let resolved = path.map(|p| ctx.resolve_path(p));
+    let loaded = ctx.loaded.as_ref().context("`inspect` needs a loaded tag")?;
     let root = loaded.tag.root();
 
     // Two cases:
@@ -63,8 +65,7 @@ pub fn run(
     //  - With path arg: inspect that specific field, interpreting
     //    block/array endpoints as the container itself (so
     //    `inspect seats` dumps the block).
-    if path.is_none() {
-        let nav_path = ctx.nav.join("/");
+    if resolved.is_none() {
         let target = if nav_path.is_empty() {
             root
         } else {
@@ -72,27 +73,27 @@ pub fn run(
                 .with_context(|| format!("nav path '{}' does not resolve to a struct", nav_path))?
         };
         if json_output {
-            println!("{}", serde_json::to_string_pretty(&struct_to_json(target, depth, &filters, show_all))?);
+            println!("{}", serde_json::to_string_pretty(&struct_to_json(ctx, target, depth, &filters, show_all))?);
         } else {
-            print_via_walker(target, depth, &filters, show_all);
+            print_via_walker(ctx, target, depth, &filters, show_all);
         }
         return Ok(());
     }
 
-    let resolved = ctx.resolve_path(path.unwrap());
+    let resolved = resolved.unwrap();
     let p = resolved.as_str();
     let field = root.field_path(p).with_context(|| format!("field '{}' not found", p))?;
 
     if let Some(nested) = field.as_struct() {
         if json_output {
-            println!("{}", serde_json::to_string_pretty(&struct_to_json(nested, depth, &filters, show_all))?);
+            println!("{}", serde_json::to_string_pretty(&struct_to_json(ctx, nested, depth, &filters, show_all))?);
         } else {
-            print_via_walker(nested, depth, &filters, show_all);
+            print_via_walker(ctx, nested, depth, &filters, show_all);
         }
     } else if let Some(block) = field.as_block() {
-        print_block(block, p, depth, json_output, &filters, show_all)?;
+        print_block(ctx, block, p, depth, json_output, &filters, show_all)?;
     } else if let Some(array) = field.as_array() {
-        print_array(array, p, depth, json_output, &filters, show_all)?;
+        print_array(ctx, array, p, depth, json_output, &filters, show_all)?;
     } else {
         anyhow::bail!("field '{}' is not a struct, block, or array", p);
     }
@@ -104,8 +105,9 @@ pub fn run(
 /// infrastructure — depth limiting comes from walker-provided
 /// depth plus the user's `--depth` cap, indent is derived from
 /// depth.
-fn print_via_walker(start: TagStruct<'_>, max_depth: usize, filters: &Filters, show_all: bool) {
+fn print_via_walker(ctx: &CliContext, start: TagStruct<'_>, max_depth: usize, filters: &InspectFilters, show_all: bool) {
     let mut visitor = InspectText {
+        ctx,
         max_depth,
         filters,
         show_all,
@@ -114,8 +116,9 @@ fn print_via_walker(start: TagStruct<'_>, max_depth: usize, filters: &Filters, s
 }
 
 struct InspectText<'a> {
+    ctx: &'a CliContext,
     max_depth: usize,
-    filters: &'a Filters,
+    filters: &'a InspectFilters,
     show_all: bool,
 }
 
@@ -171,7 +174,7 @@ impl<'a> FieldVisitor for InspectText<'a> {
         let type_name = field.type_name();
         match field.value() {
             Some(value) => {
-                let formatted = format_value(&value, false);
+                let formatted = format_value(self.ctx, &value, false);
                 if !self.filters.is_active() || self.filters.leaf_matches(name, Some(&formatted)) {
                     println!("{}{name}: {type_name} = {formatted}", self.indent(depth));
                 }
@@ -185,30 +188,30 @@ impl<'a> FieldVisitor for InspectText<'a> {
     }
 }
 
-fn print_block(block: TagBlock<'_>, label: &str, depth: usize, json_output: bool, filters: &Filters, show_all: bool) -> Result<()> {
+fn print_block(ctx: &CliContext, block: TagBlock<'_>, label: &str, depth: usize, json_output: bool, filters: &InspectFilters, show_all: bool) -> Result<()> {
     if json_output {
-        let values: Vec<Value> = block.iter().map(|s| struct_to_json(s, depth, filters, show_all)).collect();
+        let values: Vec<Value> = block.iter().map(|s| struct_to_json(ctx, s, depth, filters, show_all)).collect();
         println!("{}", serde_json::to_string_pretty(&values)?);
     } else {
         println!("{}: block [{} elements]", label, block.len());
         for (i, s) in block.iter().enumerate() {
             println!("  [{}]", i);
-            let mut v = InspectText { max_depth: depth, filters, show_all };
+            let mut v = InspectText { ctx, max_depth: depth, filters, show_all };
             walk(s, &mut v);
         }
     }
     Ok(())
 }
 
-fn print_array(array: TagArray<'_>, label: &str, depth: usize, json_output: bool, filters: &Filters, show_all: bool) -> Result<()> {
+fn print_array(ctx: &CliContext, array: TagArray<'_>, label: &str, depth: usize, json_output: bool, filters: &InspectFilters, show_all: bool) -> Result<()> {
     if json_output {
-        let values: Vec<Value> = array.iter().map(|s| struct_to_json(s, depth, filters, show_all)).collect();
+        let values: Vec<Value> = array.iter().map(|s| struct_to_json(ctx, s, depth, filters, show_all)).collect();
         println!("{}", serde_json::to_string_pretty(&values)?);
     } else {
         println!("{}: array [{} elements]", label, array.len());
         for (i, s) in array.iter().enumerate() {
             println!("  [{}]", i);
-            let mut v = InspectText { max_depth: depth, filters, show_all };
+            let mut v = InspectText { ctx, max_depth: depth, filters, show_all };
             walk(s, &mut v);
         }
     }
@@ -221,16 +224,16 @@ fn print_array(array: TagArray<'_>, label: &str, depth: usize, json_output: bool
 // more complexity than it removes.
 //================================================================================
 
-fn struct_to_json(s: TagStruct<'_>, depth: usize, filters: &Filters, show_all: bool) -> Value {
+fn struct_to_json(ctx: &CliContext, s: TagStruct<'_>, depth: usize, filters: &InspectFilters, show_all: bool) -> Value {
     let iter: Box<dyn Iterator<Item = TagField<'_>>> =
         if show_all { Box::new(s.fields_all()) } else { Box::new(s.fields()) };
     let fields: Vec<Value> = iter
-        .filter_map(|field| field_to_json(field, depth, filters, show_all))
+        .filter_map(|field| field_to_json(ctx, field, depth, filters, show_all))
         .collect();
     json!(fields)
 }
 
-fn field_to_json(field: TagField<'_>, depth: usize, filters: &Filters, show_all: bool) -> Option<Value> {
+fn field_to_json(ctx: &CliContext, field: TagField<'_>, depth: usize, filters: &InspectFilters, show_all: bool) -> Option<Value> {
     let name = field.name();
     let mut obj = serde_json::Map::new();
     obj.insert("name".into(), json!(name));
@@ -238,18 +241,18 @@ fn field_to_json(field: TagField<'_>, depth: usize, filters: &Filters, show_all:
 
     if let Some(nested) = field.as_struct() {
         if depth > 0 {
-            obj.insert("fields".into(), struct_to_json(nested, depth - 1, filters, show_all));
+            obj.insert("fields".into(), struct_to_json(ctx, nested, depth - 1, filters, show_all));
         }
     } else if let Some(block) = field.as_block() {
         obj.insert("count".into(), json!(block.len()));
         if depth > 0 {
-            let elements: Vec<Value> = block.iter().map(|s| struct_to_json(s, depth - 1, filters, show_all)).collect();
+            let elements: Vec<Value> = block.iter().map(|s| struct_to_json(ctx, s, depth - 1, filters, show_all)).collect();
             obj.insert("elements".into(), json!(elements));
         }
     } else if let Some(array) = field.as_array() {
         obj.insert("count".into(), json!(array.len()));
         if depth > 0 {
-            let elements: Vec<Value> = array.iter().map(|s| struct_to_json(s, depth - 1, filters, show_all)).collect();
+            let elements: Vec<Value> = array.iter().map(|s| struct_to_json(ctx, s, depth - 1, filters, show_all)).collect();
             obj.insert("elements".into(), json!(elements));
         }
     } else if field.as_resource().is_some() {
@@ -258,11 +261,11 @@ fn field_to_json(field: TagField<'_>, depth: usize, filters: &Filters, show_all:
         }
         obj.insert("kind".into(), json!("pageable_resource"));
     } else if let Some(value) = field.value() {
-        let formatted = format_value(&value, false);
+        let formatted = format_value(ctx, &value, false);
         if filters.is_active() && !filters.leaf_matches(name, Some(&formatted)) {
             return None;
         }
-        obj.insert("value".into(), value_to_json(&value));
+        obj.insert("value".into(), value_to_json(ctx, &value));
     } else if filters.is_active() && !filters.leaf_matches(name, None) {
         return None;
     }

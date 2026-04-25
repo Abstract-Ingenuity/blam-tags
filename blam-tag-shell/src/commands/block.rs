@@ -139,13 +139,13 @@ pub fn run(
 
         match action {
             BlockAction::Count => unreachable!("returned early above"),
-            BlockAction::Add => { block.add(); }
-            BlockAction::Insert => { block.insert(index.unwrap()).map_err(out_of_range)?; }
-            BlockAction::Duplicate => { block.duplicate(index.unwrap()).map_err(out_of_range)?; }
-            BlockAction::Delete => { block.delete(index.unwrap()).map_err(out_of_range)?; }
+            BlockAction::Add => { block.add_element(); }
+            BlockAction::Insert => { block.insert_element(index.unwrap()).map_err(out_of_range)?; }
+            BlockAction::Duplicate => { block.duplicate_element(index.unwrap()).map_err(out_of_range)?; }
+            BlockAction::Delete => { block.delete_element(index.unwrap()).map_err(out_of_range)?; }
             BlockAction::Clear => { block.clear(); }
-            BlockAction::Swap => { block.swap(index.unwrap(), index2.unwrap()).map_err(out_of_range)?; }
-            BlockAction::Move => { block.move_to(index.unwrap(), index2.unwrap()).map_err(out_of_range)?; }
+            BlockAction::Swap => { block.swap_elements(index.unwrap(), index2.unwrap()).map_err(out_of_range)?; }
+            BlockAction::Move => { block.move_element(index.unwrap(), index2.unwrap()).map_err(out_of_range)?; }
         }
     }
     loaded.dirty = true;

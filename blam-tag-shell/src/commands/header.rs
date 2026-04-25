@@ -4,6 +4,7 @@
 //! a valid tag at all.
 
 use anyhow::{Context, Result};
+use blam_tags::format_group_tag;
 use serde_json::json;
 
 use crate::context::CliContext;
@@ -13,6 +14,7 @@ pub fn run(ctx: &mut CliContext, json_output: bool) -> Result<()> {
     let file_size = std::fs::metadata(&loaded.path).context("failed to stat file")?.len();
     let tag = &loaded.tag;
     let group = tag.group();
+    let group_str = format_group_tag(group.tag);
 
     let mut streams = vec!["tag!"];
     if tag.dependency_list().is_some() { streams.push("want"); }
@@ -21,7 +23,7 @@ pub fn run(ctx: &mut CliContext, json_output: bool) -> Result<()> {
 
     if json_output {
         let out = json!({
-            "group": group.to_string(),
+            "group": group_str,
             "group_version": group.version,
             "build": { "version": tag.header.build_version, "number": tag.header.build_number },
             "version": tag.header.version,
@@ -34,7 +36,7 @@ pub fn run(ctx: &mut CliContext, json_output: bool) -> Result<()> {
     }
 
     println!("Tag File");
-    println!("  Group:         {}", group);
+    println!("  Group:         {}", group_str);
     println!("  Group version: {}", group.version);
     println!("  Build:         {}.{}", tag.header.build_version, tag.header.build_number);
     println!("  Version:       {}", tag.header.version);

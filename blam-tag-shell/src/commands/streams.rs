@@ -13,19 +13,12 @@ use anyhow::{anyhow, Result};
 
 use crate::context::CliContext;
 
-fn want_schema(game: &str) -> PathBuf {
-    PathBuf::from("definitions").join(game).join("tag_dependency_list.json")
+fn schema_path(game: &str, stem: &str) -> PathBuf {
+    PathBuf::from("definitions").join(game).join(format!("{stem}.json"))
 }
 
-fn info_schema(game: &str) -> PathBuf {
-    PathBuf::from("definitions").join(game).join("tag_import_information.json")
-}
-
-fn assd_schema(game: &str) -> PathBuf {
-    PathBuf::from("definitions").join(game).join("asset_depot_storage.json")
-}
-
-fn require_schema(path: PathBuf, game: &str, kind: &str) -> Result<PathBuf> {
+fn require_schema(game: &str, stem: &str, kind: &str) -> Result<PathBuf> {
+    let path = schema_path(game, stem);
     if !path.exists() {
         return Err(anyhow!(
             "{kind} schema not found at {} (check that definitions/{}/ is populated)",
@@ -36,8 +29,8 @@ fn require_schema(path: PathBuf, game: &str, kind: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn add_dependency_list(ctx: &mut CliContext, game: &str, output: Option<&str>) -> Result<()> {
-    let schema = require_schema(want_schema(game), game, "dependency-list")?;
+pub fn add_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
+    let schema = require_schema(&ctx.game, "tag_dependency_list", "dependency-list")?;
     let loaded = ctx.loaded_mut("add-dependency-list")?;
     loaded.tag
         .add_dependency_list(&schema)
@@ -63,8 +56,8 @@ pub fn remove_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Res
     Ok(())
 }
 
-pub fn rebuild_dependency_list(ctx: &mut CliContext, game: &str, output: Option<&str>) -> Result<()> {
-    let schema = require_schema(want_schema(game), game, "dependency-list")?;
+pub fn rebuild_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
+    let schema = require_schema(&ctx.game, "tag_dependency_list", "dependency-list")?;
     let loaded = ctx.loaded_mut("rebuild-dependency-list")?;
     loaded.tag
         .rebuild_dependency_list(&schema)
@@ -84,8 +77,8 @@ pub fn rebuild_dependency_list(ctx: &mut CliContext, game: &str, output: Option<
     Ok(())
 }
 
-pub fn add_import_info(ctx: &mut CliContext, game: &str, output: Option<&str>) -> Result<()> {
-    let schema = require_schema(info_schema(game), game, "import-info")?;
+pub fn add_import_info(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
+    let schema = require_schema(&ctx.game, "tag_import_information", "import-info")?;
     let loaded = ctx.loaded_mut("add-import-info")?;
     loaded.tag
         .add_import_info(&schema)
@@ -111,12 +104,8 @@ pub fn remove_import_info(ctx: &mut CliContext, output: Option<&str>) -> Result<
     Ok(())
 }
 
-pub fn add_asset_depot_storage(
-    ctx: &mut CliContext,
-    game: &str,
-    output: Option<&str>,
-) -> Result<()> {
-    let schema = require_schema(assd_schema(game), game, "asset-depot-storage")?;
+pub fn add_asset_depot_storage(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
+    let schema = require_schema(&ctx.game, "asset_depot_storage", "asset-depot-storage")?;
     let loaded = ctx.loaded_mut("add-asset-depot-storage")?;
     loaded.tag
         .add_asset_depot_storage(&schema)

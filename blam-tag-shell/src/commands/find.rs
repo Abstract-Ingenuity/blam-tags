@@ -6,11 +6,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use blam_tags::{TagField, TagFile};
+use blam_tags::{format_group_tag, TagField, TagFile};
 use rayon::prelude::*;
 use regex::Regex;
 use serde_json::json;
 
+use crate::context::CliContext;
+use crate::format::format_value;
 use crate::walk::{walk, FieldVisitor};
 
 pub struct FindFilters {
@@ -21,7 +23,7 @@ pub struct FindFilters {
     pub strict: bool,
 }
 
-pub fn run(dir: &str, query: &str, filters: FindFilters) -> Result<()> {
+pub fn run(ctx: &CliContext, dir: &str, query: &str, filters: FindFilters) -> Result<()> {
     let value_re = if filters.regex {
         Some(Regex::new(query).context("invalid regex query")?)
     } else {
@@ -39,7 +41,7 @@ pub fn run(dir: &str, query: &str, filters: FindFilters) -> Result<()> {
 
     let per_tag: Vec<Result<Vec<Hit>>> = tag_paths
         .par_iter()
-        .map(|path| search_tag(path, query, value_re.as_ref(), field_name_re.as_ref(), filters.group.as_deref(), filters.strict))
+        .map(|path| search_tag(ctx, path, query, value_re.as_ref(), field_name_re.as_ref(), filters.group.as_deref(), filters.strict))
         .collect();
     let mut hits: Vec<Hit> = Vec::new();
     for r in per_tag {
@@ -74,6 +76,7 @@ struct Hit {
 }
 
 fn search_tag(
+    ctx: &CliContext,
     path: &Path,
     query: &str,
     value_re: Option<&Regex>,
@@ -91,13 +94,13 @@ fn search_tag(
         }
     };
 
-    if let Some(g) = group_filter {
-        if tag.group().to_string() != g {
+    if let Some(g) = group_filter
+        && format_group_tag(tag.group().tag) != *g {
             return Ok(Vec::new());
         }
-    }
 
     let mut visitor = FindVisitor {
+        ctx,
         query,
         value_re,
         field_name_re,
@@ -109,6 +112,7 @@ fn search_tag(
 }
 
 struct FindVisitor<'a> {
+    ctx: &'a CliContext,
     query: &'a str,
     value_re: Option<&'a Regex>,
     field_name_re: Option<&'a Regex>,
@@ -118,13 +122,12 @@ struct FindVisitor<'a> {
 
 impl<'a> FieldVisitor for FindVisitor<'a> {
     fn visit_leaf(&mut self, path: &str, _depth: usize, field: TagField<'_>) {
-        if let Some(re) = self.field_name_re {
-            if !re.is_match(field.name()) {
+        if let Some(re) = self.field_name_re
+            && !re.is_match(field.name()) {
                 return;
             }
-        }
         let Some(value) = field.value() else { return };
-        let formatted = format!("{}", value);
+        let formatted = format_value(self.ctx, &value, false);
         let matched = match self.value_re {
             Some(re) => re.is_match(&formatted),
             None => formatted.contains(self.query),
@@ -150,11 +153,10 @@ fn crate_walk_dir(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
             crate_walk_dir(&path, out)?;
             continue;
         }
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name == ".DS_Store" {
+        if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && name == ".DS_Store" {
                 continue;
             }
-        }
         out.push(path);
     }
     Ok(())

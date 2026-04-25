@@ -1,22 +1,25 @@
-//! `new <group> <game>` — create a fresh tag from a schema JSON.
+//! `new <group>` — create a fresh tag from a schema JSON.
 //!
-//! Resolves the schema at `definitions/<game>/<group>.json` and calls
-//! `TagFile::new`. Writes to `./<group>.<group>` in the cwd. No
-//! optional streams attached by default — use `add-want` /
-//! `add-info` afterward if you want them.
+//! Resolves the schema at `definitions/<game>/<group>.json` (game
+//! comes from the global `--game` flag via [`CliContext::game`]) and
+//! calls `TagFile::new`. Writes to `./<group>.<group>` in the cwd. No
+//! optional streams attached by default — use `add-want` / `add-info`
+//! afterward if you want them.
 
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Context, Result};
 use blam_tags::TagFile;
 
-pub fn run(group: &str, game: &str, output: Option<&str>) -> Result<()> {
-    let schema = PathBuf::from("definitions").join(game).join(format!("{group}.json"));
+use crate::context::CliContext;
+
+pub fn run(ctx: &CliContext, group: &str, output: Option<&str>) -> Result<()> {
+    let schema = PathBuf::from("definitions").join(&ctx.game).join(format!("{group}.json"));
     if !schema.exists() {
         return Err(anyhow!(
             "schema not found: {} (is the group name right and `definitions/{}/` present?)",
             schema.display(),
-            game,
+            ctx.game,
         ));
     }
 

@@ -11,7 +11,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use blam_tags::TagFile;
+use blam_tags::{format_group_tag, TagFile};
 use rayon::prelude::*;
 use regex::Regex;
 use serde_json::json;
@@ -60,25 +60,20 @@ pub fn run(dir: &str, filters: ListFilters, mode: OutputMode) -> Result<()> {
                     return Ok(None);
                 }
             };
-            let group = tag.group().to_string();
+            let group = format_group_tag(tag.group().tag);
 
-            if let Some(g) = &filters.group {
-                if group != *g { return Ok(None); }
-            }
+            if let Some(g) = &filters.group
+                && group != *g { return Ok(None); }
 
             let path_str = path.to_string_lossy();
-            if let Some(prefix) = &filters.starts_with {
-                if !file_name_matches(path, |n| n.starts_with(prefix)) { return Ok(None); }
-            }
-            if let Some(needle) = &filters.contains {
-                if !path_str.contains(needle) { return Ok(None); }
-            }
-            if let Some(suffix) = &filters.ends_with {
-                if !file_name_matches(path, |n| n.ends_with(suffix)) { return Ok(None); }
-            }
-            if let Some(re) = &regex {
-                if !re.is_match(&path_str) { return Ok(None); }
-            }
+            if let Some(prefix) = &filters.starts_with
+                && !file_name_matches(path, |n| n.starts_with(prefix)) { return Ok(None); }
+            if let Some(needle) = &filters.contains
+                && !path_str.contains(needle) { return Ok(None); }
+            if let Some(suffix) = &filters.ends_with
+                && !file_name_matches(path, |n| n.ends_with(suffix)) { return Ok(None); }
+            if let Some(re) = &regex
+                && !re.is_match(&path_str) { return Ok(None); }
 
             Ok(Some((path.clone(), group)))
         })
@@ -137,9 +132,8 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
             walk(&path, out)?;
             continue;
         }
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name == ".DS_Store" { continue; }
-        }
+        if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && name == ".DS_Store" { continue; }
         out.push(path);
     }
     Ok(())

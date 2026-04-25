@@ -8,13 +8,14 @@ use serde_json::json;
 
 use crate::context::CliContext;
 use crate::format::{format_value, value_to_json};
+use crate::suggest::suggest_field_name;
 
 pub fn run(ctx: &mut CliContext, path: &str, raw_mode: bool, json_output: bool, hex_mode: bool) -> Result<()> {
     let resolved = ctx.resolve_path(path);
     let loaded = ctx.loaded("get")?;
     let root = loaded.tag.root();
 
-    let field = root.field_path(&resolved).ok_or_else(|| match root.suggest_field_name(&resolved) {
+    let field = root.field_path(&resolved).ok_or_else(|| match suggest_field_name(&root, &resolved) {
         Some(s) => anyhow::anyhow!("field '{}' not found. Did you mean '{}'?", resolved, s),
         None => anyhow::anyhow!("field '{}' not found", resolved),
     })?;
@@ -37,12 +38,12 @@ pub fn run(ctx: &mut CliContext, path: &str, raw_mode: bool, json_output: bool, 
     let value = field.value().context("field has no parsed value")?;
 
     if json_output {
-        let out = json!({ "path": &resolved, "type": type_name, "value": value_to_json(&value) });
+        let out = json!({ "path": &resolved, "type": type_name, "value": value_to_json(ctx, &value) });
         println!("{}", serde_json::to_string_pretty(&out)?);
         return Ok(());
     }
 
-    let formatted = format_value(&value, hex_mode);
+    let formatted = format_value(ctx, &value, hex_mode);
     if raw_mode {
         println!("{formatted}");
     } else {

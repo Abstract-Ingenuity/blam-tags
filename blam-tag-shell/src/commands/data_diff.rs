@@ -26,10 +26,12 @@ use anyhow::{Context, Result};
 use blam_tags::{TagField, TagFile};
 use serde_json::{json, Value};
 
+use crate::context::CliContext;
 use crate::format::format_value;
 use crate::walk::{walk, FieldVisitor};
 
 pub fn run(
+    ctx: &CliContext,
     file_a: &str,
     file_b: &str,
     subtree: Option<&str>,
@@ -40,8 +42,8 @@ pub fn run(
     let tag_b = TagFile::read(std::path::Path::new(file_b))
         .map_err(|e| anyhow::anyhow!("failed to read '{file_b}': {e}"))?;
 
-    let map_a = collect(&tag_a, subtree).with_context(|| format!("walking '{file_a}'"))?;
-    let map_b = collect(&tag_b, subtree).with_context(|| format!("walking '{file_b}'"))?;
+    let map_a = collect(ctx, &tag_a, subtree).with_context(|| format!("walking '{file_a}'"))?;
+    let map_b = collect(ctx, &tag_b, subtree).with_context(|| format!("walking '{file_b}'"))?;
 
     let diffs = compute_diffs(&map_a, &map_b);
 
@@ -54,7 +56,7 @@ pub fn run(
     Ok(())
 }
 
-fn collect(tag: &TagFile, subtree: Option<&str>) -> Result<BTreeMap<String, String>> {
+fn collect(ctx: &CliContext, tag: &TagFile, subtree: Option<&str>) -> Result<BTreeMap<String, String>> {
     let root = tag.root();
     let start = match subtree {
         None => root,
@@ -64,17 +66,19 @@ fn collect(tag: &TagFile, subtree: Option<&str>) -> Result<BTreeMap<String, Stri
     };
 
     let mut visitor = CollectVisitor {
+        ctx,
         values: BTreeMap::new(),
     };
     walk(start, &mut visitor);
     Ok(visitor.values)
 }
 
-struct CollectVisitor {
+struct CollectVisitor<'a> {
+    ctx: &'a CliContext,
     values: BTreeMap<String, String>,
 }
 
-impl FieldVisitor for CollectVisitor {
+impl FieldVisitor for CollectVisitor<'_> {
     fn visit_leaf(&mut self, path: &str, _depth: usize, field: TagField<'_>) {
         if let Some(value) = field.value() {
             // Skipping unnamed filler (same reasoning as export): the
@@ -83,7 +87,7 @@ impl FieldVisitor for CollectVisitor {
             if field.name().is_empty() {
                 return;
             }
-            self.values.insert(path.to_string(), format_value(&value, false));
+            self.values.insert(path.to_string(), format_value(self.ctx, &value, false));
         }
     }
 }

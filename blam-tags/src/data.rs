@@ -11,9 +11,9 @@
 //! This matches the on-disk `tgbl` chunk layout 1:1: `count + flags +
 //! concatenated element bytes + per-element tgst sub-chunks`.
 
-use std::error::Error;
 use std::io::{Read, Seek, SeekFrom, Write};
 
+use crate::error::TagReadError;
 use crate::fields::{deserialize_field, serialize_field, TagFieldData, TagFieldType};
 use crate::io::*;
 use crate::layout::{TagBlockLayout, TagLayout, TagStructLayout};
@@ -117,20 +117,28 @@ impl TagStructData {
         layout: &TagLayout,
         definition: &TagStructLayout,
         reader: &mut std::io::BufReader<R>,
-    ) -> Result<Self, Box<dyn Error>> {
-        let tag_struct_header = read_tag_chunk_header(reader)?;
+    ) -> Result<Self, TagReadError> {
+        let tag_struct_header_offset = reader.stream_position()?;
+        let tag_struct_header = read_chunk_header(reader)?;
         let tag_struct_offset = reader.stream_position()?;
-        assert!(
-            tag_struct_header.signature == u32::from_be_bytes(*b"tgst"),
-            "Invalid tag struct header at 0x{:X}",
-            tag_struct_offset - 12,
-        );
-        // HYPOTHESIS: tgst.version always equals tgst.size.
-        assert_eq!(
-            tag_struct_header.version, tag_struct_header.size,
-            "tgst version ({}) != size ({}) at 0x{:X}",
-            tag_struct_header.version, tag_struct_header.size, tag_struct_offset - 12,
-        );
+        if tag_struct_header.signature != u32::from_be_bytes(*b"tgst") {
+            return Err(TagReadError::BadChunkSignature {
+                offset: tag_struct_header_offset,
+                expected: *b"tgst",
+                got: tag_struct_header.signature.to_be_bytes(),
+            });
+        }
+        // tgst.version always equals tgst.size. Treat divergence as
+        // size-mismatch since the version field is being used as a
+        // duplicate size carrier here.
+        if tag_struct_header.version != tag_struct_header.size {
+            return Err(TagReadError::ChunkSizeMismatch {
+                chunk: "tgst",
+                started_at: tag_struct_offset,
+                ended_at: tag_struct_offset + tag_struct_header.version as u64,
+                expected_end: tag_struct_offset + tag_struct_header.size as u64,
+            });
+        }
 
         // tgst with size=0 is a null struct: no sub-chunks follow.
         let sub_chunks = if tag_struct_header.size != 0 {
@@ -154,17 +162,19 @@ impl TagStructData {
                         break;
                     }
 
-                    let trailer = read_tag_chunk_header(reader)?;
+                    let trailer = read_chunk_header(reader)?;
 
                     if trailer.signature != u32::from_be_bytes(*b"tgst") || trailer.size != 0 {
                         non_empty_trailing_chunks = true;
                         break;
                     }
 
-                    assert_eq!(
-                        trailer.version, 0,
-                        "trailing empty tgst version ({}) != 0", trailer.version,
-                    );
+                    if trailer.version != 0 {
+                        return Err(TagReadError::BadChunkVersion {
+                            chunk: "trailing empty tgst",
+                            version: trailer.version,
+                        });
+                    }
                     sub_chunks.push(TagSubChunkEntry {
                         field_index: None,
                         content: TagSubChunkContent::EmptyPlaceholder,
@@ -172,12 +182,12 @@ impl TagStructData {
                 }
 
                 if non_empty_trailing_chunks {
-                    let tag_struct_name = layout.get_string(definition.name_offset).unwrap();
-
-                    panic!(
-                        "failed to read 'tgst' \"{tag_struct_name}\": started at 0x{tag_struct_offset:X}, \
-                         ended at 0x{end_offset:X}, expected 0x{expected_offset:X}"
-                    );
+                    return Err(TagReadError::ChunkSizeMismatch {
+                        chunk: "tgst",
+                        started_at: tag_struct_offset,
+                        ended_at: end_offset,
+                        expected_end: expected_offset,
+                    });
                 }
             }
 
@@ -435,7 +445,7 @@ fn read_sub_chunks<R: Seek + Read>(
     layout: &TagLayout,
     definition: &TagStructLayout,
     reader: &mut std::io::BufReader<R>,
-) -> Result<Vec<TagSubChunkEntry>, Box<dyn Error>> {
+) -> Result<Vec<TagSubChunkEntry>, TagReadError> {
     let mut sub_chunks = Vec::new();
     let mut field_index = definition.first_field_index as usize;
 
@@ -455,20 +465,23 @@ fn read_sub_chunks<R: Seek + Read>(
                 if expected_children > 0 {
                     loop {
                         let header_offset = reader.stream_position()?;
-                        let header = read_tag_chunk_header(reader)?;
+                        let header = read_chunk_header(reader)?;
 
-                        assert!(
-                            header.signature == u32::from_be_bytes(*b"tgst"),
-                            "Invalid tag struct header at 0x{:X}",
-                            header_offset,
-                        );
+                        if header.signature != u32::from_be_bytes(*b"tgst") {
+                            return Err(TagReadError::BadChunkSignature {
+                                offset: header_offset,
+                                expected: *b"tgst",
+                                got: header.signature.to_be_bytes(),
+                            });
+                        }
 
                         if header.size == 0 {
-                            assert_eq!(
-                                header.version, 0,
-                                "empty placeholder tgst version ({}) != 0 at 0x{:X}",
-                                header.version, header_offset,
-                            );
+                            if header.version != 0 {
+                                return Err(TagReadError::BadChunkVersion {
+                                    chunk: "empty placeholder tgst",
+                                    version: header.version,
+                                });
+                            }
                             sub_chunks.push(TagSubChunkEntry {
                                 field_index: None,
                                 content: TagSubChunkContent::EmptyPlaceholder,
@@ -522,7 +535,9 @@ fn read_sub_chunks<R: Seek + Read>(
 
             TagFieldType::TagReference => {
                 let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgrf"))?;
-                assert_eq!(version, 0, "tgrf version ({}) != 0", version);
+                if version != 0 {
+                    return Err(TagReadError::BadChunkVersion { chunk: "tgrf", version });
+                }
                 sub_chunks.push(TagSubChunkEntry {
                     field_index: Some(field_index as u32),
                     content: TagSubChunkContent::TagReference(content),
@@ -531,7 +546,12 @@ fn read_sub_chunks<R: Seek + Read>(
 
             TagFieldType::StringId => {
                 let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgsi"))?;
-                assert_eq!(version, 0, "tgsi (string_id) version ({}) != 0", version);
+                if version != 0 {
+                    return Err(TagReadError::BadChunkVersion {
+                        chunk: "tgsi (string_id)",
+                        version,
+                    });
+                }
                 sub_chunks.push(TagSubChunkEntry {
                     field_index: Some(field_index as u32),
                     content: TagSubChunkContent::StringId(content),
@@ -540,7 +560,12 @@ fn read_sub_chunks<R: Seek + Read>(
 
             TagFieldType::OldStringId => {
                 let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgsi"))?;
-                assert_eq!(version, 0, "tgsi (old_string_id) version ({}) != 0", version);
+                if version != 0 {
+                    return Err(TagReadError::BadChunkVersion {
+                        chunk: "tgsi (old_string_id)",
+                        version,
+                    });
+                }
                 sub_chunks.push(TagSubChunkEntry {
                     field_index: Some(field_index as u32),
                     content: TagSubChunkContent::OldStringId(content),
@@ -549,7 +574,9 @@ fn read_sub_chunks<R: Seek + Read>(
 
             TagFieldType::Data => {
                 let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgda"))?;
-                assert_eq!(version, 0, "tgda version ({}) != 0", version);
+                if version != 0 {
+                    return Err(TagReadError::BadChunkVersion { chunk: "tgda", version });
+                }
                 sub_chunks.push(TagSubChunkEntry {
                     field_index: Some(field_index as u32),
                     content: TagSubChunkContent::Data(content),
@@ -560,25 +587,29 @@ fn read_sub_chunks<R: Seek + Read>(
                 let resource_layout = &layout.resource_layouts[field.definition as usize];
                 let resource_struct_definition = &layout.struct_layouts[resource_layout.struct_index as usize];
 
-                let outer_header = read_tag_chunk_header(reader)?;
+                let outer_header = read_chunk_header(reader)?;
                 let outer_content_offset = reader.stream_position()?;
 
                 let resource = match &outer_header.signature.to_be_bytes() {
                     b"tg\0c" => {
-                        assert_eq!(outer_header.version, 0, "tg\\0c version ({}) != 0", outer_header.version);
+                        if outer_header.version != 0 {
+                            return Err(TagReadError::BadChunkVersion {
+                                chunk: "tg\\0c",
+                                version: outer_header.version,
+                            });
+                        }
                         TagResourceChunk::Null
                     }
 
                     b"tgrc" => {
-                        assert_eq!(outer_header.version, 0, "tgrc version ({}) != 0", outer_header.version);
+                        if outer_header.version != 0 {
+                            return Err(TagReadError::BadChunkVersion {
+                                chunk: "tgrc",
+                                version: outer_header.version,
+                            });
+                        }
 
-                        let tgdt_header = read_tag_chunk_header(reader)?;
-                        assert!(
-                            tgdt_header.signature == u32::from_be_bytes(*b"tgdt"),
-                            "expected inner 'tgdt' chunk in pageable resource, got 0x{:08X}",
-                            tgdt_header.signature,
-                        );
-                        assert_eq!(tgdt_header.version, 0, "inner tgdt version ({}) != 0", tgdt_header.version);
+                        let tgdt_header = read_validated_chunk_header(reader, *b"tgdt", "tgdt")?;
 
                         let mut exploded = vec![0u8; tgdt_header.size as usize];
                         reader.read_exact(&mut exploded)?;
@@ -593,29 +624,38 @@ fn read_sub_chunks<R: Seek + Read>(
                     }
 
                     b"tgxc" => {
-                        // HYPOTHESIS: tgxc.version is always 0. Mirrors
-                        // the other resource variants; trips if an MCC
+                        // tgxc.version is always 0 — mirrors the
+                        // other resource variants; trips if an MCC
                         // later game has a non-zero xsync version.
-                        assert_eq!(outer_header.version, 0, "tgxc version ({}) != 0", outer_header.version);
+                        if outer_header.version != 0 {
+                            return Err(TagReadError::BadChunkVersion {
+                                chunk: "tgxc",
+                                version: outer_header.version,
+                            });
+                        }
                         let mut payload = vec![0u8; outer_header.size as usize];
                         reader.read_exact(&mut payload)?;
                         TagResourceChunk::Xsync(payload)
                     }
 
-                    signature => panic!(
-                        "unhandled pageable resource signature: \"{}\"",
-                        str::from_utf8(signature).unwrap_or("<non-utf8>"),
-                    ),
+                    signature => {
+                        return Err(TagReadError::UnknownSubChunkSignature {
+                            context: "pageable resource",
+                            signature: *signature,
+                        });
+                    }
                 };
 
                 let end_offset = reader.stream_position()?;
                 let expected_offset = outer_content_offset + outer_header.size as u64;
 
                 if end_offset != expected_offset {
-                    panic!(
-                        "failed to read pageable resource: started at 0x{outer_content_offset:X}, \
-                         ended at 0x{end_offset:X}, expected 0x{expected_offset:X}"
-                    );
+                    return Err(TagReadError::ChunkSizeMismatch {
+                        chunk: "pageable resource",
+                        started_at: outer_content_offset,
+                        ended_at: end_offset,
+                        expected_end: expected_offset,
+                    });
                 }
 
                 sub_chunks.push(TagSubChunkEntry {
@@ -626,7 +666,12 @@ fn read_sub_chunks<R: Seek + Read>(
 
             TagFieldType::ApiInterop => {
                 let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"ti]["))?;
-                assert_eq!(version, 0, "ti][ (api_interop) version ({}) != 0", version);
+                if version != 0 {
+                    return Err(TagReadError::BadChunkVersion {
+                        chunk: "ti][ (api_interop)",
+                        version,
+                    });
+                }
                 sub_chunks.push(TagSubChunkEntry {
                     field_index: Some(field_index as u32),
                     content: TagSubChunkContent::ApiInterop(content),
@@ -638,8 +683,11 @@ fn read_sub_chunks<R: Seek + Read>(
                 let field_type = &layout.field_types[field.type_index as usize];
 
                 if field_type.needs_sub_chunk != 0 {
-                    let name = layout.get_string(field_type.name_offset).unwrap();
-                    panic!("unhandled sub-chunk-producing field type: \"{name}\"");
+                    let name = layout
+                        .get_string(field_type.name_offset)
+                        .unwrap_or("<bad name>")
+                        .to_owned();
+                    return Err(TagReadError::UnsupportedFieldType { type_name: name });
                 }
             }
         }
@@ -756,15 +804,9 @@ impl TagBlockData {
         layout: &TagLayout,
         definition: &TagBlockLayout,
         reader: &mut std::io::BufReader<R>,
-    ) -> Result<Self, Box<dyn Error>> {
-        let tag_block_header = read_tag_chunk_header(reader)?;
-        assert!(tag_block_header.signature == u32::from_be_bytes(*b"tgbl"));
+    ) -> Result<Self, TagReadError> {
+        let tag_block_header = read_validated_chunk_header(reader, *b"tgbl", "tgbl")?;
         let tag_block_offset = reader.stream_position()?;
-        assert_eq!(
-            tag_block_header.version, 0,
-            "tgbl version ({}) != 0 at 0x{:X}",
-            tag_block_header.version, tag_block_offset - 12,
-        );
 
         let block_element_count = read_u32_le(reader)?;
         let block_flags = read_u32_le(reader)?;
@@ -792,13 +834,7 @@ impl TagBlockData {
             }
         }
 
-        let end_offset = reader.stream_position()?;
-        let expected_offset = tag_block_offset + tag_block_header.size as u64;
-        if end_offset != expected_offset {
-            panic!(
-                "failed to read 'tgbl': ended at offset 0x{end_offset:X}, expected 0x{expected_offset:X}"
-            );
-        }
+        check_chunk_end(reader, "tgbl", tag_block_offset, tag_block_header.size)?;
 
         Ok(Self {
             block_index: definition.index,
@@ -850,13 +886,13 @@ impl TagBlockData {
 
     /// Insert a fresh zero-initialized element at `index` (shifting
     /// later elements right).
-    pub(crate) fn insert_at(&mut self, layout: &TagLayout, index: usize) -> &mut TagStructData {
+    pub(crate) fn insert_element(&mut self, layout: &TagLayout, index: usize) -> &mut TagStructData {
         let struct_index = layout.block_layouts[self.block_index as usize].struct_index as usize;
         let element_size = layout.struct_layouts[struct_index].size;
         let insert_offset = index * element_size;
         self.raw_data.splice(
             insert_offset..insert_offset,
-            std::iter::repeat(0).take(element_size),
+            std::iter::repeat_n(0, element_size),
         );
         self.elements.insert(index, TagStructData::new_default(layout, struct_index));
         &mut self.elements[index]
@@ -864,7 +900,7 @@ impl TagBlockData {
 
     /// Deep-copy the element at `index` and insert the copy directly
     /// after it. Returns a mutable reference to the new element.
-    pub(crate) fn duplicate_at(&mut self, layout: &TagLayout, index: usize) -> &mut TagStructData {
+    pub(crate) fn duplicate_element(&mut self, layout: &TagLayout, index: usize) -> &mut TagStructData {
         let element_size = self.element_size(layout);
         let src_offset = index * element_size;
         let copy_bytes: Vec<u8> = self.raw_data[src_offset..src_offset + element_size].to_vec();
@@ -876,7 +912,7 @@ impl TagBlockData {
     }
 
     /// Remove the element at `index`. Panics if out of range.
-    pub(crate) fn delete_at(&mut self, layout: &TagLayout, index: usize) {
+    pub(crate) fn remove_element(&mut self, layout: &TagLayout, index: usize) {
         let element_size = self.element_size(layout);
         let start = index * element_size;
         self.raw_data.drain(start..start + element_size);
@@ -884,7 +920,7 @@ impl TagBlockData {
     }
 
     /// Swap elements at `i` and `j`. Panics if either is out of range.
-    pub(crate) fn swap_at(&mut self, layout: &TagLayout, i: usize, j: usize) {
+    pub(crate) fn swap_elements(&mut self, layout: &TagLayout, i: usize, j: usize) {
         if i == j {
             return;
         }
@@ -904,7 +940,7 @@ impl TagBlockData {
     /// Move the element at `from` to `to` (Vec::remove + Vec::insert
     /// semantics — `to` is the target index in the final ordering).
     /// Panics if either is out of range.
-    pub(crate) fn move_at(&mut self, layout: &TagLayout, from: usize, to: usize) {
+    pub(crate) fn move_element(&mut self, layout: &TagLayout, from: usize, to: usize) {
         if from == to {
             return;
         }
@@ -944,9 +980,7 @@ impl TagBlockData {
             (&self.raw_data[start..start + element_size], element)
         })
     }
-}
 
-impl TagBlockData {
     /// Block with exactly one zero-filled default element. Used as
     /// the root block of a freshly created tag file so it has a
     /// single, loadable element out of the box. Nested sub-chunks

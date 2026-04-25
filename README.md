@@ -19,6 +19,8 @@ Each crate has its own README with API shape / command reference.
 
 - **Layout versions 1 – 4** all read/write and exercised in the above sweep.
 
+- **Read path is panic-free on malformed input.** Every wire-format failure surfaces as a typed [`TagReadError`](blam-tags/src/error.rs) — `BadChunkSignature`, `BadChunkVersion`, `ChunkSizeMismatch`, `CountMismatch`, `InvalidUtf8`, etc. Corruption-suite tests live at [`blam-tags/tests/corruption.rs`](blam-tags/tests/corruption.rs).
+
 ## Build
 
 ```sh
@@ -29,10 +31,12 @@ Builds the library and the CLI binary (`blam-tag-shell`).
 
 ## Use the CLI
 
+The shell needs a `--game <GAME>` flag (alias `-g`) on every invocation — it scopes schema lookups and group-name resolution to `definitions/<GAME>/`. `<GAME>` is a directory name under `definitions/` (currently `halo3_mcc` or `haloreach_mcc`).
+
 ```sh
-cargo run --release -p blam-tag-shell -- header path/to/masterchief.biped
-cargo run --release -p blam-tag-shell -- get    path/to/masterchief.biped "jump velocity"
-cargo run --release -p blam-tag-shell -- set    path/to/masterchief.biped "jump velocity" 3.14
+cargo run --release -p blam-tag-shell -- --game halo3_mcc header path/to/masterchief.biped
+cargo run --release -p blam-tag-shell -- --game halo3_mcc get    path/to/masterchief.biped "jump velocity"
+cargo run --release -p blam-tag-shell -- --game halo3_mcc set    path/to/masterchief.biped "jump velocity" 3.14
 ```
 
 Full command reference in [`blam-tag-shell/README.md`](./blam-tag-shell/README.md).
@@ -44,9 +48,10 @@ use blam_tags::TagFile;
 
 let mut tag = TagFile::read("path/to/masterchief.biped")?;
 
-// Read a field by slash-separated path.
+// Read a field by slash-separated path. `value()` returns the
+// per-variant `TagFieldData` (or `None` for container/padding fields).
 let jump = tag.root().field_path("jump velocity").unwrap();
-println!("{}: {} = {}", "jump velocity", jump.type_name(), jump.value().unwrap());
+println!("{} ({}): {:?}", jump.name(), jump.type_name(), jump.value().unwrap());
 
 // Toggle a flag and write the edit back to a new file.
 tag.root_mut()
@@ -64,8 +69,9 @@ Full API tour with more examples in [`blam-tags/README.md`](./blam-tags/README.m
 ```
 blam-tags/          — workspace root
 ├── Cargo.toml      — virtual manifest
-├── blam-tags/      — library crate (modules: io, math, fields, layout,
-│   └── src/          data, path, stream, file)
+├── blam-tags/      — library crate (modules: io, math, error, fields,
+│   ├── src/          layout, schema, data, path, stream, file, api,
+│   └── tests/        definition; integration tests in tests/)
 └── blam-tag-shell/ — CLI crate
     └── src/        — Clap entry point + per-command implementations
 ```

@@ -92,11 +92,10 @@ pub fn run(
     // Reference disk-existence is cheaper as a single post-pass: we
     // can dedupe candidates (many refs point at the same target) and
     // share a small `read_dir` cache across them.
-    if kinds.contains(&CheckKind::Reference) {
-        if let Some(root) = &tags_root {
+    if kinds.contains(&CheckKind::Reference)
+        && let Some(root) = &tags_root {
             check_references_on_disk(&loaded.tag, root, &mut findings);
         }
-    }
 
     emit(&findings, json_output)?;
 
@@ -228,11 +227,10 @@ fn check_references_on_disk(
     }
     impl FieldVisitor for RefCollector {
         fn visit_leaf(&mut self, path: &str, _depth: usize, field: TagField<'_>) {
-            if let Some(TagFieldData::TagReference(r)) = field.value() {
-                if let Some((_group, p)) = r.group_tag_and_name {
+            if let Some(TagFieldData::TagReference(r)) = field.value()
+                && let Some((_group, p)) = r.group_tag_and_name {
                     self.refs.push((path.to_string(), p));
                 }
-            }
         }
     }
     let mut collector = RefCollector { refs: Vec::new() };

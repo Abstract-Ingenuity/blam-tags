@@ -1,3 +1,11 @@
+//! Subcommand implementations.
+//!
+//! One module per CLI verb. Each exposes a `pub fn run(...)` invoked
+//! from `main::dispatch`. Tag-bound commands take `&mut CliContext`
+//! (the tag is loaded into `ctx.loaded` before dispatch); read-only
+//! commands that work on raw paths (`list`, `layout_diff`) take their
+//! arguments directly.
+
 pub mod block;
 pub mod check;
 pub mod data_diff;

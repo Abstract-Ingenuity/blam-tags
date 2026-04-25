@@ -15,25 +15,26 @@
 //! via `to_le_bytes`, which — since LE of a BE-packed u32 just reverses
 //! the memory order — re-emits the ASCII in source order.
 
-use std::error::Error;
-use std::io::{Read, Write};
+use std::io::{self, BufReader, Read, Seek, Write};
+
+use crate::error::TagReadError;
 
 /// Read a 2-byte big-endian `u16`.
-pub fn read_u16_be<R: Read>(reader: &mut std::io::BufReader<R>) -> Result<u16, Box<dyn Error>> {
+pub fn read_u16_be<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u16> {
     let mut buffer = [0u8; size_of::<u16>()];
     reader.read_exact(&mut buffer)?;
     Ok(u16::from_be_bytes(buffer))
 }
 
 /// Read a 2-byte little-endian `u16`.
-pub fn read_u16_le<R: Read>(reader: &mut std::io::BufReader<R>) -> Result<u16, Box<dyn Error>> {
+pub fn read_u16_le<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u16> {
     let mut buffer = [0u8; size_of::<u16>()];
     reader.read_exact(&mut buffer)?;
     Ok(u16::from_le_bytes(buffer))
 }
 
 /// Read a 4-byte big-endian `u32`.
-pub fn read_u32_be<R: Read>(reader: &mut std::io::BufReader<R>) -> Result<u32, Box<dyn Error>> {
+pub fn read_u32_be<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u32> {
     let mut buffer = [0u8; size_of::<u32>()];
     reader.read_exact(&mut buffer)?;
     Ok(u32::from_be_bytes(buffer))
@@ -41,21 +42,21 @@ pub fn read_u32_be<R: Read>(reader: &mut std::io::BufReader<R>) -> Result<u32, B
 
 /// Read a 4-byte little-endian `u32`. The workhorse — most tag-file
 /// fields use this byte order.
-pub fn read_u32_le<R: Read>(reader: &mut std::io::BufReader<R>) -> Result<u32, Box<dyn Error>> {
+pub fn read_u32_le<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u32> {
     let mut buffer = [0u8; size_of::<u32>()];
     reader.read_exact(&mut buffer)?;
     Ok(u32::from_le_bytes(buffer))
 }
 
 /// Read an 8-byte big-endian `u64`.
-pub fn read_u64_be<R: Read>(reader: &mut std::io::BufReader<R>) -> Result<u64, Box<dyn Error>> {
+pub fn read_u64_be<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u64> {
     let mut buffer = [0u8; size_of::<u64>()];
     reader.read_exact(&mut buffer)?;
     Ok(u64::from_be_bytes(buffer))
 }
 
 /// Read an 8-byte little-endian `u64`.
-pub fn read_u64_le<R: Read>(reader: &mut std::io::BufReader<R>) -> Result<u64, Box<dyn Error>> {
+pub fn read_u64_le<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u64> {
     let mut buffer = [0u8; size_of::<u64>()];
     reader.read_exact(&mut buffer)?;
     Ok(u64::from_le_bytes(buffer))
@@ -66,7 +67,7 @@ pub fn read_u64_le<R: Read>(reader: &mut std::io::BufReader<R>) -> Result<u64, B
 /// order isn't meaningful.
 pub fn read_u8_array<R: Read, const N: usize>(
     reader: &mut std::io::BufReader<R>,
-) -> Result<[u8; N], Box<dyn Error>> {
+) -> io::Result<[u8; N]> {
     let mut buffer = [0u8; N];
     reader.read_exact(&mut buffer)?;
     Ok(buffer)
@@ -94,7 +95,7 @@ pub struct TagChunkHeader {
 /// Read a 12-byte chunk header. Pair with `write_tag_chunk_header`.
 pub fn read_tag_chunk_header<R: Read>(
     reader: &mut std::io::BufReader<R>,
-) -> Result<TagChunkHeader, Box<dyn Error>> {
+) -> io::Result<TagChunkHeader> {
     Ok(TagChunkHeader {
         signature: read_u32_le(reader)?,
         version: read_u32_le(reader)?,
@@ -133,22 +134,116 @@ pub fn write_tag_chunk_content<W: Write>(
 /// `Vec<u8>`. Returns the chunk's `version` (preserved for byte-exact roundtrip)
 /// and its `content`. The signature is implicit in the caller's
 /// TagSubChunkContent variant, and the size is `content.len()`.
-pub fn read_tag_chunk_content<R: Read>(
+pub(crate) fn read_tag_chunk_content<R: Read + Seek>(
     reader: &mut std::io::BufReader<R>,
     expected_signature: u32,
-) -> Result<(u32, Vec<u8>), Box<dyn Error>> {
+) -> Result<(u32, Vec<u8>), TagReadError> {
+    let offset = reader.stream_position()?;
     let header = read_tag_chunk_header(reader)?;
 
     if header.signature != expected_signature {
-        return Err(format!(
-            "expected chunk signature 0x{expected_signature:08X}, got 0x{:08X}",
-            header.signature
-        )
-        .into());
+        return Err(TagReadError::BadChunkSignature {
+            offset,
+            expected: expected_signature.to_be_bytes(),
+            got: header.signature.to_be_bytes(),
+        });
     }
 
     let mut content = vec![0u8; header.size as usize];
     reader.read_exact(&mut content)?;
 
     Ok((header.version, content))
+}
+
+//================================================================================
+// Typed-error chunk-header readers (Phase-1 helpers for the 7d
+// migration). These return `Result<_, TagReadError>` so the read-side
+// modules can propagate `?` cleanly into their own typed-error
+// returns. They sit alongside the boxed-error helpers above; once
+// every module is migrated to `TagReadError`, the boxed variants can
+// retire.
+//================================================================================
+
+/// Read a 12-byte chunk header without any signature/version validation.
+/// Lower-level than [`read_validated_chunk_header`]; used by callers
+/// that need to peek a chunk before deciding how to dispatch.
+pub(crate) fn read_chunk_header<R: Read>(
+    reader: &mut BufReader<R>,
+) -> Result<TagChunkHeader, TagReadError> {
+    let mut buf = [0u8; 12];
+    reader.read_exact(&mut buf)?;
+    Ok(TagChunkHeader {
+        signature: u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]),
+        version: u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]),
+        size: u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]),
+    })
+}
+
+/// Read a 12-byte chunk header, validate that its signature matches
+/// `expected_sig` and that its version is `0`. Returns the parsed
+/// header on success.
+///
+/// Most chunks in the format use version 0; the few that don't
+/// (`tgly`, `bdat`) have their own version-checking code in the
+/// caller and should use [`read_chunk_header`] + their own version
+/// check instead.
+pub(crate) fn read_validated_chunk_header<R: Read + Seek>(
+    reader: &mut BufReader<R>,
+    expected_sig: [u8; 4],
+    chunk: &'static str,
+) -> Result<TagChunkHeader, TagReadError> {
+    let offset = reader.stream_position()?;
+    let header = read_chunk_header(reader)?;
+    if header.signature != u32::from_be_bytes(expected_sig) {
+        return Err(TagReadError::BadChunkSignature {
+            offset,
+            expected: expected_sig,
+            got: header.signature.to_be_bytes(),
+        });
+    }
+    if header.version != 0 {
+        return Err(TagReadError::BadChunkVersion { chunk, version: header.version });
+    }
+    Ok(header)
+}
+
+/// Validate that a header's count field matches the count derived
+/// from `payload_size / entry_size`. Returns
+/// [`TagReadError::CountMismatch`] when they disagree.
+pub(crate) fn check_count_matches_size(
+    chunk: &'static str,
+    header_count: u32,
+    payload_size: u32,
+    entry_size: u32,
+) -> Result<(), TagReadError> {
+    let derived = payload_size / entry_size;
+    if header_count != derived {
+        return Err(TagReadError::CountMismatch {
+            chunk,
+            header_count,
+            derived_count: derived,
+        });
+    }
+    Ok(())
+}
+
+/// Validate that a chunk read finished at exactly the offset its
+/// header's size field implied.
+pub(crate) fn check_chunk_end<R: Seek>(
+    reader: &mut R,
+    chunk: &'static str,
+    started_at: u64,
+    expected_size: u32,
+) -> Result<(), TagReadError> {
+    let ended_at = reader.stream_position()?;
+    let expected_end = started_at + expected_size as u64;
+    if ended_at != expected_end {
+        return Err(TagReadError::ChunkSizeMismatch {
+            chunk,
+            started_at,
+            ended_at,
+            expected_end,
+        });
+    }
+    Ok(())
 }

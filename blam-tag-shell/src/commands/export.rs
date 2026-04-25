@@ -17,10 +17,11 @@ use anyhow::{Context, Result};
 use blam_tags::{TagField, TagFieldData};
 
 use crate::context::CliContext;
+use crate::format::write_tag_reference;
 use crate::walk::{walk, FieldVisitor};
 
 pub fn run(ctx: &mut CliContext, subtree: Option<&str>, output: Option<&str>) -> Result<()> {
-    let loaded = ctx.loaded("export")?;
+    let loaded = ctx.loaded.as_ref().context("`export` needs a loaded tag")?;
     let tag_path = loaded.path.to_string_lossy().into_owned();
     let root = loaded.tag.root();
 
@@ -33,6 +34,7 @@ pub fn run(ctx: &mut CliContext, subtree: Option<&str>, output: Option<&str>) ->
 
     // Collect lines first so we can route to a file or stdout.
     let mut visitor = ExportVisitor {
+        ctx,
         prefix: subtree.map(String::from).unwrap_or_default(),
         tag_path: &tag_path,
         lines: Vec::new(),
@@ -68,6 +70,7 @@ pub fn run(ctx: &mut CliContext, subtree: Option<&str>, output: Option<&str>) ->
 }
 
 struct ExportVisitor<'a> {
+    ctx: &'a CliContext,
     prefix: String,
     tag_path: &'a str,
     lines: Vec<String>,
@@ -93,7 +96,7 @@ impl<'a> FieldVisitor for ExportVisitor<'a> {
     fn visit_leaf(&mut self, path: &str, _depth: usize, field: TagField<'_>) {
         let Some(value) = field.value() else { return };
 
-        match export_value(&value) {
+        match export_value(self.ctx, &value) {
             Some(v) => {
                 let abs = self.absolute(path);
                 self.lines.push(format!(
@@ -117,44 +120,58 @@ impl<'a> FieldVisitor for ExportVisitor<'a> {
     }
 }
 
-/// Render a `TagFieldData` as a string `parse_and_set` will accept,
-/// or `None` if the type isn't CLI-settable.
-fn export_value(v: &TagFieldData) -> Option<String> {
-    use TagFieldData::*;
+/// Render a `TagFieldData` as a string the shell's `set` command will
+/// accept, or `None` if the type isn't CLI-settable. `ctx` provides
+/// the [`crate::tag_index::TagIndex`] used to resolve tag-reference
+/// group tags to friendly group-name suffixes.
+fn export_value(ctx: &CliContext, v: &TagFieldData) -> Option<String> {
     match v {
-        CharInteger(x) => Some(x.to_string()),
-        ShortInteger(x) => Some(x.to_string()),
-        LongInteger(x) => Some(x.to_string()),
-        Int64Integer(x) => Some(x.to_string()),
-        Tag(x) => Some(blam_tags::format_group_tag(*x)),
+        TagFieldData::CharInteger(x) => Some(x.to_string()),
+        TagFieldData::ShortInteger(x) => Some(x.to_string()),
+        TagFieldData::LongInteger(x) => Some(x.to_string()),
+        TagFieldData::Int64Integer(x) => Some(x.to_string()),
+        TagFieldData::Tag(x) => Some(blam_tags::format_group_tag(*x)),
 
-        Angle(x) | Real(x) | RealSlider(x) | RealFraction(x) => Some(x.to_string()),
+        TagFieldData::Angle(x)
+        | TagFieldData::Real(x)
+        | TagFieldData::RealSlider(x)
+        | TagFieldData::RealFraction(x) => Some(x.to_string()),
 
-        CharEnum { value, .. } => Some(value.to_string()),
-        ShortEnum { value, .. } => Some(value.to_string()),
-        LongEnum { value, .. } => Some(value.to_string()),
+        TagFieldData::CharEnum { value, .. } => Some(value.to_string()),
+        TagFieldData::ShortEnum { value, .. } => Some(value.to_string()),
+        TagFieldData::LongEnum { value, .. } => Some(value.to_string()),
 
-        ByteFlags { value, .. } => Some(format!("0x{:02X}", value)),
-        WordFlags { value, .. } => Some(format!("0x{:04X}", value)),
-        LongFlags { value, .. } => Some(format!("0x{:08X}", *value as u32)),
+        TagFieldData::ByteFlags { value, .. } => Some(format!("0x{:02X}", value)),
+        TagFieldData::WordFlags { value, .. } => Some(format!("0x{:04X}", value)),
+        TagFieldData::LongFlags { value, .. } => Some(format!("0x{:08X}", *value as u32)),
 
-        ByteBlockFlags(x) => Some(format!("0x{:02X}", x)),
-        WordBlockFlags(x) => Some(format!("0x{:04X}", x)),
-        LongBlockFlags(x) => Some(format!("0x{:08X}", *x as u32)),
+        TagFieldData::ByteBlockFlags(x) => Some(format!("0x{:02X}", x)),
+        TagFieldData::WordBlockFlags(x) => Some(format!("0x{:04X}", x)),
+        TagFieldData::LongBlockFlags(x) => Some(format!("0x{:08X}", *x as u32)),
 
-        CharBlockIndex(x) | CustomCharBlockIndex(x) => Some(block_index(*x as i64)),
-        ShortBlockIndex(x) | CustomShortBlockIndex(x) => Some(block_index(*x as i64)),
-        LongBlockIndex(x) | CustomLongBlockIndex(x) => Some(block_index(*x as i64)),
+        TagFieldData::CharBlockIndex(x) | TagFieldData::CustomCharBlockIndex(x) => {
+            Some(block_index(*x as i64))
+        }
+        TagFieldData::ShortBlockIndex(x) | TagFieldData::CustomShortBlockIndex(x) => {
+            Some(block_index(*x as i64))
+        }
+        TagFieldData::LongBlockIndex(x) | TagFieldData::CustomLongBlockIndex(x) => {
+            Some(block_index(*x as i64))
+        }
 
-        String(s) | LongString(s) => Some(s.clone()),
-        StringId(s) | OldStringId(s) => Some(s.string.clone()),
+        TagFieldData::String(s) | TagFieldData::LongString(s) => Some(s.clone()),
+        TagFieldData::StringId(s) | TagFieldData::OldStringId(s) => Some(s.string.clone()),
 
-        TagReference(r) => Some(match &r.group_tag_and_name {
+        TagFieldData::TagReference(r) => Some(match &r.group_tag_and_name {
             None => "none".into(),
-            Some((tag, path)) => format!("{}:{}", blam_tags::format_group_tag(*tag), path),
+            Some(_) => {
+                let mut s = String::new();
+                write_tag_reference(ctx, &mut s, r);
+                s
+            }
         }),
 
-        // Anything else isn't round-trippable via `parse_and_set`.
+        // Anything else isn't round-trippable via `set`.
         _ => None,
     }
 }
@@ -164,19 +181,32 @@ fn block_index(v: i64) -> String {
 }
 
 fn non_settable_reason(v: &TagFieldData) -> &'static str {
-    use TagFieldData::*;
     match v {
-        Data(_) => "data blob",
-        Custom(_) => "custom bytes",
-        ApiInterop(_) => "runtime handle (use 'set <path> reset' to scrub)",
-        Point2d(_) | Rectangle2d(_) | RealPoint2d(_) | RealPoint3d(_)
-        | RealVector2d(_) | RealVector3d(_) | RealQuaternion(_)
-        | RealEulerAngles2d(_) | RealEulerAngles3d(_)
-        | RealPlane2d(_) | RealPlane3d(_) => "math composite",
-        RgbColor(_) | ArgbColor(_) | RealRgbColor(_)
-        | RealArgbColor(_) | RealHsvColor(_) | RealAhsvColor(_) => "color",
-        ShortIntegerBounds(_) | AngleBounds(_) | RealBounds(_) | FractionBounds(_) => "bounds",
-        _ => "type not supported by parse_and_set",
+        TagFieldData::Data(_) => "data blob",
+        TagFieldData::Custom(_) => "custom bytes",
+        TagFieldData::ApiInterop(_) => "runtime handle (use 'set <path> reset' to scrub)",
+        TagFieldData::Point2d(_)
+        | TagFieldData::Rectangle2d(_)
+        | TagFieldData::RealPoint2d(_)
+        | TagFieldData::RealPoint3d(_)
+        | TagFieldData::RealVector2d(_)
+        | TagFieldData::RealVector3d(_)
+        | TagFieldData::RealQuaternion(_)
+        | TagFieldData::RealEulerAngles2d(_)
+        | TagFieldData::RealEulerAngles3d(_)
+        | TagFieldData::RealPlane2d(_)
+        | TagFieldData::RealPlane3d(_) => "math composite",
+        TagFieldData::RgbColor(_)
+        | TagFieldData::ArgbColor(_)
+        | TagFieldData::RealRgbColor(_)
+        | TagFieldData::RealArgbColor(_)
+        | TagFieldData::RealHsvColor(_)
+        | TagFieldData::RealAhsvColor(_) => "color",
+        TagFieldData::ShortIntegerBounds(_)
+        | TagFieldData::AngleBounds(_)
+        | TagFieldData::RealBounds(_)
+        | TagFieldData::FractionBounds(_) => "bounds",
+        _ => "type not supported by `set`",
     }
 }
 

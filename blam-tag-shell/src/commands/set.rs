@@ -11,6 +11,8 @@ use anyhow::{Context, Result};
 use blam_tags::TagSetError;
 
 use crate::context::CliContext;
+use crate::format::format_value;
+use crate::parse::{parse_field_value, ParseError};
 
 pub fn run(
     ctx: &mut CliContext,
@@ -21,45 +23,43 @@ pub fn run(
 ) -> Result<()> {
     let resolved = ctx.resolve_path(path);
 
-    // Read the previous value for the "(was …)" context. Captures
-    // via the immutable handle so dry-run stays touch-free.
-    let previous = {
+    // Phase 1: capture the previous value (for the "(was …)" suffix)
+    // and parse the new value. Both go through the immutable handle
+    // so dry-run is touch-free and the borrow checker is happy when
+    // we re-borrow `ctx` mutably below.
+    let (previous, parsed) = {
         let loaded = ctx.loaded("set")?;
         let field = loaded
             .tag
             .root()
             .field_path(&resolved)
             .with_context(|| format!("field '{}' not found", resolved))?;
-        field.value().map(|v| format!("{}", v))
+        let previous = field.value().as_ref().map(|v| format_value(ctx, v, false));
+        let parsed = parse_field_value(ctx, &field, value).map_err(parse_error_to_anyhow)?;
+        (previous, parsed)
     };
+
     let was_phrase = previous
         .map(|p| format!(" (was {p})"))
         .unwrap_or_default();
     let core = format!("set {resolved} = {value}{was_phrase}");
 
     if dry_run {
-        // Parse-only through the immutable handle so the in-memory
-        // tag isn't touched. Validation errors surface the same way
-        // as a real set.
-        let loaded = ctx.loaded("set")?;
-        loaded.tag
-            .root()
-            .field_path(&resolved)
-            .with_context(|| format!("field '{}' not found", resolved))?
-            .parse(value)
-            .map_err(set_error_to_anyhow)?;
         println!("(dry run) would {core}");
         return Ok(());
     }
 
+    // Phase 2: apply via mutable borrow. No `ctx` access here — the
+    // typed `field.set(value)` only needs the layout the field
+    // already holds.
     let loaded = ctx.loaded_mut("set")?;
-
-    loaded.tag
-        .root_mut()
-        .field_path_mut(&resolved)
-        .with_context(|| format!("field '{}' not found", resolved))?
-        .parse_and_set(value)
-        .map_err(set_error_to_anyhow)?;
+    {
+        let mut root = loaded.tag.root_mut();
+        let mut field = root
+            .field_path_mut(&resolved)
+            .with_context(|| format!("field '{}' not found", resolved))?;
+        field.set(parsed).map_err(set_error_to_anyhow)?;
+    }
     loaded.dirty = true;
 
     let commit = loaded.commit(output.map(Path::new))?;
@@ -71,9 +71,12 @@ pub fn run(
     Ok(())
 }
 
+fn parse_error_to_anyhow(e: ParseError) -> anyhow::Error {
+    anyhow::anyhow!("{e}")
+}
+
 fn set_error_to_anyhow(e: TagSetError) -> anyhow::Error {
     match e {
-        TagSetError::ParseError(msg) => anyhow::anyhow!("{msg}"),
         TagSetError::NotAssignable => anyhow::anyhow!("cannot set container field types directly"),
         TagSetError::TypeMismatch { expected, got } => {
             anyhow::anyhow!("type mismatch: expected {expected}, got {got}")

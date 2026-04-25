@@ -1,44 +1,50 @@
 //! Façade API — concept-oriented access on top of the structural
 //! types in [`crate::data`] / [`crate::layout`] / [`crate::path`].
 //!
-//! **Status: design sketch.** Every body is `todo!()`. Not yet wired
-//! into `lib.rs`. The goal here is to pin down the shape (names,
-//! lifetimes, which operations belong where) before writing impls.
+//! Entry points are reached from [`crate::TagFile`]:
+//! [`TagFile::root`][crate::TagFile::root] /
+//! [`root_mut`][crate::TagFile::root_mut] for the main payload,
+//! plus the optional-stream accessors
+//! ([`dependency_list`][crate::TagFile::dependency_list],
+//! [`import_info`][crate::TagFile::import_info],
+//! [`asset_depot_storage`][crate::TagFile::asset_depot_storage]).
 //!
-//! ## CLI before / after
+//! From there callers walk the tree via [`TagStruct`] / [`TagField`]
+//! / [`TagBlock`] / [`TagArray`] (and their `*Mut` counterparts),
+//! reach values via [`TagField::value`], and mutate via
+//! [`TagFieldMut::set`] / [`TagBlockMut`]'s element editors. Every
+//! borrow is split-borrow safe — there's no `RefCell` or other
+//! interior mutability anywhere.
 //!
-//! ```text
-//! // get.rs — read a field value
-//! - let tag = TagFile::read(file)?;
-//! - let layout = &tag.tag_stream.layout;
-//! - let cursor = lookup(layout, &tag.tag_stream.data, path)?;
-//! - let value = cursor.parse(layout)?;
-//! + let tag   = TagFile::read(file)?;
-//! + let field = tag.root().field_path(path)?;
-//! + let value = field.value()?;
+//! ## Examples
 //!
-//! // flag.rs — toggle a flag bit
-//! - let mut cursor = lookup_mut(layout, &mut tag_stream.data, path)?;
-//! - let bit        = find_flag_bit(layout, field, flag_name)?;
-//! - let mut parsed = cursor.parse(layout)?;
-//! - let current    = parsed.flag_bit(bit)?;
-//! - parsed.set_flag_bit(bit, !current);
-//! - cursor.set(layout, parsed);
-//! + let mut flag = tag.root_mut().field_path_mut(path)?.flag_mut(flag_name)?;
-//! + flag.toggle();
+//! ```no_run
+//! use blam_tags::{TagFieldData, TagFile};
 //!
-//! // block.rs — delete element N
-//! - let entry = cursor.struct_data.sub_chunks.iter_mut()
-//! -     .find(|e| e.field_index == Some(cursor.field_index as u32))?;
-//! - let TagSubChunkContent::Block(block) = &mut entry.content else { ... };
-//! - block.delete_at(layout, idx);
-//! + tag.root_mut().field_path_mut(path)?.as_block_mut()?.delete(idx)?;
+//! let mut tag = TagFile::read("masterchief.biped").unwrap();
+//!
+//! // Read a field by `/`-separated path.
+//! let field = tag.root().field_path("jump velocity").unwrap();
+//! if let Some(TagFieldData::Real(v)) = field.value() {
+//!     println!("jump velocity = {v}");
+//! }
+//!
+//! // Toggle a flag bit by name.
+//! tag.root_mut()
+//!     .field_path_mut("unit/flags").unwrap()
+//!     .flag_mut("has_hull").unwrap()
+//!     .toggle();
+//!
+//! // Delete element 3 of a block.
+//! tag.root_mut()
+//!     .field_path_mut("seats").unwrap()
+//!     .as_block_mut().unwrap()
+//!     .delete_element(3).unwrap();
 //! ```
 
 use crate::data::{TagBlockData, TagResourceChunk, TagStructData, TagSubChunkContent};
 use crate::fields::{
-    field_option_names, find_enum_option_index, find_flag_bit, parse_group_tag,
-    StringIdData, TagFieldData, TagFieldType, TagReferenceData,
+    field_option_names, find_flag_bit, TagFieldData, TagFieldType,
 };
 use crate::file::TagFile;
 use crate::layout::TagLayout;
@@ -128,20 +134,12 @@ fn stream_root_mut(stream: &mut crate::stream::TagStream) -> Option<TagStructMut
 /// version, and checksum, read [`crate::file::TagFileHeader`]
 /// directly via `tag.header`.
 ///
-/// `Display` renders the group tag in its ASCII form with trailing
-/// NULs and spaces stripped (e.g. `b"scnr"` → `"scnr"`, `b"mo  "` →
-/// `"mo"`). Matches [`crate::fields::format_group_tag`].
+/// Use [`crate::fields::format_group_tag`] to render `tag` as ASCII.
 #[derive(Debug, Clone, Copy)]
 pub struct TagGroup {
     /// BE-packed 4-byte group tag — same representation as on disk.
     pub tag: u32,
     pub version: u32,
-}
-
-impl std::fmt::Display for TagGroup {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&crate::fields::format_group_tag(self.tag))
-    }
 }
 
 //================================================================================
@@ -162,7 +160,7 @@ pub struct TagStruct<'a> {
 
 impl<'a> TagStruct<'a> {
     /// The schema side of this instance — the struct definition it
-    /// conforms to. Bridges to the [`crate::definition`] façade.
+    /// conforms to. Bridges to the [`crate::definition`] facade.
     pub fn definition(&self) -> crate::TagStructDefinition<'a> {
         crate::TagStructDefinition::new(self.layout, self.struct_data.struct_index as usize)
     }
@@ -259,38 +257,6 @@ impl<'a> TagStruct<'a> {
         })
     }
 
-    /// Closest-match suggestion for an unresolved field name, for
-    /// "did you mean?" UX. Returns `None` when nothing is close
-    /// enough (distance > `typed.len() / 2 + 1`, matching the
-    /// existing CLI heuristic).
-    pub fn suggest_field_name(&self, typed: &str) -> Option<&'a str> {
-        let typed_lower = typed.to_lowercase();
-        let mut best: Option<(usize, &'a str)> = None;
-        for candidate in self.field_names() {
-            let distance = edit_distance(&typed_lower, &candidate.to_lowercase());
-            match best {
-                Some((d, _)) if distance >= d => {}
-                _ => best = Some((distance, candidate)),
-            }
-        }
-        best.filter(|(d, _)| *d <= typed.len() / 2 + 1).map(|(_, s)| s)
-    }
-}
-
-fn edit_distance(a: &str, b: &str) -> usize {
-    let a: Vec<char> = a.chars().collect();
-    let b: Vec<char> = b.chars().collect();
-    let (m, n) = (a.len(), b.len());
-    let mut dp = vec![vec![0usize; n + 1]; m + 1];
-    for i in 0..=m { dp[i][0] = i; }
-    for j in 0..=n { dp[0][j] = j; }
-    for i in 1..=m {
-        for j in 1..=n {
-            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
-            dp[i][j] = (dp[i - 1][j] + 1).min(dp[i][j - 1] + 1).min(dp[i - 1][j - 1] + cost);
-        }
-    }
-    dp[m][n]
 }
 
 /// A resolved field within a [`TagStruct`]. Carries the field's
@@ -309,7 +275,7 @@ pub struct TagField<'a> {
 
 impl<'a> TagField<'a> {
     /// The schema side of this field — its definition in the layout.
-    /// Bridges to the [`crate::definition`] façade.
+    /// Bridges to the [`crate::definition`] facade.
     pub fn definition(&self) -> crate::TagFieldDefinition<'a> {
         crate::TagFieldDefinition::new(self.layout, self.field_index)
     }
@@ -450,15 +416,6 @@ impl<'a> TagField<'a> {
         Some(TagFlag { field: *self, bit })
     }
 
-    /// Parse a CLI-flavored string into a [`TagFieldData`] matching
-    /// this field's schema type — without mutating anything. Same
-    /// parser as [`TagFieldMut::parse_and_set`]; pull it out
-    /// separately when you want validation or preview without
-    /// committing (e.g. `set --dry-run`).
-    pub fn parse(&self, input: &str) -> Result<TagFieldData, TagSetError> {
-        parse_value(self.layout, self.field_index, input)
-    }
-
     /// The sub-chunk content entry (if any) owned by this field —
     /// shared plumbing for [`TagField::as_block`] / `as_array` /
     /// `as_resource` and the string-id / tag-reference / data leaf
@@ -482,7 +439,7 @@ pub struct TagBlock<'a> {
 
 impl<'a> TagBlock<'a> {
     /// The schema side of this block — its block definition.
-    /// Bridges to the [`crate::definition`] façade.
+    /// Bridges to the [`crate::definition`] facade.
     pub fn definition(&self) -> crate::TagBlockDefinition<'a> {
         crate::TagBlockDefinition::new(self.layout, self.block_data.block_index as usize)
     }
@@ -524,7 +481,7 @@ pub struct TagArray<'a> {
 
 impl<'a> TagArray<'a> {
     /// The schema side of this array — its array definition.
-    /// Bridges to the [`crate::definition`] façade.
+    /// Bridges to the [`crate::definition`] facade.
     pub fn definition(&self) -> crate::TagArrayDefinition<'a> {
         crate::TagArrayDefinition::new(self.layout, self.array_layout_index as usize)
     }
@@ -566,7 +523,7 @@ fn element_struct_size(layout: &TagLayout, array_layout_index: u32) -> usize {
 
 /// Read-only view onto a pageable resource field. Exposes shape
 /// discriminant only — payload bytes are intentionally not surfaced
-/// at the façade level (they're opaque engine data).
+/// at the facade level (they're opaque engine data).
 #[derive(Clone, Copy)]
 pub struct TagResource<'a> {
     chunk: &'a TagResourceChunk,
@@ -741,15 +698,6 @@ impl<'a> TagFieldMut<'a> {
         Ok(())
     }
 
-    /// CLI-flavored convenience: parse `input` against this field's
-    /// schema (integer / enum variant name / group-tag / etc.) and
-    /// write it. Use [`TagField::parse`] on the immutable handle if
-    /// you only want to validate without committing.
-    pub fn parse_and_set(&mut self, input: &str) -> Result<(), TagSetError> {
-        let value = self.as_ref().parse(input)?;
-        self.set(value)
-    }
-
     /// Look up a single flag by name and return a mutable handle.
     pub fn flag_mut(&mut self, name: &str) -> Option<TagFlagMut<'_>> {
         let field = &self.layout.fields[self.field_index];
@@ -827,182 +775,6 @@ impl<'a> TagFieldMut<'a> {
     }
 }
 
-/// Parse `input` as a value for `field_index`'s schema type.
-/// Used by [`TagFieldMut::parse_and_set`]; kept private because the
-/// mutation path is the only intended entry point for string-based
-/// editing.
-///
-/// Enum fields accept either a variant name (case-insensitive) or a
-/// raw integer. Flags fields take an integer mask (decimal or `0x`
-/// hex) — use [`TagFieldMut::flag_mut`] to set individual bits by
-/// name. Block-index fields additionally accept `"none"` as `-1`.
-fn parse_value(
-    layout: &TagLayout,
-    field_index: usize,
-    input: &str,
-) -> Result<TagFieldData, TagSetError> {
-    let field = &layout.fields[field_index];
-
-    match field.field_type {
-        TagFieldType::CharInteger => Ok(TagFieldData::CharInteger(input.parse().map_err(|_| TagSetError::ParseError("expected i8".into()))?)),
-        TagFieldType::ShortInteger => Ok(TagFieldData::ShortInteger(input.parse().map_err(|_| TagSetError::ParseError("expected i16".into()))?)),
-        TagFieldType::LongInteger => Ok(TagFieldData::LongInteger(input.parse().map_err(|_| TagSetError::ParseError("expected i32".into()))?)),
-        TagFieldType::Int64Integer => Ok(TagFieldData::Int64Integer(input.parse().map_err(|_| TagSetError::ParseError("expected i64".into()))?)),
-        TagFieldType::Tag => Ok(TagFieldData::Tag(
-            parse_group_tag(input).ok_or_else(|| TagSetError::ParseError("group tag must be 1..=4 ASCII chars".into()))?,
-        )),
-
-        TagFieldType::Angle => Ok(TagFieldData::Angle(input.parse().map_err(|_| TagSetError::ParseError("expected f32".into()))?)),
-        TagFieldType::Real => Ok(TagFieldData::Real(input.parse().map_err(|_| TagSetError::ParseError("expected f32".into()))?)),
-        TagFieldType::RealSlider => Ok(TagFieldData::RealSlider(input.parse().map_err(|_| TagSetError::ParseError("expected f32".into()))?)),
-        TagFieldType::RealFraction => Ok(TagFieldData::RealFraction(input.parse().map_err(|_| TagSetError::ParseError("expected f32".into()))?)),
-
-        TagFieldType::CharEnum => Ok(TagFieldData::CharEnum {
-            value: parse_enum_value(layout, field, input)? as i8,
-            name: None,
-        }),
-        TagFieldType::ShortEnum => Ok(TagFieldData::ShortEnum {
-            value: parse_enum_value(layout, field, input)? as i16,
-            name: None,
-        }),
-        TagFieldType::LongEnum => Ok(TagFieldData::LongEnum {
-            value: parse_enum_value(layout, field, input)?,
-            name: None,
-        }),
-
-        TagFieldType::ByteFlags => Ok(TagFieldData::ByteFlags {
-            value: parse_int_mask(input)? as u8,
-            names: Vec::new(),
-        }),
-        TagFieldType::WordFlags => Ok(TagFieldData::WordFlags {
-            value: parse_int_mask(input)? as u16,
-            names: Vec::new(),
-        }),
-        TagFieldType::LongFlags => Ok(TagFieldData::LongFlags {
-            value: parse_int_mask(input)? as i32,
-            names: Vec::new(),
-        }),
-
-        TagFieldType::ByteBlockFlags => Ok(TagFieldData::ByteBlockFlags(parse_int_mask(input)? as u8)),
-        TagFieldType::WordBlockFlags => Ok(TagFieldData::WordBlockFlags(parse_int_mask(input)? as u16)),
-        TagFieldType::LongBlockFlags => Ok(TagFieldData::LongBlockFlags(parse_int_mask(input)? as i32)),
-
-        TagFieldType::CharBlockIndex => Ok(TagFieldData::CharBlockIndex(parse_block_index(input)? as i8)),
-        TagFieldType::CustomCharBlockIndex => Ok(TagFieldData::CustomCharBlockIndex(parse_block_index(input)? as i8)),
-        TagFieldType::ShortBlockIndex => Ok(TagFieldData::ShortBlockIndex(parse_block_index(input)? as i16)),
-        TagFieldType::CustomShortBlockIndex => Ok(TagFieldData::CustomShortBlockIndex(parse_block_index(input)? as i16)),
-        TagFieldType::LongBlockIndex => Ok(TagFieldData::LongBlockIndex(parse_block_index(input)?)),
-        TagFieldType::CustomLongBlockIndex => Ok(TagFieldData::CustomLongBlockIndex(parse_block_index(input)?)),
-
-        TagFieldType::String => Ok(TagFieldData::String(input.to_string())),
-        TagFieldType::LongString => Ok(TagFieldData::LongString(input.to_string())),
-
-        TagFieldType::StringId => Ok(TagFieldData::StringId(StringIdData { string: input.to_string() })),
-        TagFieldType::OldStringId => Ok(TagFieldData::OldStringId(StringIdData { string: input.to_string() })),
-
-        TagFieldType::TagReference => Ok(TagFieldData::TagReference(parse_tag_reference(input)?)),
-
-        TagFieldType::Data => Err(TagSetError::ParseError("parsing 'data' fields from a string is not supported".into())),
-
-        TagFieldType::Struct
-        | TagFieldType::Block
-        | TagFieldType::Array
-        | TagFieldType::PageableResource => Err(TagSetError::NotAssignable),
-
-        TagFieldType::ApiInterop => Ok(TagFieldData::ApiInterop(parse_api_interop(input)?)),
-
-        TagFieldType::VertexBuffer => {
-            Err(TagSetError::ParseError("parsing vertex_buffer fields is not supported".into()))
-        }
-
-        _ => Err(TagSetError::ParseError(format!(
-            "parsing field type {:?} from a string is not supported",
-            field.field_type,
-        ))),
-    }
-}
-
-fn parse_enum_value(
-    layout: &TagLayout,
-    field: &crate::layout::TagFieldLayout,
-    input: &str,
-) -> Result<i32, TagSetError> {
-    if let Ok(n) = input.parse::<i32>() {
-        return Ok(n);
-    }
-    if let Some(index) = find_enum_option_index(layout, field, input) {
-        return Ok(index as i32);
-    }
-    Err(TagSetError::ParseError(format!("enum option '{}' not found", input)))
-}
-
-fn parse_int_mask(s: &str) -> Result<i64, TagSetError> {
-    if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-        i64::from_str_radix(hex, 16).map_err(|_| TagSetError::ParseError("expected hex integer".into()))
-    } else {
-        s.parse::<i64>().map_err(|_| TagSetError::ParseError("expected integer".into()))
-    }
-}
-
-fn parse_block_index(s: &str) -> Result<i32, TagSetError> {
-    if s.eq_ignore_ascii_case("none") {
-        return Ok(-1);
-    }
-    s.parse().map_err(|_| TagSetError::ParseError("expected integer or 'none'".into()))
-}
-
-/// Parse an api_interop payload.
-///
-/// - `reset` / `none` → BCS's canonical reset pattern
-///   (`{ 0, UINT_MAX, 0 }`). The usual way to scrub runtime handles
-///   out of a tag before committing it.
-/// - `0xDESCRIPTOR,0xADDRESS,0xDEFINITION_ADDRESS` → verbatim triple
-///   (each field a 32-bit integer, decimal or `0x` hex).
-fn parse_api_interop(s: &str) -> Result<crate::fields::ApiInteropData, TagSetError> {
-    let trimmed = s.trim();
-    if trimmed.eq_ignore_ascii_case("reset") || trimmed.eq_ignore_ascii_case("none") {
-        return Ok(crate::fields::ApiInteropData::reset());
-    }
-
-    let parts: Vec<&str> = trimmed.split(',').map(str::trim).collect();
-    if parts.len() != 3 {
-        return Err(TagSetError::ParseError(
-            "api_interop format: 'reset', or 'descriptor,address,definition_address' (each u32, decimal or 0x…)".into(),
-        ));
-    }
-    let one = |p: &str| -> Result<u32, TagSetError> {
-        let (radix, body) = match p.strip_prefix("0x").or_else(|| p.strip_prefix("0X")) {
-            Some(hex) => (16, hex),
-            None => (10, p),
-        };
-        u32::from_str_radix(body, radix)
-            .map_err(|_| TagSetError::ParseError("expected u32 (decimal or 0x hex)".into()))
-    };
-    let descriptor = one(parts[0])?;
-    let address = one(parts[1])?;
-    let definition_address = one(parts[2])?;
-
-    let mut raw = Vec::with_capacity(12);
-    raw.extend_from_slice(&descriptor.to_le_bytes());
-    raw.extend_from_slice(&address.to_le_bytes());
-    raw.extend_from_slice(&definition_address.to_le_bytes());
-    Ok(crate::fields::ApiInteropData { raw })
-}
-
-fn parse_tag_reference(s: &str) -> Result<TagReferenceData, TagSetError> {
-    if s.eq_ignore_ascii_case("none") || s.is_empty() {
-        return Ok(TagReferenceData { group_tag_and_name: None });
-    }
-    let (group_str, path) = s.split_once(':').ok_or_else(|| {
-        TagSetError::ParseError(
-            "tag reference format: GROUP:path (e.g. hlmt:objects/characters/elite), or 'none'".into(),
-        )
-    })?;
-    let group_tag = parse_group_tag(group_str)
-        .ok_or_else(|| TagSetError::ParseError("group tag must be 1..=4 ASCII chars".into()))?;
-    Ok(TagReferenceData { group_tag_and_name: Some((group_tag, path.to_string())) })
-}
-
 /// Mutable counterpart of [`TagBlock`]. All structural edits
 /// (`add`/`insert`/`delete`/`clear`) funnel through here so callers
 /// never touch `TagBlockData` directly.
@@ -1013,7 +785,7 @@ pub struct TagBlockMut<'a> {
 
 impl<'a> TagBlockMut<'a> {
     /// The schema side of this block — its block definition.
-    /// Bridges to the [`crate::definition`] façade.
+    /// Bridges to the [`crate::definition`] facade.
     pub fn definition(&self) -> crate::TagBlockDefinition<'_> {
         crate::TagBlockDefinition::new(self.layout, self.block_data.block_index as usize)
     }
@@ -1051,44 +823,44 @@ impl<'a> TagBlockMut<'a> {
     }
 
     /// Append a default-initialized element. Returns its new index.
-    pub fn add(&mut self) -> usize {
+    pub fn add_element(&mut self) -> usize {
         self.block_data.add_element(self.layout);
         self.block_data.elements.len() - 1
     }
 
     /// Insert a default element at `index`. Error on out-of-range
     /// (valid range is `0..=len`).
-    pub fn insert(&mut self, index: usize) -> Result<(), TagIndexError> {
+    pub fn insert_element(&mut self, index: usize) -> Result<(), TagIndexError> {
         let len = self.block_data.elements.len();
         if index > len {
             return Err(TagIndexError::OutOfRange { index, len });
         }
-        self.block_data.insert_at(self.layout, index);
+        self.block_data.insert_element(self.layout, index);
         Ok(())
     }
 
     /// Duplicate element `index`, placing the copy at `index + 1`.
     /// Returns the copy's index.
-    pub fn duplicate(&mut self, index: usize) -> Result<usize, TagIndexError> {
+    pub fn duplicate_element(&mut self, index: usize) -> Result<usize, TagIndexError> {
         let len = self.block_data.elements.len();
         if index >= len {
             return Err(TagIndexError::OutOfRange { index, len });
         }
-        self.block_data.duplicate_at(self.layout, index);
+        self.block_data.duplicate_element(self.layout, index);
         Ok(index + 1)
     }
 
-    pub fn delete(&mut self, index: usize) -> Result<(), TagIndexError> {
+    pub fn delete_element(&mut self, index: usize) -> Result<(), TagIndexError> {
         let len = self.block_data.elements.len();
         if index >= len {
             return Err(TagIndexError::OutOfRange { index, len });
         }
-        self.block_data.delete_at(self.layout, index);
+        self.block_data.remove_element(self.layout, index);
         Ok(())
     }
 
     /// Swap elements at `i` and `j`.
-    pub fn swap(&mut self, i: usize, j: usize) -> Result<(), TagIndexError> {
+    pub fn swap_elements(&mut self, i: usize, j: usize) -> Result<(), TagIndexError> {
         let len = self.block_data.elements.len();
         if i >= len {
             return Err(TagIndexError::OutOfRange { index: i, len });
@@ -1096,13 +868,13 @@ impl<'a> TagBlockMut<'a> {
         if j >= len {
             return Err(TagIndexError::OutOfRange { index: j, len });
         }
-        self.block_data.swap_at(self.layout, i, j);
+        self.block_data.swap_elements(self.layout, i, j);
         Ok(())
     }
 
     /// Move the element at `from` to final position `to` (Vec::remove
     /// + Vec::insert semantics).
-    pub fn move_to(&mut self, from: usize, to: usize) -> Result<(), TagIndexError> {
+    pub fn move_element(&mut self, from: usize, to: usize) -> Result<(), TagIndexError> {
         let len = self.block_data.elements.len();
         if from >= len {
             return Err(TagIndexError::OutOfRange { index: from, len });
@@ -1110,7 +882,7 @@ impl<'a> TagBlockMut<'a> {
         if to >= len {
             return Err(TagIndexError::OutOfRange { index: to, len });
         }
-        self.block_data.move_at(self.layout, from, to);
+        self.block_data.move_element(self.layout, from, to);
         Ok(())
     }
 
@@ -1128,7 +900,7 @@ pub struct TagArrayMut<'a> {
 
 impl<'a> TagArrayMut<'a> {
     /// The schema side of this array — its array definition.
-    /// Bridges to the [`crate::definition`] façade.
+    /// Bridges to the [`crate::definition`] facade.
     pub fn definition(&self) -> crate::TagArrayDefinition<'_> {
         crate::TagArrayDefinition::new(self.layout, self.array_layout_index as usize)
     }
@@ -1252,10 +1024,6 @@ pub enum TagSetError {
     /// The supplied [`TagFieldData`] variant doesn't match the
     /// field's schema type.
     TypeMismatch { expected: &'static str, got: &'static str },
-    /// [`TagFieldMut::parse_and_set`] couldn't parse `input`. Message
-    /// is human-readable (e.g. `"expected i32"`, `"enum option 'foo'
-    /// not found"`).
-    ParseError(String),
     /// The field is a container — use `as_block_mut()` / etc.
     NotAssignable,
 }

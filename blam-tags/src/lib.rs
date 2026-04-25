@@ -3,7 +3,7 @@
 //! A standalone Rust library for reading, writing, and manipulating
 //! Halo 3 / Reach tag files. No ManagedBlam.dll, no .NET, no engine
 //! required. Built around a byte-exact roundtrip read/write path
-//! with a concept-oriented façade layered on top.
+//! with a concept-oriented facade layered on top.
 //!
 //! ## Quick start
 //!
@@ -12,9 +12,12 @@
 //!
 //! let mut tag = TagFile::read("masterchief.biped").unwrap();
 //!
-//! // Read a field by `/`-separated path.
+//! // Read a field by `/`-separated path. Pattern-match on the
+//! // returned `TagFieldData` to render the value — the library no
+//! // longer ships a `Display` impl (callers own their UI).
 //! let jump = tag.root().field_path("jump velocity").unwrap();
-//! println!("{}: {} = {}", "jump velocity", jump.type_name(), jump.value().unwrap());
+//! let value = jump.value().unwrap();
+//! println!("{} ({}): {:?}", jump.name(), jump.type_name(), value);
 //!
 //! // Toggle a flag by name.
 //! tag.root_mut()
@@ -27,26 +30,33 @@
 //!
 //! ## Module tour
 //!
-//! **High-level façade (start here):**
+//! **High-level facade (start here):**
 //!
-//! - [`api`] — data-side façade: [`TagStruct`], [`TagField`],
+//! - [`api`] — data-side facade: [`TagStruct`], [`TagField`],
 //!   [`TagBlock`], [`TagArray`], [`TagFlag`], [`TagResource`], and
 //!   their mutable counterparts. All reachable from [`TagFile`].
-//! - [`definition`] — schema-side façade: [`TagStructDefinition`],
+//! - [`definition`] — schema-side facade: [`TagStructDefinition`],
 //!   [`TagFieldDefinition`], [`TagBlockDefinition`],
 //!   [`TagArrayDefinition`], reachable from [`TagFile::definitions`].
 //! - [`file::TagFile`] — the fully parsed tag file (re-exported as
 //!   [`TagFile`]).
 //!
-//! **Lower-level, used by the façade:**
+//! **Lower-level, used by the facade:**
 //!
 //! - [`fields`] — [`TagFieldType`] dispatch enum, [`TagFieldData`]
-//!   per-field value enum (with [`std::fmt::Display`]), plus
-//!   `deserialize_field` / `serialize_field`.
+//!   per-field value enum, plus `deserialize_field` /
+//!   `serialize_field`. No `Display` impl — UI rendering is the
+//!   caller's responsibility (the shell crate has formatters).
 //! - [`layout`] — [`layout::TagLayout`] (the schema chunk) and all
-//!   its record types.
+//!   its record types, plus the binary `blay`-chunk read/write path.
+//! - [`schema`] — JSON schema import: [`schema::TagSchemaError`],
+//!   [`schema::TagGroupMeta`], plus
+//!   [`TagLayout::from_json`][layout::TagLayout::from_json] and the
+//!   parent-chain merge that powers it.
+//! - [`error`] — [`TagReadError`] returned by every read-path entry
+//!   point, plus internal helpers shared by the read-side modules.
 //! - [`data`] — per-tag instance data storage (opaque; driven through
-//!   the [`api`] façade).
+//!   the [`api`] facade).
 //! - [`path`] — `/`-separated path navigation (crate-internal).
 //! - [`stream`] — the `tag!` / `want` / `info` outer stream chunks.
 //! - [`io`] — primitive readers/writers + 12-byte chunk header helpers.
@@ -54,8 +64,10 @@
 
 pub mod math;
 pub mod io;
+pub mod error;
 pub mod fields;
 pub mod layout;
+pub mod schema;
 pub mod data;
 pub mod path;
 pub mod stream;
@@ -63,7 +75,7 @@ pub mod file;
 pub mod api;
 pub mod definition;
 
-// Façade re-exports — the recommended surface for editing tags.
+// Facade re-exports — the recommended surface for editing tags.
 pub use api::{
     TagArray, TagArrayMut, TagBlock, TagBlockMut, TagField, TagFieldMut, TagFlag, TagFlagMut,
     TagFlagOption, TagGroup, TagIndexError, TagOptions, TagResource, TagResourceKind, TagSetError,
@@ -74,6 +86,10 @@ pub use definition::{
     TagFieldDefinition, TagResourceDefinition, TagStructDefinition,
 };
 pub use fields::{
-    format_group_tag, ApiInteropData, StringIdData, TagFieldData, TagFieldType, TagReferenceData,
+    format_group_tag, parse_group_tag, ApiInteropData, StringIdData, TagFieldData, TagFieldType,
+    TagReferenceData,
 };
+pub use error::TagReadError;
 pub use file::TagFile;
+pub use layout::TagLayout;
+pub use schema::{TagGroupMeta, TagSchemaError};

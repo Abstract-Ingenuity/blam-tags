@@ -1,7 +1,7 @@
-//! Façade API — concept-oriented access over the schema types in
+//! Facade API — concept-oriented access over the schema types in
 //! [`crate::layout`].
 //!
-//! Mirrors the data-side façade in [`crate::api`]: structural records
+//! Mirrors the data-side facade in [`crate::api`]: structural records
 //! (`TagStructLayout`, `TagFieldLayout`, `TagBlockLayout`,
 //! `TagArrayLayout`, `TagResourceLayout`, `TagInteropLayout`) are
 //! wrapped by lightweight handles that carry a `&TagLayout` plus the
@@ -17,7 +17,7 @@ use crate::file::TagFile;
 use crate::layout::TagLayout;
 
 impl TagFile {
-    /// Schema façade — navigate the definitions tree without touching
+    /// Schema facade — navigate the definitions tree without touching
     /// the underlying [`TagLayout`] tables directly.
     pub fn definitions(&self) -> TagDefinitions<'_> {
         TagDefinitions { layout: &self.tag_stream.layout }
