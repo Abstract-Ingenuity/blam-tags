@@ -15,10 +15,15 @@
   "structs": {
     "sound_scenery_struct_definition": {
       "guid": "5ba7c4d46a4d95965f0877bbf56e39d4",
-      "size": 16,
+      "size": 376,
       "size_string": "sizeof(struct _sound_scenery_definition)",
       "flags": 15,
       "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
         {
           "type": "long_integer",
           "name": "YJNXHAWAO1!"

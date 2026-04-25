@@ -15,10 +15,15 @@
   "structs": {
     "shader_contrail_struct_definition": {
       "guid": "3a7338b917409310e4b331994c43b1e1",
-      "size": 0,
+      "size": 100,
       "size_string": "sizeof(c_render_method_shader_contrail)-sizeof(c_render_method)",
       "flags": 1731,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "terminator",
           "name": null

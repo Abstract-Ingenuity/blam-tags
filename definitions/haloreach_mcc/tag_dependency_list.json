@@ -3,7 +3,6 @@
   "tag": "want",
   "version": 1,
   "flags": 1,
-  "parent_tag": "@jf?",
   "block": "tag_dependency_list_stream",
   "blocks": {
     "tag_dependency_list_stream": {

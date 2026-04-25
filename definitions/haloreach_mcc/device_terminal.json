@@ -20,10 +20,15 @@
   "structs": {
     "device_terminal_struct_definition": {
       "guid": "503d049982415a59fe310ebce7eed1f8",
-      "size": 72,
+      "size": 584,
       "size_string": "sizeof(struct _terminal_definition)",
       "flags": 265,
       "fields": [
+        {
+          "type": "struct",
+          "name": "device",
+          "definition": "device_struct_definition"
+        },
         {
           "type": "explanation",
           "name": "$$$ TERMINAL $$$",

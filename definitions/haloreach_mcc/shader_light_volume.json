@@ -15,10 +15,15 @@
   "structs": {
     "shader_light_volume_struct_definition": {
       "guid": "af63bf0e79466b429bf5e493f20fbc93",
-      "size": 0,
+      "size": 100,
       "size_string": "sizeof(c_render_method_shader_light_volume)-sizeof(c_render_method)",
       "flags": 1749,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "terminator",
           "name": null

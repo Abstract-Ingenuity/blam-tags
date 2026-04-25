@@ -15,10 +15,15 @@
   "structs": {
     "shader_mux_material_struct_definition": {
       "guid": "a792cb4dd740d2e20e662ea36dd0653c",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_mux_material)-sizeof(c_render_method)",
       "flags": 1649,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name",

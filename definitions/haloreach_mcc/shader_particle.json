@@ -15,10 +15,15 @@
   "structs": {
     "shader_particle_struct_definition": {
       "guid": "b8e19b7649401c53834559998983a024",
-      "size": 52,
+      "size": 152,
       "size_string": "sizeof(c_render_method_shader_particle)-sizeof(c_render_method)",
       "flags": 1707,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "real_rgb_color",
           "name": "bright tint"

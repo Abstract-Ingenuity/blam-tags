@@ -15,10 +15,15 @@
   "structs": {
     "device_machine_struct_definition": {
       "guid": "a2fa048d8d4c03c2275d92b24877af85",
-      "size": 32,
+      "size": 544,
       "size_string": "sizeof(struct _machine_definition)",
       "flags": 200,
       "fields": [
+        {
+          "type": "struct",
+          "name": "device",
+          "definition": "device_struct_definition"
+        },
         {
           "type": "explanation",
           "name": "$$$ MACHINE $$$",

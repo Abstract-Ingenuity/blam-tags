@@ -15,10 +15,15 @@
   "structs": {
     "device_struct_definition": {
       "guid": "4e94feb29045cf74ed0ce39f946bbfb1",
-      "size": 152,
+      "size": 512,
       "size_string": "sizeof(struct _device_definition)",
       "flags": 93,
       "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
         {
           "type": "custom",
           "name": "$$$ DEVICE $$$",

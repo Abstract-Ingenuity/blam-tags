@@ -1623,7 +1623,7 @@ impl TagLayout {
     ) -> Result<(Self, TagGroupMeta), FromJsonError> {
         let path = path.as_ref();
         let file = std::fs::File::open(path)?;
-        let schema: TagGroupSchema = serde_json::from_reader(std::io::BufReader::new(file))?;
+        let mut schema: TagGroupSchema = serde_json::from_reader(std::io::BufReader::new(file))?;
         let meta = TagGroupMeta {
             tag: parse_group_tag(&schema.tag)?,
             version: schema.version,
@@ -1633,8 +1633,69 @@ impl TagLayout {
         // `tmpl` custom expansion sizes are resolved by loading the
         // sibling group JSONs from the same directory on demand.
         let defs_dir = path.parent().unwrap_or(Path::new("."));
+
+        // Schemas only carry their *own* registry entries — anything
+        // inherited from `parent_tag`'s chain (e.g. `biped` → `unit` →
+        // `object` for shared structs like `mapping_function`) lives in
+        // the ancestor JSONs. Walk the chain via `_meta.json` and merge
+        // ancestor registries into the child so cross-parent references
+        // resolve. Child wins on key collision (defensive — the dedupe
+        // tool guarantees no overlap, but if a future override appears
+        // we don't silently drop it).
+        merge_parent_schemas(&mut schema, defs_dir);
+
         let layout = build_layout_from_schema(schema, defs_dir)?;
         Ok((layout, meta))
+    }
+}
+
+/// Walk `schema.parent_tag` recursively (via `_meta.json` for the 4cc →
+/// filename mapping) and merge each ancestor's registries into
+/// `schema`. Child entries take precedence; ancestor entries fill in
+/// the gaps. Tolerates missing `_meta.json`, missing parent files, or
+/// bogus 4ccs by silently treating them as "no parent" — same posture
+/// as `tmpl_expansion_size`.
+fn merge_parent_schemas(schema: &mut TagGroupSchema, defs_dir: &Path) {
+    let Ok(meta_bytes) = std::fs::read(defs_dir.join("_meta.json")) else { return };
+    let Ok(meta_value): Result<serde_json::Value, _> = serde_json::from_slice(&meta_bytes) else {
+        return;
+    };
+    let Some(tag_index) = meta_value.get("tag_index").and_then(|v| v.as_object()) else {
+        return;
+    };
+
+    let mut current_parent = schema.parent_tag.clone();
+    for _ in 0..32 {
+        let Some(pt) = current_parent.take() else { break };
+        let Some(name) = tag_index.get(&pt).and_then(|v| v.as_str()) else { break };
+        let Ok(bytes) = std::fs::read(defs_dir.join(format!("{name}.json"))) else { break };
+        let Ok(parent_schema): Result<TagGroupSchema, _> = serde_json::from_slice(&bytes) else {
+            break;
+        };
+
+        for (k, v) in parent_schema.blocks {
+            schema.blocks.entry(k).or_insert(v);
+        }
+        for (k, v) in parent_schema.structs {
+            schema.structs.entry(k).or_insert(v);
+        }
+        for (k, v) in parent_schema.arrays {
+            schema.arrays.entry(k).or_insert(v);
+        }
+        for (k, v) in parent_schema.enums_flags {
+            schema.enums_flags.entry(k).or_insert(v);
+        }
+        for (k, v) in parent_schema.datas {
+            schema.datas.entry(k).or_insert(v);
+        }
+        for (k, v) in parent_schema.resources {
+            schema.resources.entry(k).or_insert(v);
+        }
+        for (k, v) in parent_schema.interops {
+            schema.interops.entry(k).or_insert(v);
+        }
+
+        current_parent = parent_schema.parent_tag;
     }
 }
 

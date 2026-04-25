@@ -16,10 +16,15 @@
   "structs": {
     "scenery_group": {
       "guid": "73acf58eb943c8e1aac85ca15c5ef1c9",
-      "size": 8,
+      "size": 368,
       "size_string": "actual_size",
       "flags": 220,
       "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
         {
           "type": "explanation",
           "name": "Pathfinding",

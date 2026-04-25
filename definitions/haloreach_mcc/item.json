@@ -15,10 +15,15 @@
   "structs": {
     "item_struct_definition": {
       "guid": "e3f7cd213e4494ad8d9680aebfebfb8c",
-      "size": 156,
+      "size": 516,
       "size_string": "sizeof(struct _item_definition)",
       "flags": 55,
       "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
         {
           "type": "custom",
           "name": "$$$ ITEM $$$",

@@ -15,10 +15,15 @@
   "structs": {
     "shader_decal_struct_definition": {
       "guid": "a77c08ea5b454b6d3c0dd4a53a31bdc2",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_decal)-sizeof(c_render_method)",
       "flags": 1785,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "long_integer",
           "name": "specular_modulate!"

@@ -15,10 +15,15 @@
   "structs": {
     "shader_fur_stencil_struct_definition": {
       "guid": "2bd77bf4564fd275041ec99ccbbac6fb",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_fur_stencil)-sizeof(c_render_method)",
       "flags": 1504,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name",

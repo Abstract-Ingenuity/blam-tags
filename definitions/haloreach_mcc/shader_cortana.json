@@ -15,10 +15,15 @@
   "structs": {
     "shader_cortana_struct_definition": {
       "guid": "4e5d5bc85849a0e9b17865b53b6d84fd",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_cortana)-sizeof(c_render_method)",
       "flags": 1589,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name",

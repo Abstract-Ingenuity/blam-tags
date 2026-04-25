@@ -15,10 +15,15 @@
   "structs": {
     "shader_fur_struct_definition": {
       "guid": "c9786ac5e44330fff6b2c1b4c58d32ef",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_fur)-sizeof(c_render_method)",
       "flags": 1483,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name",

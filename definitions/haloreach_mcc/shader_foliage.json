@@ -15,10 +15,15 @@
   "structs": {
     "shader_foliage_struct_definition": {
       "guid": "33e74bd7ad431c12abdb9bba6f18ff5c",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_foliage)-sizeof(c_render_method)",
       "flags": 1525,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name",

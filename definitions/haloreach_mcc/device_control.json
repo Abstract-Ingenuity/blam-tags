@@ -15,10 +15,15 @@
   "structs": {
     "device_control_struct_definition": {
       "guid": "dd80f658084a2d1b40861faaee8cf373",
-      "size": 60,
+      "size": 572,
       "size_string": "sizeof(struct _control_definition)",
       "flags": 297,
       "fields": [
+        {
+          "type": "struct",
+          "name": "device",
+          "definition": "device_struct_definition"
+        },
         {
           "type": "custom",
           "name": "$$$ CONTROL $$$",

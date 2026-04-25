@@ -15,10 +15,15 @@
   "structs": {
     "shader_glass_struct_definition": {
       "guid": "e281c5e95c4bd1dbd3682c88f985853c",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_glass)-sizeof(c_render_method)",
       "flags": 1546,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name",

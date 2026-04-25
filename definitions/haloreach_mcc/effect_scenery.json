@@ -15,10 +15,15 @@
   "structs": {
     "effect_scenery_struct_definition": {
       "guid": "86065b577d45b7254541b1bbc9b63b17",
-      "size": 0,
+      "size": 360,
       "size_string": "0",
       "flags": 23,
       "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
         {
           "type": "terminator",
           "name": null

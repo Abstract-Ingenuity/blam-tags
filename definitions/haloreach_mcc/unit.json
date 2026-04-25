@@ -80,10 +80,15 @@
   "structs": {
     "unit_struct_definition": {
       "guid": "778095c828406a46e3a1ac94b8f13bdb",
-      "size": 868,
+      "size": 1228,
       "size_string": "sizeof(struct _unit_definition)",
       "flags": 1009,
       "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
         {
           "type": "custom",
           "name": "$$$ UNIT $$$",
@@ -942,34 +947,6 @@
         }
       ],
       "source_file": "c:\\mcc\\qfe1\\reach\\shared\\engine\\source\\omaha\\units\\unit_definitions.cpp"
-    },
-    "mapping_function": {
-      "guid": "8fa9145a8444fa53d46810809e45f10a",
-      "size": 20,
-      "size_string": "actual_size",
-      "flags": 7009,
-      "fields": [
-        {
-          "type": "custom",
-          "name": null,
-          "group_tag": "hide"
-        },
-        {
-          "type": "data",
-          "name": "data",
-          "definition": "function_definition_data"
-        },
-        {
-          "type": "custom",
-          "name": null,
-          "group_tag": "edih"
-        },
-        {
-          "type": "terminator",
-          "name": null
-        }
-      ],
-      "source_file": "c:\\mcc\\qfe1\\reach\\shared\\engine\\source\\omaha\\math\\function_definitions.cpp"
     },
     "gamepad_stick_info_block": {
       "guid": "067441d35f4b7ef4157c3c95abbe64d3",
@@ -1865,14 +1842,6 @@
         "pegs throttle"
       ],
       "source_file": "c:\\mcc\\qfe1\\reach\\shared\\engine\\source\\omaha\\units\\unit_definitions.cpp"
-    }
-  },
-  "datas": {
-    "function_definition_data": {
-      "alignment": 4,
-      "flags": 2,
-      "max_size": 872,
-      "max_size_string": "k_max_function_size"
     }
   }
 }

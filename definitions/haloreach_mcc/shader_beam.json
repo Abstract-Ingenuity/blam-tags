@@ -15,10 +15,15 @@
   "structs": {
     "shader_beam_struct_definition": {
       "guid": "d9dc9205c44bfa378abf38a791505a3d",
-      "size": 0,
+      "size": 100,
       "size_string": "sizeof(c_render_method_shader_beam)-sizeof(c_render_method)",
       "flags": 1767,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "terminator",
           "name": null

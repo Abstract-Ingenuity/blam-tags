@@ -15,10 +15,15 @@
   "structs": {
     "shader_terrain_struct_definition": {
       "guid": "fc3fe2a5044fcf8610b99b8f569c55ec",
-      "size": 28,
+      "size": 128,
       "size_string": "sizeof(c_render_method_shader_terrain)-sizeof(c_render_method)",
       "flags": 1622,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name 0#defines global material type for channel 0 of the terrain shader",

@@ -15,10 +15,15 @@
   "structs": {
     "shader_custom_struct_definition": {
       "guid": "64e350ffff4532eb9bb6d4a2b49be28b",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_custom)-sizeof(c_render_method)",
       "flags": 1441,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name",

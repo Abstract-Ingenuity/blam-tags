@@ -20,10 +20,15 @@
   "structs": {
     "crate_struct_definition": {
       "guid": "873a3c7935406c5095fc3bbfe49b45f0",
-      "size": 20,
+      "size": 380,
       "size_string": "sizeof(struct _crate_definition)",
       "flags": 22,
       "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
         {
           "type": "custom",
           "name": "$$$ CRATE $$$",

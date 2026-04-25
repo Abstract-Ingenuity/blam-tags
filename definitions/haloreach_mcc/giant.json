@@ -20,10 +20,15 @@
   "structs": {
     "giant_struct_definition": {
       "guid": "1d5955a87e47a2a708cd97ab618c7aa9",
-      "size": 56,
+      "size": 1284,
       "size_string": "sizeof(struct _giant_definition)",
       "flags": 201,
       "fields": [
+        {
+          "type": "struct",
+          "name": "unit",
+          "definition": "unit_struct_definition"
+        },
         {
           "type": "custom",
           "name": "$$$ GIANT $$$",

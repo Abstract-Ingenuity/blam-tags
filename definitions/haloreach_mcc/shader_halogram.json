@@ -15,10 +15,15 @@
   "structs": {
     "shader_halogram_struct_definition": {
       "guid": "f83b82c9284fa4336e12078305fae0d5",
-      "size": 4,
+      "size": 104,
       "size_string": "sizeof(c_render_method_shader_halogram)-sizeof(c_render_method)",
       "flags": 1462,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "string_id",
           "name": "material name",

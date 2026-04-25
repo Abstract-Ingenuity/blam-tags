@@ -41,10 +41,15 @@
   "structs": {
     "projectile_group": {
       "guid": "782ed8f78c4b07197294d480c100d67b",
-      "size": 504,
+      "size": 864,
       "size_string": "actual_size",
       "flags": 861,
       "fields": [
+        {
+          "type": "struct",
+          "name": "object",
+          "definition": "object_struct_definition"
+        },
         {
           "type": "custom",
           "name": "$$$ PROJECTILE $$$",

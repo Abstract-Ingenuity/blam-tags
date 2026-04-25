@@ -15,10 +15,15 @@
   "structs": {
     "shader_water_struct_definition": {
       "guid": "56d70c69494fe320d99c5ea3a20f4c59",
-      "size": 0,
+      "size": 100,
       "size_string": "sizeof(c_render_method_shader_water)-sizeof(c_render_method)",
       "flags": 1806,
       "fields": [
+        {
+          "type": "struct",
+          "name": "render_method",
+          "definition": "render_method_struct_definition"
+        },
         {
           "type": "terminator",
           "name": null
