@@ -1,9 +1,13 @@
 //! `list` — walk a tag directory and emit matching paths.
 //!
-//! Replaces the old `scan` command. The default output is a simple
-//! path list, one per line (raw fodder for scripts). `--summary`
-//! re-creates the `scan`-style group/extension tally. `--json` emits
-//! structured output.
+//! For standalone tag files the file extension *is* the group name
+//! (`.render_model`, `.biped`, `.scenario`, etc.), so filtering by
+//! group needs zero file reads — a path-only walk over even a full
+//! H3+Reach corpus stays comfortably under a second.
+//!
+//! `--group` accepts either form: a 4-byte group tag (`mode`) gets
+//! translated to its long name (`render_model`) via the loaded
+//! [`crate::tag_index::TagIndex`], so existing scripts keep working.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -11,10 +15,11 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use blam_tags::{format_group_tag, TagFile};
-use rayon::prelude::*;
+use blam_tags::parse_group_tag;
 use regex::Regex;
 use serde_json::json;
+
+use crate::context::CliContext;
 
 pub struct ListFilters {
     pub group: Option<String>,
@@ -23,7 +28,6 @@ pub struct ListFilters {
     pub ends_with: Option<String>,
     pub regex: Option<String>,
     pub from_file: Option<String>,
-    pub strict: bool,
 }
 
 pub enum OutputMode {
@@ -32,7 +36,7 @@ pub enum OutputMode {
     Json,
 }
 
-pub fn run(dir: &str, filters: ListFilters, mode: OutputMode) -> Result<()> {
+pub fn run(ctx: &CliContext, dir: &str, filters: ListFilters, mode: OutputMode) -> Result<()> {
     let regex = filters.regex.as_deref().map(Regex::new).transpose().context("invalid --regex pattern")?;
     let from_file = load_from_file(filters.from_file.as_deref())?;
 
@@ -44,47 +48,35 @@ pub fn run(dir: &str, filters: ListFilters, mode: OutputMode) -> Result<()> {
         paths
     };
 
-    // Read each tag's header in parallel, filter, collect. In strict
-    // mode we propagate the first read error; otherwise unreadable
-    // files are silently skipped (the usual "corpus contains stray
-    // non-tag files" case).
-    let results: Vec<Result<Option<(PathBuf, String)>>> = candidates
-        .par_iter()
-        .map(|path| -> Result<Option<(PathBuf, String)>> {
-            let tag = match TagFile::read(path) {
-                Ok(t) => t,
-                Err(e) => {
-                    if filters.strict {
-                        return Err(anyhow::anyhow!("failed to read '{}': {e}", path.display()));
-                    }
-                    return Ok(None);
-                }
-            };
-            let group = format_group_tag(tag.group().tag);
+    // Resolve `--group` once: prefer it as an extension/long-name
+    // (`render_model`); fall back to parsing it as a 4-byte group tag
+    // (`mode`) and looking the long name up in the tag index. This
+    // way `--group mode` and `--group render_model` are equivalent.
+    let group_filter = filters
+        .group
+        .as_deref()
+        .map(|raw| resolve_group(ctx, raw))
+        .transpose()?;
 
-            if let Some(g) = &filters.group
-                && group != *g { return Ok(None); }
+    let mut matched: Vec<(PathBuf, String)> = Vec::new();
+    for path in &candidates {
+        let Some(ext) = path.extension().and_then(|e| e.to_str()) else { continue };
 
-            let path_str = path.to_string_lossy();
-            if let Some(prefix) = &filters.starts_with
-                && !file_name_matches(path, |n| n.starts_with(prefix)) { return Ok(None); }
-            if let Some(needle) = &filters.contains
-                && !path_str.contains(needle) { return Ok(None); }
-            if let Some(suffix) = &filters.ends_with
-                && !file_name_matches(path, |n| n.ends_with(suffix)) { return Ok(None); }
-            if let Some(re) = &regex
-                && !re.is_match(&path_str) { return Ok(None); }
+        if let Some(want_ext) = &group_filter
+            && ext != want_ext { continue; }
 
-            Ok(Some((path.clone(), group)))
-        })
-        .collect();
+        let path_str = path.to_string_lossy();
+        if let Some(prefix) = &filters.starts_with
+            && !file_name_matches(path, |n| n.starts_with(prefix)) { continue; }
+        if let Some(needle) = &filters.contains
+            && !path_str.contains(needle) { continue; }
+        if let Some(suffix) = &filters.ends_with
+            && !file_name_matches(path, |n| n.ends_with(suffix)) { continue; }
+        if let Some(re) = &regex
+            && !re.is_match(&path_str) { continue; }
 
-    // Fail fast on the first read error in strict mode; drop skipped
-    // entries (Ok(None)) and unwrap the matches.
-    let matched: Vec<(PathBuf, String)> = results
-        .into_iter()
-        .filter_map(|r| r.transpose())
-        .collect::<Result<Vec<_>>>()?;
+        matched.push((path.clone(), ext.to_string()));
+    }
 
     match mode {
         OutputMode::Paths => {
@@ -93,24 +85,27 @@ pub fn run(dir: &str, filters: ListFilters, mode: OutputMode) -> Result<()> {
             }
         }
         OutputMode::Summary { sort_by_count } => {
-            let mut groups: BTreeMap<(String, String), u64> = BTreeMap::new();
-            for (path, group) in &matched {
-                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
-                *groups.entry((group.clone(), ext)).or_insert(0) += 1;
+            // Tally by extension only — for standalone tag files the
+            // extension is the group, so the GROUP/EXTENSION split
+            // the old per-file-read implementation produced was
+            // always redundant.
+            let mut counts: BTreeMap<String, u64> = BTreeMap::new();
+            for (_, ext) in &matched {
+                *counts.entry(ext.clone()).or_insert(0) += 1;
             }
-            let mut rows: Vec<_> = groups.into_iter().map(|((g, e), c)| (g, e, c)).collect();
+            let mut rows: Vec<_> = counts.into_iter().collect();
             if sort_by_count {
-                rows.sort_by(|a, b| b.2.cmp(&a.2));
+                rows.sort_by(|a, b| b.1.cmp(&a.1));
             }
-            println!("{:<8} {:<24} {:>8}", "GROUP", "EXTENSION", "COUNT");
+            println!("{:<32} {:>8}", "GROUP", "COUNT");
             println!("{}", "-".repeat(44));
             let mut total = 0u64;
-            for (group, ext, count) in &rows {
-                println!("{:<8} {:<24} {:>8}", group, ext, count);
+            for (group, count) in &rows {
+                println!("{:<32} {:>8}", group, count);
                 total += count;
             }
             println!("{}", "-".repeat(44));
-            println!("{:<8} {:<24} {:>8}", format!("{} types", rows.len()), "", total);
+            println!("{:<32} {:>8}", format!("{} types", rows.len()), total);
         }
         OutputMode::Json => {
             let arr: Vec<_> = matched.iter()
@@ -121,6 +116,30 @@ pub fn run(dir: &str, filters: ListFilters, mode: OutputMode) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Normalise `--group <X>` to a tag-file extension (which equals the
+/// long group name for standalone tags). Accepts either form:
+///
+/// - long name (`"render_model"`) → returned verbatim if the index
+///   knows it, otherwise also accepted (lets users filter for
+///   experimental/unindexed extensions).
+/// - 4-byte group tag (`"mode"`) → looked up in the tag index and
+///   translated to its long name.
+fn resolve_group(ctx: &CliContext, raw: &str) -> Result<String> {
+    if ctx.tag_index.group_tag_for(raw).is_some() {
+        return Ok(raw.to_string());
+    }
+    if raw.len() == 4
+        && let Some(tag) = parse_group_tag(raw)
+        && let Some(name) = ctx.tag_index.name_for(tag)
+    {
+        return Ok(name.to_string());
+    }
+    // Unknown to the index — fall through and match it as-is. Lets
+    // a user filter for `.foo` even when `foo` isn't a registered
+    // group, instead of erroring out.
+    Ok(raw.to_string())
 }
 
 fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {

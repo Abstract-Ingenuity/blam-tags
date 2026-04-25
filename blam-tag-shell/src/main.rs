@@ -67,9 +67,6 @@ enum Commands {
         /// Emit JSON
         #[arg(long)]
         json: bool,
-        /// Fail on any unreadable / malformed tag encountered (default: skip silently)
-        #[arg(long)]
-        strict: bool,
     },
 
     /// Show field tree
@@ -84,6 +81,10 @@ enum Commands {
         /// Show all fields including hidden
         #[arg(long)]
         all: bool,
+        /// Expand block elements. Default: show only the count and stop.
+        /// Drill into a specific element with `<path>[<index>]` instead.
+        #[arg(long)]
+        full: bool,
         /// Output as JSON
         #[arg(long)]
         json: bool,
@@ -373,10 +374,10 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
         }
 
         Commands::List {
-            dir, group, starts_with, contains, ends_with, regex, from_file, summary, sort_by_count, json, strict,
+            dir, group, starts_with, contains, ends_with, regex, from_file, summary, sort_by_count, json,
         } => {
             let filters = commands::list::ListFilters {
-                group, starts_with, contains, ends_with, regex, from_file, strict,
+                group, starts_with, contains, ends_with, regex, from_file,
             };
             let mode = if json {
                 commands::list::OutputMode::Json
@@ -385,16 +386,17 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             } else {
                 commands::list::OutputMode::Paths
             };
-            commands::list::run(&dir, filters, mode)
+            commands::list::run(ctx, &dir, filters, mode)
         }
 
-        Commands::Inspect { file, path, depth, all, json, filter, filter_not, filter_value } => {
+        Commands::Inspect { file, path, depth, all, full, json, filter, filter_not, filter_value } => {
             ensure_loaded(ctx, &file, reload_tag)?;
             commands::inspect::run(
                 ctx,
                 path.as_deref(),
                 depth,
                 all,
+                full,
                 json,
                 commands::inspect::InspectFilters {
                     names: filter,

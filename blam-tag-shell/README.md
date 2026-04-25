@@ -99,32 +99,34 @@ Tag File
 
 | Long | Description |
 |-|-|
-| `--group <TAG>` | Filter by group tag (e.g. `bipd`). |
+| `--group <TAG>` | Filter by group. Accepts either form: long name (`render_model`) or 4-byte group tag (`mode`). |
 | `--starts-with <S>` | Only filenames starting with `S`. |
 | `--contains <S>` | Only paths containing `S`. |
 | `--ends-with <S>` | Only filenames ending with `S` (e.g. extension matching). |
 | `--regex <PAT>` | Only full paths matching `PAT`. |
 | `--from-file <F>` | Read candidate paths from `F` instead of walking. |
-| `--summary` | Group/extension tally instead of a path list. |
+| `--summary` | Group tally instead of a path list. |
 | `--sort-by-count` | Sort summary rows by count (desc) instead of name. |
 | `--json` | Emit JSON. |
-| `--strict` | Fail on any unreadable / malformed tag (default: skip silently). |
+
+`list` is path-only — it never opens a tag file. For standalone tag files the file extension *is* the group name, so a full corpus walk runs in well under a second.
 
 ```sh
-# Plain list of every biped under a tags root
+# Plain list of every biped under a tags root (long name or 4cc both work)
+$ blam-tag-shell list /path/to/tags --group biped
 $ blam-tag-shell list /path/to/tags --group bipd
 
-# Group/extension tally
+# Group tally
 $ blam-tag-shell list /path/to/tags/globals --summary
-GROUP    EXTENSION                   COUNT
+GROUP                               COUNT
 --------------------------------------------
-bsdt     breakable_surface               2
-cddf     collision_damage               22
-jpt!     damage_effect                  10
-matg     globals                         1
-wind     wind                            1
+breakable_surface                       2
+collision_damage                       22
+damage_effect                          10
+globals                                 1
+wind                                    1
 --------------------------------------------
-14 types                                99
+14 types                               99
 
 # JSON-sorted by most common
 $ blam-tag-shell list /path/to/tags --summary --sort-by-count --json
@@ -143,29 +145,47 @@ $ blam-tag-shell list /path/to/tags --summary --sort-by-count --json
 |-|-|
 | `--depth <N>` | Maximum depth to display (default `1`). |
 | `--all` | Include schema padding / explanation / skip / unknown fields. |
+| `--full` | Expand block elements. Default: print only the count. Drill into a single element with `<path>[<index>]` instead. |
 | `--json` | Emit JSON. |
 | `--filter <S,...>` | Only show fields whose name contains any of the comma-separated substrings. |
 | `--filter-not <S,...>` | Skip fields whose name contains any of these. |
 | `--filter-value <S>` | Only leaves whose rendered value contains `S`. |
 
+By default, blocks (variable-count tag-data lists) print as `<name>: block [<n> elements]` and stop — for tags with many entries this keeps `inspect` output to a screenful. Pass `--full` to expand every block recursively, or descend into one element with the `[<index>]` path syntax. Arrays (fixed-count from the schema) always expand regardless.
+
+When a block or array element collapses to a single scalar leaf (e.g. spherical-harmonic coefficient arrays where each element is a one-field `coefficient: real`), the `[i]` header and its leaf are merged onto a single line:
+
+```
+default lightprobe r: array [16 elements]
+  [0] coefficient: real = 0.8951472
+  [1] coefficient: real = -1.0852382
+  ...
+```
+
+`--all` opts out of the collapse (every padding / explanation field gets its own line).
+
 ```sh
-# Top-level fields
+# Top-level fields — blocks show as count only
 $ blam-tag-shell inspect masterchief.biped
 unit: struct
   object: struct
   flags: long flags = 0x0046C708 [fires from camera, melee attackers cannot attach, ...]
   default team: short enum = 1 (player)
+  attachments: block [3 elements]
   ...
 jump velocity: real = 3.08
 
-# Drill into a subtree
+# Drill into a single element — blocks below it still gated by --full
 $ blam-tag-shell inspect masterchief.biped "unit/seats[0]" --depth 2
+
+# Show the contents of every block too
+$ blam-tag-shell inspect masterchief.biped --full --depth 5
 
 # Filter by name + value
 $ blam-tag-shell inspect masterchief.biped --depth 5 \
     --filter velocity --filter-value 3
 
-# Full tree as JSON
+# Full tree as JSON (still gated by --full for blocks)
 $ blam-tag-shell inspect masterchief.biped --depth 3 --json
 ```
 
@@ -569,7 +589,7 @@ bts rebuild-dependency-list mychief.biped
 |-|-|
 | `[FILE]` | Optional tag to load at startup. |
 
-Opens a persistent session against a loaded tag. Tag-bound commands can omit the file argument — it's injected from the loaded tag's path. Dirty-tracking means the REPL asks for confirmation before discarding unsaved edits. History is persisted to `~/.blam-tag-shell-history`.
+Opens a persistent session against a loaded tag. Tag-bound commands always operate on the loaded tag — the file positional is filled in automatically, so `inspect materials[0]` drills into the loaded tag's `materials[0]` element rather than being misread as `inspect materials[0] (no path)`. To work on a different tag, use `open <path>` to switch. Dirty-tracking means the REPL asks for confirmation before discarding unsaved edits. History is persisted to `~/.blam-tag-shell-history`.
 
 **Session verbs:**
 

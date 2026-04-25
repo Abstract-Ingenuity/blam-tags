@@ -130,35 +130,39 @@ fn handle_line(ctx: &mut CliContext, line: &str) -> LineOutcome {
 }
 
 fn dispatch_via_clap(ctx: &mut CliContext, words: &[String]) -> Result<()> {
-    // Try parsing the line as-is first. That covers corpus commands
-    // (`list`, `find`, `layout-diff`) and any tag-bound command where
-    // the user supplied the file argument explicitly.
+    // REPL parsing has to disambiguate two flavors of verb without
+    // hardcoding a list:
     //
-    // If parsing fails AND there's a tag loaded, retry with the
-    // loaded tag's path injected as the first positional after the
-    // verb — that's how REPL users run `get unit/flags` without
-    // retyping the file. Clap itself decides whether the shape
-    // matches; no hardcoded verb list needed.
-    let mut args: Vec<String> = std::iter::once(BINARY_NAME.to_string())
+    //  - Tag-bound verbs (`inspect`, `get`, `set`, `flag`, …) require
+    //    a `<file>` positional. The REPL fills it in from the loaded
+    //    tag so users don't retype the path on every command.
+    //  - Corpus verbs (`list`, `find`, `layout-diff`, …) take a
+    //    different first positional (`<dir>`/`<file_a>`/etc.) and
+    //    don't accept the loaded path.
+    //
+    // When the user types `inspect materials[0]`, clap will *happily*
+    // parse that as `file="materials[0]", path=None` — which silently
+    // dumps the root instead of drilling into the element. To avoid
+    // that trap we prefer the injected form when a tag is loaded:
+    // try `<verb> <loaded-path> <user-args...>` first, and fall back
+    // to the as-typed parse only if injection fails (which is what
+    // happens for corpus verbs whose signature can't accept the
+    // extra positional).
+    let raw: Vec<String> = std::iter::once(BINARY_NAME.to_string())
         .chain(words.iter().cloned())
         .collect();
 
-    let first_err = match Cli::try_parse_from(&args) {
-        Ok(cli) => return dispatch(ctx, cli.command, false),
-        Err(e) => e,
-    };
+    if let Some(loaded) = ctx.loaded.as_ref() {
+        let mut injected = raw.clone();
+        injected.insert(2, loaded.path.to_string_lossy().into_owned());
+        if let Ok(cli) = Cli::try_parse_from(&injected) {
+            return dispatch(ctx, cli.command, false);
+        }
+    }
 
-    let Some(loaded) = ctx.loaded.as_ref() else {
-        return Err(first_err.into());
-    };
-    args.insert(2, loaded.path.to_string_lossy().into_owned());
-
-    match Cli::try_parse_from(&args) {
+    match Cli::try_parse_from(&raw) {
         Ok(cli) => dispatch(ctx, cli.command, false),
-        // Injection didn't help — the user's command was genuinely
-        // wrong. Surface the original error since it describes the
-        // line as typed rather than the injected retry.
-        Err(_) => Err(first_err.into()),
+        Err(e) => Err(e.into()),
     }
 }
 
@@ -278,7 +282,7 @@ fn print_pwd(ctx: &CliContext) {
 
 fn prompt_for(ctx: &CliContext) -> String {
     match &ctx.loaded {
-        None => "blam> ".into(),
+        None => format!("{game}> ", game = ctx.game),
         Some(loaded) => {
             let name = loaded
                 .path
@@ -287,9 +291,9 @@ fn prompt_for(ctx: &CliContext) -> String {
                 .unwrap_or("?");
             let dirty = if loaded.dirty { "*" } else { "" };
             if ctx.nav.is_empty() {
-                format!("blam {name}{dirty}> ")
+                format!("{game} :: {name}{dirty}> ", game = ctx.game)
             } else {
-                format!("blam {name}{dirty}/{nav}> ", nav = ctx.nav.join("/"))
+                format!("{game} :: {name}{dirty}/{nav}> ", game = ctx.game, nav = ctx.nav.join("/"))
             }
         }
     }

@@ -80,8 +80,19 @@ pub trait FieldVisitor {
 
     /// Called immediately before the walker recurses into element
     /// `index` of a block or array. `path` includes the `[index]`
-    /// suffix. Default: noop.
-    fn enter_element(&mut self, _path: &str, _depth: usize, _index: usize) {}
+    /// suffix; `elem` is the element struct, exposed so visitors can
+    /// inspect its fields and decide whether the body recursion is
+    /// needed (e.g. inline single-leaf elements). Return `Skip` to
+    /// suppress the body walk. Default: `Descend`.
+    fn enter_element(
+        &mut self,
+        _path: &str,
+        _depth: usize,
+        _index: usize,
+        _elem: TagStruct<'_>,
+    ) -> VisitControl {
+        VisitControl::Descend
+    }
 }
 
 /// Walk every field under `start`, calling the visitor's hooks as it
@@ -140,8 +151,9 @@ fn walk_elements<'a, V: FieldVisitor>(
         let saved = path.len();
         use std::fmt::Write;
         let _ = write!(path, "[{i}]");
-        visitor.enter_element(path, depth + 1, i);
-        walk_struct(elem, path, depth + 1, visitor);
+        if matches!(visitor.enter_element(path, depth + 1, i, elem), VisitControl::Descend) {
+            walk_struct(elem, path, depth + 1, visitor);
+        }
         path.truncate(saved);
     }
 }
