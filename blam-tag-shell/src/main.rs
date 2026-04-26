@@ -232,7 +232,11 @@ enum Commands {
     ExtractBitmap {
         /// Path to a `.bitmap` tag file
         file: String,
-        /// Output directory (default: current directory)
+        /// Output path. If it ends in `.dds`, writes that exact
+        /// filename (single-image tags only). Otherwise treated as
+        /// a directory: 1-image tags emit `<dir>/<tag_stem>.dds`,
+        /// N-image tags emit `<dir>/<tag_stem>/<i>.dds`.
+        /// Default: current directory.
         #[arg(long)]
         output: Option<String>,
     },

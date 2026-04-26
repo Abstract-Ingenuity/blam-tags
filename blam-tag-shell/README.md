@@ -478,14 +478,16 @@ $ blam-tag-shell export masterchief.biped 'unit/unit camera' --output cam.cmds
 
 | Long | Description |
 |-|-|
-| `--output <DIR>` | Output directory (default: current directory). |
+| `--output <PATH>` | Where to write. Path ending in `.dds` → that exact file (single-image tags only). Otherwise treated as a directory. Default: current directory. |
 
 Reads pixel bytes straight from the tag's `processed pixel data` blob and emits one DDS per image. No resource cache files needed — halo3_mcc / haloreach_mcc bitmaps keep their pixels inline. Validated against 25,908 / 25,908 bitmap-tag images across both corpora.
 
 Output naming:
 
-- 1-image tag → `<tag_stem>.dds` in `<DIR>`.
-- N-image tag → `<DIR>/<tag_stem>/<i>.dds` (one subdirectory per tag, one file per image).
+- `--output <FILE>.dds` → writes to that exact filename. Errors on multi-image tags (one filename can't hold all of them).
+- `--output <DIR>` (anything not ending in `.dds`):
+  - 1-image tag → `<DIR>/<tag_stem>.dds`.
+  - N-image tag → `<DIR>/<tag_stem>/<i>.dds` (per-tag subdirectory).
 
 Format coverage:
 
@@ -497,6 +499,11 @@ Format coverage:
 $ blam-tag-shell extract-bitmap masterchief.bitmap
 masterchief.dds: 256×256 a8r8g8b8 (2D texture, 9 mips)
 
+# Specific filename (single-image tags only)
+$ blam-tag-shell extract-bitmap masterchief.bitmap --output ~/Downloads/chief.dds
+/Users/.../Downloads/chief.dds: 256×256 a8r8g8b8 (2D texture, 9 mips)
+
+# Directory output
 $ blam-tag-shell extract-bitmap envmap.bitmap --output extracted/
 extracted/envmap.dds: 256×256 dxt5 (cube map, 9 mips)
 
