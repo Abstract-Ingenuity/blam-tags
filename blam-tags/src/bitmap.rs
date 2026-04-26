@@ -82,6 +82,8 @@ impl BitmapFormat {
         })
     }
 
+    /// Whether this format stores pixels as 4×4 blocks (BC1/2/3/5
+    /// family) rather than per-pixel.
     pub fn is_compressed(self) -> bool {
         matches!(self,
             Self::Dxt1 | Self::Dxt3 | Self::Dxt5 | Self::Dxt5a | Self::Dxn
@@ -145,6 +147,7 @@ impl BitmapFormat {
     }
 }
 
+/// Errors returned by the bitmap walkers and DDS writer.
 #[derive(Debug)]
 pub enum BitmapError {
     /// Root struct doesn't expose the fields we expect from a
@@ -191,6 +194,8 @@ pub struct Bitmap<'a> {
 }
 
 impl<'a> Bitmap<'a> {
+    /// Wrap a parsed `.bitmap` tag. Errors with [`BitmapError::NotABitmapTag`]
+    /// if the tag doesn't expose `bitmaps[]` and `processed pixel data`.
     pub fn new(tag: &'a TagFile) -> Result<Self, BitmapError> {
         let root = tag.root();
 
@@ -207,14 +212,19 @@ impl<'a> Bitmap<'a> {
         Ok(Self { pixels, bitmaps })
     }
 
+    /// Number of images in the tag's `bitmaps[]` block.
     pub fn len(&self) -> usize { self.bitmaps.len() }
+
+    /// `true` if this tag has no images.
     pub fn is_empty(&self) -> bool { self.bitmaps.is_empty() }
 
+    /// Get the image at `index`, or `None` if out of range.
     pub fn image(&self, index: usize) -> Option<BitmapImage<'a>> {
         let elem = self.bitmaps.element(index)?;
         Some(BitmapImage { elem, pixels: self.pixels })
     }
 
+    /// Iterate every image in declaration order.
     pub fn iter(&self) -> impl Iterator<Item = BitmapImage<'a>> + '_ {
         let pixels = self.pixels;
         self.bitmaps.iter().map(move |elem| BitmapImage { elem, pixels })
@@ -248,6 +258,7 @@ impl<'a> BitmapImage<'a> {
             _ => None,
         }
     }
+
     /// Read an enum field's resolved name regardless of width — h3
     /// uses `short_enum` for `type` while reach uses `char_enum`, and
     /// the schema-driven enum name resolution applies the same way to
@@ -261,8 +272,13 @@ impl<'a> BitmapImage<'a> {
         }
     }
 
+    /// Base-mip width in pixels.
     pub fn width(&self) -> u32 { self.read_u16("width").unwrap_or(0).max(0) as u32 }
+
+    /// Base-mip height in pixels.
     pub fn height(&self) -> u32 { self.read_u16("height").unwrap_or(0).max(0) as u32 }
+
+    /// 3D-texture depth (or array layer count for arrays). Always `>= 1`.
     pub fn depth(&self) -> u32 { self.read_i8("depth").unwrap_or(1).max(1) as u32 }
 
     /// Total mipmap levels including the base level. The schema's
@@ -288,10 +304,12 @@ impl<'a> BitmapImage<'a> {
         self.read_enum_name("type")
     }
 
+    /// `true` for cube map textures (six 2D surfaces under one image).
     pub fn is_cube(&self) -> bool {
         matches!(self.type_name().as_deref(), Some("cube map"))
     }
 
+    /// `true` for texture arrays (`depth` layers of 2D surfaces).
     pub fn is_array(&self) -> bool {
         matches!(self.type_name().as_deref(), Some("array"))
     }

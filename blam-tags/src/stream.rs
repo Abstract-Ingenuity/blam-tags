@@ -1,7 +1,8 @@
-//! Top-level tag stream: the `tag!` / `want` / `info` chunks that sit
-//! directly under the tag file header. Each stream wraps a `blay` block
-//! layout and a `bdat` root block data chunk — same structure, different
-//! content (main data, dependency list, import info).
+//! Top-level tag stream: the `tag!` / `want` / `info` / `assd`
+//! chunks that sit directly under the tag file header. Each stream
+//! wraps a `blay` block layout and a `bdat` root block data chunk —
+//! same structure, different content (main data, dependency list,
+//! import info, asset depot storage).
 
 use std::io::{Read, Seek, Write};
 
@@ -10,11 +11,12 @@ use crate::error::TagReadError;
 use crate::io::*;
 use crate::layout::TagLayout;
 
-/// One of the three top-level chunks in a tag file: `tag!` (main
-/// payload), `want` (dependency list), or `info` (import info). All three
-/// share the same structure: a `blay` block layout followed by a `bdat`
-/// block data. The chunk signature is passed in by the caller since it
-/// determines *which* stream is being read, not *how* it's shaped.
+/// One of the four top-level chunks in a tag file: `tag!` (main
+/// payload), `want` (dependency list), `info` (import info), or
+/// `assd` (asset depot storage). All four share the same structure:
+/// a `blay` block layout followed by a `bdat` block data. The chunk
+/// signature is passed in by the caller since it determines *which*
+/// stream is being read, not *how* it's shaped.
 #[derive(Debug)]
 pub(crate) struct TagStream {
     /// The `blay` chunk — the schema (structs, blocks, fields, types)
@@ -105,10 +107,10 @@ impl TagStream {
         Self { layout, data }
     }
 
-    /// Write this stream as a `tag!` / `want` / `info` chunk. The payload is
-    /// a `blay` chunk (block layout) followed by a `bdat` chunk (block
-    /// data). Both the outer stream chunk and `blay` have version 0;
-    /// `bdat` has version 1 (hypothesis-verified on read).
+    /// Write this stream as a `tag!` / `want` / `info` / `assd` chunk.
+    /// The payload is a `blay` chunk (block layout) followed by a
+    /// `bdat` chunk (block data). Both the outer stream chunk and
+    /// `blay` have version 0; `bdat` has version 1.
     pub(crate) fn write<W: Write>(
         &self,
         chunk_signature: u32,

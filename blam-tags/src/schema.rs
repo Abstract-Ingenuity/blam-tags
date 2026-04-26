@@ -1,5 +1,5 @@
 //! JSON schema import — build a [`TagLayout`] from a per-group JSON
-//! schema dumped by `h3_guerilla_dump_tag_definitions_json.py`.
+//! schema dumped by `halo3_dump_tag_definitions_json.py`.
 //!
 //! The result matches what `TagLayout::read` would produce from an
 //! equivalent blay chunk: same string_data/string_offsets/string_lists,
@@ -342,7 +342,7 @@ pub struct TagGroupMeta {
 
 impl TagLayout {
     /// Build a TagLayout from a JSON schema file (per-group output of
-    /// `h3_guerilla_dump_tag_definitions_json.py`). The result matches
+    /// `halo3_dump_tag_definitions_json.py`). The result matches
     /// what `TagLayout::read` would produce from an equivalent blay
     /// chunk: same string_data/string_offsets/string_lists,
     /// struct_layouts/block_layouts/etc. with consistent indices, and

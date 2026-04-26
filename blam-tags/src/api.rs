@@ -280,6 +280,7 @@ impl<'a> TagField<'a> {
         crate::TagFieldDefinition::new(self.layout, self.field_index)
     }
 
+    /// Field display name (e.g. `"jump velocity"`).
     pub fn name(&self) -> &'a str {
         let field = &self.layout.fields[self.field_index];
         self.layout.get_string(field.name_offset).unwrap_or("")
@@ -323,6 +324,8 @@ impl<'a> TagField<'a> {
         Some(TagStruct { layout: self.layout, struct_data, struct_raw })
     }
 
+    /// Step into a block field. `None` if this isn't a block or if
+    /// the on-disk sub-chunk for it is missing.
     pub fn as_block(&self) -> Option<TagBlock<'a>> {
         if self.layout.fields[self.field_index].field_type != TagFieldType::Block {
             return None;
@@ -334,6 +337,8 @@ impl<'a> TagField<'a> {
         Some(TagBlock { layout: self.layout, block_data })
     }
 
+    /// Step into a fixed-count array field. `None` if this isn't an
+    /// array or if the sub-chunk is missing.
     pub fn as_array(&self) -> Option<TagArray<'a>> {
         let field = &self.layout.fields[self.field_index];
         if field.field_type != TagFieldType::Array {
@@ -370,6 +375,8 @@ impl<'a> TagField<'a> {
         }
     }
 
+    /// Step into a `pageable_resource` field. `None` if this isn't a
+    /// resource field or if the sub-chunk is missing.
     pub fn as_resource(&self) -> Option<TagResource<'a>> {
         if self.layout.fields[self.field_index].field_type != TagFieldType::PageableResource {
             return None;
@@ -463,9 +470,13 @@ impl<'a> TagBlock<'a> {
         crate::TagBlockDefinition::new(self.layout, self.block_data.block_index as usize)
     }
 
+    /// Number of elements currently in this block.
     pub fn len(&self) -> usize { self.block_data.elements.len() }
+
+    /// `true` when this block has zero elements.
     pub fn is_empty(&self) -> bool { self.block_data.elements.is_empty() }
 
+    /// Get the element at `index`. `None` if out of range.
     pub fn element(&self, index: usize) -> Option<TagStruct<'a>> {
         let struct_data = self.block_data.elements.get(index)?;
         let size = block_element_size(self.layout, self.block_data);
@@ -474,6 +485,7 @@ impl<'a> TagBlock<'a> {
         Some(TagStruct { layout: self.layout, struct_data, struct_raw })
     }
 
+    /// Iterate every element in declaration order.
     pub fn iter(&self) -> impl Iterator<Item = TagStruct<'a>> + 'a {
         let TagBlock { layout, block_data } = *self;
         block_data.iter_elements(layout).map(move |(struct_raw, struct_data)| {
@@ -505,9 +517,14 @@ impl<'a> TagArray<'a> {
         crate::TagArrayDefinition::new(self.layout, self.array_layout_index as usize)
     }
 
+    /// Schema-declared element count.
     pub fn len(&self) -> usize { self.elements.len() }
+
+    /// `true` when the schema declares zero elements (rare but
+    /// permitted).
     pub fn is_empty(&self) -> bool { self.elements.is_empty() }
 
+    /// Get the element at `index`. `None` if out of range.
     pub fn element(&self, index: usize) -> Option<TagStruct<'a>> {
         let struct_data = self.elements.get(index)?;
         let size = self.layout.struct_layouts[self.element_struct_index() as usize].size;
@@ -516,6 +533,7 @@ impl<'a> TagArray<'a> {
         Some(TagStruct { layout: self.layout, struct_data, struct_raw })
     }
 
+    /// Iterate every element in declaration order.
     pub fn iter(&self) -> impl Iterator<Item = TagStruct<'a>> + 'a {
         let TagArray { layout, array_layout_index, array_raw, elements } = *self;
         let size = element_struct_size(layout, array_layout_index);
@@ -571,6 +589,9 @@ pub struct TagResource<'a> {
 }
 
 impl<'a> TagResource<'a> {
+    /// Which on-disk shape this resource carries (Null, Exploded, or
+    /// XSync). Distinguishes whether [`Self::as_struct`] /
+    /// [`Self::exploded_payload`] / [`Self::xsync_payload`] return data.
     pub fn kind(&self) -> TagResourceKind {
         match self.chunk {
             TagResourceChunk::Null => TagResourceKind::Null,
@@ -639,24 +660,37 @@ impl<'a> TagResource<'a> {
     }
 }
 
+/// Wire-format shape of a `pageable_resource` field.
 #[derive(Debug, Clone, Copy)]
 pub enum TagResourceKind {
+    /// `tg\0c` — empty / sentinel resource, no payload to walk.
     Null,
+    /// `tgrc` — exploded resource. Carries a `tgdt` payload (header
+    /// struct bytes + opaque per-group bytes) plus a nested `tgst`.
     Exploded,
+    /// `tgxc` — XSync resource. Opaque payload.
     Xsync,
 }
 
 /// Enum or flags option set, as surfaced to the CLI `options`
 /// command and to "did you mean?" value parsing.
 pub enum TagOptions<'a> {
+    /// Enum field — a single integer value picked from a named set.
+    /// `current` is the stored value (or `None` if it didn't resolve);
+    /// `names` lists every variant name in declaration order.
     Enum { names: Vec<&'a str>, current: Option<i64> },
+    /// Flags field — one entry per named bit with its current state.
     Flags(Vec<TagFlagOption<'a>>),
 }
 
+/// One named bit in a flags field's declaration.
 #[derive(Debug, Clone, Copy)]
 pub struct TagFlagOption<'a> {
+    /// Display name of this bit.
     pub name: &'a str,
+    /// Bit position (0-based).
     pub bit: u32,
+    /// `true` if this bit is set in the field's current value.
     pub is_set: bool,
 }
 
@@ -667,8 +701,13 @@ pub struct TagFlag<'a> {
 }
 
 impl<'a> TagFlag<'a> {
+    /// Display name of this bit.
     pub fn name(&self) -> &'a str { self.field.flag_from_bit(self.bit) }
+
+    /// Bit position (0-based) within the flags field.
     pub fn bit(&self) -> u32 { self.bit }
+
+    /// `true` if this bit is set in the field's current value.
     pub fn is_set(&self) -> bool {
         self.field.value().and_then(|v| v.flag_bit(self.bit)).unwrap_or(false)
     }
@@ -770,6 +809,7 @@ pub struct TagFieldMut<'a> {
 }
 
 impl<'a> TagFieldMut<'a> {
+    /// Re-borrow as a read-only [`TagField`] for inspection.
     pub fn as_ref(&self) -> TagField<'_> {
         TagField {
             layout: self.layout,
@@ -827,6 +867,7 @@ impl<'a> TagFieldMut<'a> {
         Some(TagStructMut { layout: self.layout, struct_data, struct_raw })
     }
 
+    /// Same shape-vs-missing distinction as [`TagField::as_block`].
     pub fn as_block_mut(&mut self) -> Option<TagBlockMut<'_>> {
         if self.layout.fields[self.field_index].field_type != TagFieldType::Block {
             return None;
@@ -844,6 +885,7 @@ impl<'a> TagFieldMut<'a> {
         Some(TagBlockMut { layout: self.layout, block_data })
     }
 
+    /// Same shape-vs-missing distinction as [`TagField::as_array`].
     pub fn as_array_mut(&mut self) -> Option<TagArrayMut<'_>> {
         let field = &self.layout.fields[self.field_index];
         if field.field_type != TagFieldType::Array {
@@ -890,9 +932,13 @@ impl<'a> TagBlockMut<'a> {
         crate::TagBlockDefinition::new(self.layout, self.block_data.block_index as usize)
     }
 
+    /// Number of elements currently in this block.
     pub fn len(&self) -> usize { self.block_data.elements.len() }
+
+    /// `true` when this block has zero elements.
     pub fn is_empty(&self) -> bool { self.block_data.elements.is_empty() }
 
+    /// Mutable handle to the element at `index`. `None` if out of range.
     pub fn element_mut(&mut self, index: usize) -> Option<TagStructMut<'_>> {
         if index >= self.block_data.elements.len() {
             return None;
@@ -950,6 +996,7 @@ impl<'a> TagBlockMut<'a> {
         Ok(index + 1)
     }
 
+    /// Remove the element at `index`. Error on out-of-range.
     pub fn delete_element(&mut self, index: usize) -> Result<(), TagIndexError> {
         let len = self.block_data.elements.len();
         if index >= len {
@@ -986,6 +1033,7 @@ impl<'a> TagBlockMut<'a> {
         Ok(())
     }
 
+    /// Remove every element.
     pub fn clear(&mut self) { self.block_data.clear(); }
 }
 
@@ -1005,9 +1053,14 @@ impl<'a> TagArrayMut<'a> {
         crate::TagArrayDefinition::new(self.layout, self.array_layout_index as usize)
     }
 
+    /// Schema-declared element count.
     pub fn len(&self) -> usize { self.elements.len() }
+
+    /// `true` when the schema declares zero elements (rare but
+    /// permitted).
     pub fn is_empty(&self) -> bool { self.elements.is_empty() }
 
+    /// Mutable handle to the element at `index`. `None` if out of range.
     pub fn element_mut(&mut self, index: usize) -> Option<TagStructMut<'_>> {
         if index >= self.elements.len() {
             return None;
@@ -1070,16 +1123,20 @@ pub struct TagFlagMut<'a> {
 }
 
 impl<'a> TagFlagMut<'a> {
+    /// Display name of this bit.
     pub fn name(&self) -> &str {
         self.field.as_ref().flag_from_bit(self.bit)
     }
 
+    /// Bit position (0-based) within the flags field.
     pub fn bit(&self) -> u32 { self.bit }
 
+    /// `true` if this bit is currently set.
     pub fn is_set(&self) -> bool {
         self.field.as_ref().value().and_then(|v| v.flag_bit(self.bit)).unwrap_or(false)
     }
 
+    /// Set or clear this bit.
     pub fn set(&mut self, on: bool) {
         let Some(mut value) = self.field.as_ref().value() else { return };
         if value.set_flag_bit(self.bit, on) {
@@ -1119,6 +1176,7 @@ impl<'a> TagField<'a> {
 // Errors
 //================================================================================
 
+/// Failure modes for [`TagFieldMut::set`].
 #[derive(Debug)]
 pub enum TagSetError {
     /// The supplied [`TagFieldData`] variant doesn't match the
@@ -1128,7 +1186,9 @@ pub enum TagSetError {
     NotAssignable,
 }
 
+/// Failure modes for block / array structural edits.
 #[derive(Debug)]
 pub enum TagIndexError {
+    /// An index argument was outside the block / array's `0..len` range.
     OutOfRange { index: usize, len: usize },
 }

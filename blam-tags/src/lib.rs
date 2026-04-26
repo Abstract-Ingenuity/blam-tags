@@ -75,6 +75,10 @@ pub mod file;
 pub mod api;
 pub mod definition;
 pub mod bitmap;
+pub mod animation;
+pub(crate) mod geometry;
+pub mod jms;
+pub mod ass;
 
 // Facade re-exports — the recommended surface for editing tags.
 pub use api::{
@@ -95,3 +99,16 @@ pub use file::TagFile;
 pub use layout::TagLayout;
 pub use schema::{TagGroupMeta, TagSchemaError};
 pub use bitmap::{Bitmap, BitmapError, BitmapFormat, BitmapImage};
+pub use jms::{
+    JmsBox, JmsCapsule, JmsConvex, JmsError, JmsFile, JmsHinge, JmsMarker, JmsMaterial,
+    JmsNode, JmsRagdoll, JmsSphere, JmsTriangle, JmsVertex,
+};
+pub use ass::{
+    AssError, AssFile, AssInstance, AssLight, AssLightKind, AssMaterial, AssObject,
+    AssObjectPayload, AssTriangle, AssVertex,
+};
+pub use animation::{
+    Animation, AnimationClip, AnimationError, AnimationGroup, AnimationTracks,
+    AnimatedStreamStatus, BitArray, Codec, JmaKind, MovementData, MovementFrame, MovementKind,
+    NodeFlags, NodeTransform, PackedDataSizes, Pose, SizeLayout, Skeleton, SkeletonNode,
+};

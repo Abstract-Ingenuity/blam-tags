@@ -41,22 +41,28 @@ The example commands below elide `--game` for readability — add it to every in
 
 | Command | Description |
 |-|-|
-| [`header`](#header--file-metadata) | Show tag/cache file header metadata |
-| [`list`](#list--walk-a-directory-for-tags) | Walk a directory for tags; filter + list, or summarize by group |
+| [`repl`](#repl--interactive-shell) | Interactive shell against a loaded tag |
+| [`new`](#new--create-a-fresh-tag-from-a-schema) | Create a fresh tag from a schema JSON |
 | [`inspect`](#inspect--show-field-tree) | Show the field tree |
 | [`get`](#get--read-a-field-value) | Read a field value |
 | [`set`](#set--write-a-field-value) | Write a field value |
 | [`flag`](#flag--get-or-set-a-flag-bit) | Get or set a flag bit by name |
 | [`options`](#options--list-enumflag-options) | List enum/flag options for a field |
 | [`block`](#block--block-element-operations) | Block element operations (count, add, insert, duplicate, delete, clear, swap, move) |
+| [`deps`](#deps--list-tag-references) | List every `tag_reference` in a tag |
+| [`list`](#list--walk-a-directory-for-tags) | Walk a directory for tags; filter + list, or summarize by group |
+| [`find`](#find--search-values-across-a-directory) | Search a directory of tags for fields whose value matches a query |
+| [`check`](#check--integrity-validator) | Integrity check — flag enum / flag / real / reference anomalies |
+| [`header`](#header--file-metadata) | Show tag/cache file header metadata |
 | [`layout-diff`](#layout-diff--compare-tag-schemas) | Diff the **schemas** of two tag files |
 | [`data-diff`](#data-diff--compare-two-tag-values) | Diff the **values** of two tag files |
-| [`deps`](#deps--list-tag-references) | List every `tag_reference` in a tag |
-| [`find`](#find--search-values-across-a-directory) | Search a directory of tags for fields whose value matches a query |
 | [`export`](#export--dump-tag-state-as-replay-commands) | Dump a tag's state as replayable `set` commands |
 | [`extract-bitmap`](#extract-bitmap--bitmap-to-dds) | Extract a `.bitmap` tag's images as DDS files (one per image) |
-| [`check`](#check--integrity-validator) | Integrity check — flag enum / flag / real / reference anomalies |
-| [`new`](#new--create-a-fresh-tag-from-a-schema) | Create a fresh tag from a schema JSON |
+| [`extract-jms`](#extract-jms--model-to-source-tree-jms-files) | Extract a `.model` tag's render / collision / physics children as JMS files in the H3EK source-tree layout |
+| [`extract-ass`](#extract-ass--scenario_structure_bsp-to-ass) | Extract a `.scenario` tag's structure BSPs as ASS files (one per BSP, with paired lighting baked in) |
+| [`extract-data`](#extract-data--dump-a-tag_data-field) | Write the bytes of a single `tag_data` field to a file |
+| [`list-animations`](#list-animations--enumerate-jmad-animations) | List the animations in a `model_animation_graph` tag |
+| [`extract-animation`](#extract-animation--decode-and-export-an-animation) | Decode a single jmad animation; write JMA-family text or JSON |
 | [`add-dependency-list`](#optional-stream-commands) | Attach an empty dependency-list stream |
 | [`remove-dependency-list`](#optional-stream-commands) | Drop the dependency-list stream |
 | [`rebuild-dependency-list`](#optional-stream-commands) | Repopulate the dependency list from the tag's own tag_references |
@@ -64,73 +70,71 @@ The example commands below elide `--game` for readability — add it to every in
 | [`remove-import-info`](#optional-stream-commands) | Drop the import-info stream |
 | [`add-asset-depot-storage`](#optional-stream-commands) | Attach an empty asset-depot-storage stream |
 | [`remove-asset-depot-storage`](#optional-stream-commands) | Drop the asset-depot-storage stream |
-| [`repl`](#repl--interactive-shell) | Interactive shell against a loaded tag |
 
 ---
 
-### `header` — File metadata
+### `repl` — Interactive shell
 
 | Argument | Description |
 |-|-|
-| `<FILE>` | Path to a tag or cache file. |
+| `[FILE]` | Optional tag to load at startup. |
 
-| Long | Description |
+Opens a persistent session against a loaded tag. Tag-bound commands always operate on the loaded tag — the file positional is filled in automatically, so `inspect materials[0]` drills into the loaded tag's `materials[0]` element rather than being misread as `inspect materials[0] (no path)`. To work on a different tag, use `open <path>` to switch. Dirty-tracking means the REPL asks for confirmation before discarding unsaved edits. History is persisted to `~/.blam-tag-shell-history`.
+
+**Session verbs:**
+
+| | |
 |-|-|
-| `--json` | Emit JSON. |
+| `open <path>` | Load a tag. |
+| `close` | Close the current tag. |
+| `save [path]` | Write the tag (back to source, or to `path`). |
+| `revert` | Reload from disk, discarding edits. |
+| `exit` / `quit` | Leave the REPL (prompts on unsaved changes; `exit --force` skips the prompt). |
+| `help` / `?` | Show inline help. |
 
-```sh
-$ blam-tag-shell header masterchief.biped
-Tag File
-  Group:         bipd
-  Group version: 3
-  Build:         1.1
-  Version:       11707
-  Checksum:      0x2858868A
-  File size:     35301 bytes
-  Streams:       tag!, want
+**Navigation** (Unix-cd semantics — leading `/` resets to absolute):
+
+| | |
+|-|-|
+| `edit-block <path>` | Push a sub-struct / block-element / array-element onto the nav stack. Alias: `cd`. |
+| `back` | Pop one level. |
+| `exit-to <segment>` | Pop until the named segment is the tail; `exit-to root` clears. |
+| `pwd` | Show the current nav path. |
+
+The prompt reflects the current `--game`, currently-loaded tag, dirty state (`*` after the tag name), and nav stack:
+
+```
+halo3_mcc> open masterchief.biped
+halo3_mcc :: masterchief.biped> cd unit/seats[0]
+halo3_mcc :: masterchief.biped/unit/seats[0]> flag "flags" "invisible" toggle
+set unit/seats[0]/flags.invisible = on (was off)
+halo3_mcc :: masterchief.biped*/unit/seats[0]> save
+saved to masterchief.biped
+halo3_mcc :: masterchief.biped/unit/seats[0]> exit
 ```
 
 ---
 
-### `list` — Walk a directory for tags
+### `new` — Create a fresh tag from a schema
 
 | Argument | Description |
 |-|-|
-| `<DIR>` | Directory to walk (recursive). |
+| `<GROUP>` | Group name — matches the JSON filename under `definitions/<GAME>/` (e.g. `biped`, `render_model`, `scenario`). |
 
 | Long | Description |
 |-|-|
-| `--group <TAG>` | Filter by group. Accepts either form: long name (`render_model`) or 4-byte group tag (`mode`). |
-| `--starts-with <S>` | Only filenames starting with `S`. |
-| `--contains <S>` | Only paths containing `S`. |
-| `--ends-with <S>` | Only filenames ending with `S` (e.g. extension matching). |
-| `--regex <PAT>` | Only full paths matching `PAT`. |
-| `--from-file <F>` | Read candidate paths from `F` instead of walking. |
-| `--summary` | Group tally instead of a path list. |
-| `--sort-by-count` | Sort summary rows by count (desc) instead of name. |
-| `--json` | Emit JSON. |
+| `--output <FILE>` | Write to this path. Default: `./<GROUP>.<GROUP>` in the cwd. Refuses to overwrite an existing file. |
 
-`list` is path-only — it never opens a tag file. For standalone tag files the file extension *is* the group name, so a full corpus walk runs in well under a second.
+Game comes from the global `--game` flag. Resolves the schema at `definitions/<GAME>/<GROUP>.json`, builds a zero-filled tag (one default-initialized root element, no optional streams), and writes it. Header gets `group_tag` / `group_version` from the schema, `signature = 'BLAM'`, and `checksum = 0`.
+
+Run from the workspace root (or wherever your `definitions/` tree lives) — paths are resolved relative to cwd.
 
 ```sh
-# Plain list of every biped under a tags root (long name or 4cc both work)
-$ blam-tag-shell list /path/to/tags --group biped
-$ blam-tag-shell list /path/to/tags --group bipd
+$ blam-tag-shell --game halo3_mcc new render_model
+created render_model.render_model from definitions/halo3_mcc/render_model.json
 
-# Group tally
-$ blam-tag-shell list /path/to/tags/globals --summary
-GROUP                               COUNT
---------------------------------------------
-breakable_surface                       2
-collision_damage                       22
-damage_effect                          10
-globals                                 1
-wind                                    1
---------------------------------------------
-14 types                               99
-
-# JSON-sorted by most common
-$ blam-tag-shell list /path/to/tags --summary --sort-by-count --json
+$ blam-tag-shell --game halo3_mcc new biped --output characters/chief.biped
+created characters/chief.biped from definitions/halo3_mcc/biped.json
 ```
 
 ---
@@ -249,8 +253,8 @@ $ blam-tag-shell set some.tag "block index field" none
 
 # api_interop: `reset` writes BCS's canonical {0, UINT_MAX, 0}
 #              or a comma triple (decimal or 0x…)
-$ blam-tag-shell set asset.polyart "vertex buffer interop" reset
-$ blam-tag-shell set asset.polyart "vertex buffer interop" 0xDEADBEEF,0x12345678,0
+$ blam-tag-shell set hunter.render_model "vertex buffer interop" reset
+$ blam-tag-shell set hunter.render_model "vertex buffer interop" 0xDEADBEEF,0x12345678,0
 
 # Preview without writing
 $ blam-tag-shell set masterchief.biped "jump velocity" 0.5 --dry-run
@@ -352,6 +356,154 @@ $ blam-tag-shell block masterchief.biped "contact points" clear --dry-run
 
 ---
 
+### `deps` — List tag references
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+
+| Long | Description |
+|-|-|
+| `--unique` | De-duplicate repeated references. |
+| `--json` | Emit JSON. |
+
+```sh
+$ blam-tag-shell deps masterchief.biped
+unit/object/model: objects\characters\masterchief\masterchief.model
+unit/object/collision damage: globals\collision_damage\biped_player.collision_damage
+…
+```
+
+References render as `<path>.<group_name>` (canonical filename form) when the group resolves in the loaded tag index, falling back to `<group_tag>:<path>` (legacy form) otherwise.
+
+---
+
+### `list` — Walk a directory for tags
+
+| Argument | Description |
+|-|-|
+| `<DIR>` | Directory to walk (recursive). |
+
+| Long | Description |
+|-|-|
+| `--group <TAG>` | Filter by group. Accepts either form: long name (`render_model`) or 4-byte group tag (`mode`). |
+| `--starts-with <S>` | Only filenames starting with `S`. |
+| `--contains <S>` | Only paths containing `S`. |
+| `--ends-with <S>` | Only filenames ending with `S` (e.g. extension matching). |
+| `--regex <PAT>` | Only full paths matching `PAT`. |
+| `--from-file <F>` | Read candidate paths from `F` instead of walking. |
+| `--summary` | Group tally instead of a path list. |
+| `--sort-by-count` | Sort summary rows by count (desc) instead of name. |
+| `--json` | Emit JSON. |
+
+`list` is path-only — it never opens a tag file. For standalone tag files the file extension *is* the group name, so a full corpus walk runs in well under a second.
+
+```sh
+# Plain list of every biped under a tags root (long name or 4cc both work)
+$ blam-tag-shell list /path/to/tags --group biped
+$ blam-tag-shell list /path/to/tags --group bipd
+
+# Group tally
+$ blam-tag-shell list /path/to/tags/globals --summary
+GROUP                               COUNT
+--------------------------------------------
+breakable_surface                       2
+collision_damage                       22
+damage_effect                          10
+globals                                 1
+wind                                    1
+--------------------------------------------
+14 types                               99
+
+# JSON-sorted by most common
+$ blam-tag-shell list /path/to/tags --summary --sort-by-count --json
+```
+
+---
+
+### `find` — Search values across a directory
+
+| Argument | Description |
+|-|-|
+| `<DIR>` | Directory to walk. |
+| `<VALUE>` | Substring (or regex with `--regex`) to search for. |
+
+| Long | Description |
+|-|-|
+| `--group <TAG>` | Only search tags of this group. |
+| `--field-name <PAT>` | Only check fields whose name matches `PAT` (regex). |
+| `--regex` | Interpret `<VALUE>` as a regex. |
+| `--json` | Emit JSON. |
+| `--strict` | Fail on any unreadable tag. |
+
+```sh
+# Which weapons reference a specific sound tag?
+$ blam-tag-shell find /path/to/tags 'weapons/fire_sound' \
+    --group weap --field-name 'sound'
+
+# Regex match — all numeric velocities > 5
+$ blam-tag-shell find /path/to/tags '^[5-9]\.' \
+    --field-name 'velocity' --regex
+```
+
+---
+
+### `check` — Integrity validator
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag file. |
+
+| Long | Description |
+|-|-|
+| `--tags-root <DIR>` | Tags root directory; required for tag-reference existence checks. |
+| `--only <KINDS>` | Comma-separated subset: `enum`, `flag`, `real`, `reference` (default: all). |
+| `--json` | Emit JSON. |
+| `--strict` | Non-zero exit status on any finding (for CI). |
+
+Surfaces:
+
+- **Enum out of range** — the stored int didn't resolve to a named variant.
+- **Unknown flag bits** — bits set without a declared name.
+- **Non-finite reals** — `NaN` / `±inf` in any real field.
+- **Missing tag references** — with `--tags-root`, references that don't resolve to a file on disk.
+
+```sh
+$ blam-tag-shell check floodcombat_elite.biped --tags-root /path/to/tags
+[reference] unit/dialogue variants[0]/dialogue: no file with stem 'sound\dialog\combat\floodcombat_elite'
+
+1 finding(s)
+
+# Fail the build if anything shows up
+$ blam-tag-shell check masterchief.biped --tags-root /path/to/tags --strict
+```
+
+---
+
+### `header` — File metadata
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a tag or cache file. |
+
+| Long | Description |
+|-|-|
+| `--json` | Emit JSON. |
+
+```sh
+$ blam-tag-shell header masterchief.biped
+Tag File
+  Group:         bipd
+  Group version: 3
+  Build:         1.1
+  Version:       11707
+  Checksum:      0x2858868A
+  File size:     35301 bytes
+  Streams:       tag!, want
+```
+
+---
+
 ### `layout-diff` — Compare tag schemas
 
 | Argument | Description |
@@ -389,53 +541,6 @@ $ blam-tag-shell data-diff h3/masterchief.biped h3/floodcombat_elite.biped
 73 changed, 76 only in a, 6 only in b
 
 $ blam-tag-shell data-diff a.biped b.biped --only 'unit/unit camera'
-```
-
----
-
-### `deps` — List tag references
-
-| Argument | Description |
-|-|-|
-| `<FILE>` | Path to a tag file. |
-
-| Long | Description |
-|-|-|
-| `--unique` | De-duplicate repeated references. |
-| `--json` | Emit JSON. |
-
-```sh
-$ blam-tag-shell deps masterchief.biped
-unit/object/model: hlmt:objects\characters\masterchief\masterchief
-unit/object/collision damage: cddf:globals\collision_damage\biped_player
-…
-```
-
----
-
-### `find` — Search values across a directory
-
-| Argument | Description |
-|-|-|
-| `<DIR>` | Directory to walk. |
-| `<VALUE>` | Substring (or regex with `--regex`) to search for. |
-
-| Long | Description |
-|-|-|
-| `--group <TAG>` | Only search tags of this group. |
-| `--field-name <PAT>` | Only check fields whose name matches `PAT` (regex). |
-| `--regex` | Interpret `<VALUE>` as a regex. |
-| `--json` | Emit JSON. |
-| `--strict` | Fail on any unreadable tag. |
-
-```sh
-# Which weapons reference a specific sound tag?
-$ blam-tag-shell find /path/to/tags 'weapons/fire_sound' \
-    --group weap --field-name 'sound'
-
-# Regex match — all numeric velocities > 5
-$ blam-tag-shell find /path/to/tags '^[5-9]\.' \
-    --field-name 'velocity' --regex
 ```
 
 ---
@@ -516,58 +621,192 @@ extracted/weapon_atlas/1.dds: 256×256 dxt5 (2D texture, 9 mips)
 
 ---
 
-### `check` — Integrity validator
+### `extract-jms` — model to source-tree JMS files
 
 | Argument | Description |
 |-|-|
-| `<FILE>` | Path to a tag file. |
+| `<FILE>` | Path to a `.model` (hlmt) tag file. Other tag groups are rejected — extraction must route through `.model` so the world-space skeleton is available to coll/phmo. |
+| `[KINDS...]` | Optional positional filters: `render`, `collision`, `physics`, or `all`. Default: all three. |
 
 | Long | Description |
 |-|-|
-| `--tags-root <DIR>` | Tags root directory; required for tag-reference existence checks. |
-| `--only <KINDS>` | Comma-separated subset: `enum`, `flag`, `real`, `reference` (default: all). |
-| `--json` | Emit JSON. |
-| `--strict` | Non-zero exit status on any finding (for CI). |
+| `--output <DIR>` | Output root directory (default: current directory). |
+| `--flat` | Emit `<DIR>/<stem>.<kind>.jms` in a single dir instead of the nested `<DIR>/<stem>/<kind>/<stem>.JMS` source-tree layout. |
 
-Surfaces:
+Reconstructs JMS files (Bungie static-geometry text format, version 8213) for the model's referenced render / collision / physics children. Output mirrors the H3EK / Tool.exe source-tree convention so the result is re-importable as artist source.
 
-- **Enum out of range** — the stored int didn't resolve to a named variant.
-- **Unknown flag bits** — bits set without a declared name.
-- **Non-finite reals** — `NaN` / `±inf` in any real field.
-- **Missing tag references** — with `--tags-root`, references that don't resolve to a file on disk.
+Default layout:
+
+```
+<DIR>/<stem>/render/<stem>.JMS         ← render geometry + skeleton + markers
+<DIR>/<stem>/collision/<stem>.JMS      ← collision geometry (BSP triangles, world-space)
+<DIR>/<stem>/physics/<stem>.JMS        ← Havok primitives + constraints
+```
+
+Each JMS is per-purpose (matches what Tool.exe expects in each subdir):
+
+- **render**: NODES + MATERIALS + MARKERS + VERTICES + TRIANGLES (no collision/physics sections)
+- **collision**: NODES + MATERIALS + VERTICES + TRIANGLES (collision geometry only, world-space via skeleton)
+- **physics**: NODES + collision primitives (CAPSULES / BOXES / CONVEX / RAGDOLLS / HINGES — no triangle mesh)
+
+The skeleton is built once from the model's render_model and shared across all three. Coll and phmo place their data in world space using bone-name-keyed lookups against that skeleton — see `JmsFile::from_collision_model_with_skeleton` / `from_physics_model_with_skeleton` in the library for direct callers.
+
+Missing references in the .model are silently skipped with a status note (e.g. a model with no physics_model emits only render + collision).
 
 ```sh
-$ blam-tag-shell check floodcombat_elite.biped --tags-root /path/to/tags
-[reference] unit/dialogue variants[0]/dialogue: no file with stem 'sound\dialog\combat\floodcombat_elite'
+# Default — all three kinds, source-tree layout
+$ blam-tag-shell extract-jms masterchief.model --output extracted/
+extracted/masterchief/render/masterchief.JMS: [render] 51 nodes, 20 mats, 37 markers, 18702 verts, 6234 tris
+extracted/masterchief/collision/masterchief.JMS: [collision] 51 nodes, 4 mats, 660 verts, 220 tris
+extracted/masterchief/physics/masterchief.JMS: [physics] 51 nodes, 1 mats, 9 capsules, 1 convex, 5 ragdolls, 4 hinges
 
-1 finding(s)
+# Just physics
+$ blam-tag-shell extract-jms masterchief.model physics --output extracted/
 
-# Fail the build if anything shows up
-$ blam-tag-shell check masterchief.biped --tags-root /path/to/tags --strict
+# Render + collision, flat layout
+$ blam-tag-shell extract-jms masterchief.model render collision --output extracted/ --flat
+extracted/masterchief.render.jms: [render] 51 nodes, …
+extracted/masterchief.collision.jms: [collision] 51 nodes, …
+```
+
+Render-side pipeline: walks `regions × permutations × meshes × parts`, decompresses bounds-quantized positions/UVs against `compression info[0]`, converts triangle strips to lists with restart-aware parity + degenerate filtering, and emits one JMS material per `(shader, perm, region)` cell. Collision-side pipeline: walks each BSP's `surfaces[]` via the edge-ring algorithm, fan-triangulates each ring, and emits world-space vertices through the render_model-derived skeleton. Physics-side pipeline: emits Havok shape primitives (sphere/box/pill/polyhedron) plus ragdoll/hinge constraints in world-space. Validated across the H3 MCC corpus: 4354/4354 reconstructions; 89.7% bbox match against embedded source JMS, 86.8% with ≥99% position coverage at 10cm precision.
+
+Notes:
+
+- Material `material_name` follows the `(slot) <perm> <region>` H3 Blender exporter convention. The `(N)` slot value is a deterministic 1-based counter — the original artist counter from `bpy.data.materials` is round-trip metadata only and unrecoverable from the tag.
+- Transparent parts (`part_type=4`) are emitted with both face windings, matching what MCC's importer baked from the artist's `%` two-sided directive. Same behavior as TagTool.
+- Marker `node_index` references the tag's node table (which differs from the artist's depth-first JMS node ordering).
+- For tag-direct extraction (skip the .model wrapper), call the library functions `JmsFile::from_render_model` / `from_collision_model_with_skeleton` / `from_physics_model_with_skeleton` directly.
+
+---
+
+### `extract-ass` — scenario_structure_bsp to ASS
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a `.scenario_structure_bsp` (sbsp) tag file. Other tag groups are rejected. |
+
+| Long | Description |
+|-|-|
+| `--output <DIR>` | Output root directory (default: current directory). |
+| `--flat` | Emit `<DIR>/<stem>.ass` in a single dir instead of the nested `<DIR>/<stem>/structure/<stem>.ASS` source-tree layout. |
+
+Reconstructs an ASS file (Bungie Amalgam, version 7 — H3's static-scene authoring format, the level-geometry counterpart to JMS) from the BSP's inline cluster geometry.
+
+Default layout (re-importable as artist source):
+```
+<DIR>/<stem>/structure/<stem>.ASS
+```
+
+Sections emitted:
+- **HEADER** — version 7 + tool/user/machine placeholders
+- **MATERIALS** — one per `materials[]` entry on the sbsp, with `BM_FLAGS` / `BM_LMRES` (real lightmap-resolution from the material `properties[type=0]`) plus `BM_LIGHTING_BASIC` / `_ATTEN` / `_FRUS` strings layered in for emissive materials from the paired `.scenario_structure_lighting_info`
+- **OBJECTS** — cluster MESHes (one per `clusters[]`), per-IGD-def MESHes (one per `instanced geometries definitions[]`, each in its own per-definition compression bounds), `+portal_N` MESHes (one per cluster portal, fan-triangulated), `+weather_N` MESHes (convex hull of the polyhedron plane set), `@CollideOnly` MESH (merged structure collision BSP), SPHERE primitives for sbsp markers (matching the `frame construct` convention), GENERIC_LIGHT (SPOT/DIRECT/OMNI/AMBIENT) entries from the `.stli` definitions, and xref-only OBJECTs for `environment_objects[]` palette entries
+- **INSTANCES** — Scene Root parent (object_index = -1), one identity-transform instance per cluster, one instance per `instanced geometry instances[]` placement (3-vec3 rotation matrix → quaternion, position × 100, uniform scale), one instance per portal / weather polyhedron / marker / collision BSP / environment_object placement, and one instance per stli `generic_light_instances[]` entry (forward+up → quat, position × 100)
+
+Validated across 147 / 147 BSPs across 49 H3 scenarios — every BSP produces a clean ASS file. Source ASS files have a different mesh granularity (artist-named meshes vs our cluster aggregates); that's compile-time information the tag doesn't carry.
+
+```sh
+$ blam-tag-shell extract-ass construct.scenario_structure_bsp --output extracted/
+extracted/construct/structure/construct.ASS: 94 mats, 147 objects, 557 instances, 87992 verts, 56316 tris
 ```
 
 ---
 
-### `new` — Create a fresh tag from a schema
+### `extract-data` — Dump a `tag_data` field
 
 | Argument | Description |
 |-|-|
-| `<GROUP>` | Group name — matches the JSON filename under `definitions/<GAME>/` (e.g. `biped`, `render_model`, `scenario`). |
+| `<FILE>` | Path to a tag file. |
+| `<PATH>` | Field path resolving to a `tag_data` leaf. |
 
 | Long | Description |
 |-|-|
-| `--output <FILE>` | Write to this path. Default: `./<GROUP>.<GROUP>` in the cwd. Refuses to overwrite an existing file. |
+| `--output <PATH>` | Output file path. Default: `<tag_stem>.<field_name>.bin` in cwd (field-name non-alphanumerics replaced with `_`). |
 
-Game comes from the global `--game` flag. Resolves the schema at `definitions/<GAME>/<GROUP>.json`, builds a zero-filled tag (one default-initialized root element, no optional streams), and writes it. Header gets `group_tag` / `group_version` from the schema, `signature = 'BLAM'`, and `checksum = 0`.
-
-Run from the workspace root (or wherever your `definitions/` tree lives) — paths are resolved relative to cwd.
+Writes the raw bytes of one `tag_data` field to a file for inspection. Errors with the field's actual type when the path resolves to a non-`tag_data` leaf, and uses the same "did you mean?" suggester as `get` for unknown paths.
 
 ```sh
-$ blam-tag-shell --game halo3_mcc new render_model
-created render_model.render_model from definitions/halo3_mcc/render_model.json
+$ blam-tag-shell extract-data masterchief.bitmap "processed pixel data"
+masterchief.processed_pixel_data.bin: 32760 bytes
 
-$ blam-tag-shell --game halo3_mcc new biped --output characters/chief.biped
-created characters/chief.biped from definitions/halo3_mcc/biped.json
+# Pull the raw codec stream out of one animation's resource group_member
+$ blam-tag-shell extract-data elite.model_animation_graph \
+    "tag resource groups[0]/tag_resource/group_members[0]/animation_data" \
+    --output /tmp/elite0.bin
+/tmp/elite0.bin: 106860 bytes
+
+# Wrong-type leaf surfaces clearly
+$ blam-tag-shell extract-data elite.model_animation_graph "definitions/animations"
+Error: field 'definitions/animations' is block (not a `tag_data` field)
+```
+
+---
+
+### `list-animations` — Enumerate jmad animations
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a `.model_animation_graph` tag file. |
+
+| Long | Description |
+|-|-|
+| `--json` | Emit JSON (full per-animation metadata + `data sizes` breakdown). |
+
+Walks `definitions/animations` (or `resources/animations` for older inline-layout tags) and prints one row per animation. Header-only — no codec decode. Inheriting jmads (zero local animations + non-null `parent animation graph`) print a one-line "(no animations — inherits from …)" notice.
+
+Columns: `idx` (animation index), `cdc` (first byte of the static codec stream), `frame` (engine-recorded frame count), `node` (engine-recorded node count), `type` (animation type — `base` / `overlay` / `replacement` / …), `movement` (frame info type — `none` / `dx,dy` / `dx,dy,dyaw` / …), `blob` (raw `animation_data` byte count), `name` (resolved string-id name).
+
+```sh
+$ blam-tag-shell list-animations masterchief.model_animation_graph
+  idx  cdc  frame node  type        movement             blob  name
+    0    1    121   55  base        dx,dy                106860  any:any:any:morph
+    1    1    143   55  base        none                 115276  any:any:infection_wrestle
+    …
+
+# Inheriting tag
+$ blam-tag-shell list-animations objects/.../foo.model_animation_graph
+(no animations — inherits from objects/.../parent.model_animation_graph)
+```
+
+---
+
+### `extract-animation` — Decode and export an animation
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a `.model_animation_graph` tag file. |
+| `<ANIM>` | Animation index (`definitions/animations[N]`) or resolved string-id name. |
+
+| Long | Description |
+|-|-|
+| `--output <PATH>` | Output file path. Default: `<tag_stem>.<anim_name>.<EXT>` in cwd for `jma` format; stdout for `json`. |
+| `--format <FMT>` | `jma` (default) or `json`. |
+
+Decodes one animation's static + animated codec streams + per-bone flag bitarrays + per-frame movement, composes them against the tag's skeleton, and writes the result.
+
+`--format jma` writes a JMA-family text file (`.JMM/.JMA/.JMT/.JMZ/.JMO/.JMR/.JMW`), kind picked from the animation's `animation type` × `frame info type` per Bungie's convention. Movement-bearing kinds (JMA/JMT/JMZ) emit per-frame movement lines with **world-space** dx/dy (rotated by accumulated yaw at write time per Foundry's fix), translation × 100 cm, and conjugate-quaternion serialization.
+
+`--format json` dumps both static and animated tracks plus the animated-stream status — useful for diagnostics and for codecs not yet wired into the JMA writer.
+
+Verified across 36,270 / 36,270 H3 + Reach MCC animations.
+
+```sh
+$ blam-tag-shell extract-animation masterchief.model_animation_graph 0
+masterchief.any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
+
+# By name (string-id)
+$ blam-tag-shell extract-animation masterchief.model_animation_graph "any:any:any:morph"
+masterchief.any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
+
+# Specific output path
+$ blam-tag-shell extract-animation brute.model_animation_graph 139 \
+    --output /tmp/brute_melee.JMT
+/tmp/brute_melee.JMT: 37 frames × 50 bones [JMT]  movement=DxDyDyaw (37 frames)
+
+# JSON for diagnostics
+$ blam-tag-shell extract-animation elite.model_animation_graph 0 --format json --output anim.json
+anim.json: 121 frames, animated=Decoded
 ```
 
 ---
@@ -621,54 +860,12 @@ bts new biped --output mychief.biped
 
 # 2. Populate the data via `set` / `flag` / `block`.
 bts set mychief.biped "jump velocity" 3.2
-bts set mychief.biped "unit/integrated light toggle" \
-    "effe:fx/flashlight"
+bts set mychief.biped "unit/melee damage" \
+    "jpt!:globals/melee_damage"
 # …
 
 # 3. Build the dependency list from the references we just wrote.
 bts rebuild-dependency-list mychief.biped
-```
-
----
-
-### `repl` — Interactive shell
-
-| Argument | Description |
-|-|-|
-| `[FILE]` | Optional tag to load at startup. |
-
-Opens a persistent session against a loaded tag. Tag-bound commands always operate on the loaded tag — the file positional is filled in automatically, so `inspect materials[0]` drills into the loaded tag's `materials[0]` element rather than being misread as `inspect materials[0] (no path)`. To work on a different tag, use `open <path>` to switch. Dirty-tracking means the REPL asks for confirmation before discarding unsaved edits. History is persisted to `~/.blam-tag-shell-history`.
-
-**Session verbs:**
-
-| | |
-|-|-|
-| `open <path>` | Load a tag. |
-| `close` | Close the current tag. |
-| `save [path]` | Write the tag (back to source, or to `path`). |
-| `revert` | Reload from disk, discarding edits. |
-| `exit` / `quit` | Leave the REPL (prompts on unsaved changes; `exit --force` skips the prompt). |
-| `help` / `?` | Show inline help. |
-
-**Navigation** (Unix-cd semantics — leading `/` resets to absolute):
-
-| | |
-|-|-|
-| `edit-block <path>` | Push a sub-struct / block-element / array-element onto the nav stack. Alias: `cd`. |
-| `back` | Pop one level. |
-| `exit-to <segment>` | Pop until the named segment is the tail; `exit-to root` clears. |
-| `pwd` | Show the current nav path. |
-
-The prompt reflects the current tag, nav stack, and dirty state:
-
-```
-blam> open masterchief.biped
-blam masterchief.biped> cd unit/seats[0]
-blam masterchief.biped/unit/seats[0]> flag "flags" "invisible" toggle
-set unit/seats[0]/flags.invisible = on (was off)
-blam masterchief.biped*/unit/seats[0]> save
-saved to masterchief.biped
-blam masterchief.biped/unit/seats[0]> exit
 ```
 
 ---

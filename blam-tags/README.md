@@ -10,6 +10,12 @@ tag, write it back, md5-compare — zero differences. Locally verified on
 the 119,432-tag H3 + Reach subset; full-corpus validation (including H4
 and H2A MP) contributed by the community.
 
+Four group-specific extractors sit on top of the generic tag tree:
+- [`bitmap`](#bitmap--dds-extraction): `.bitmap` → DDS files.
+- [`animation`](#animation-jmad--jma-family): `.model_animation_graph` → JMA-family text files.
+- [`jms`](#jms-render--collision--physics--jms): `.render_model` / `.collision_model` / `.physics_model` → JMS files.
+- [`ass`](#ass-scenario_structure_bsp--ass): `.scenario_structure_bsp` (+ `.scenario_structure_lighting_info`) → ASS files.
+
 ## Quick start
 
 ```rust
@@ -243,6 +249,131 @@ cargo run --release -p blam-tags --example extract_bitmap_sweep -- \
     /path/to/halo3_mcc/tags /path/to/haloreach_mcc/tags
 ```
 
+### Animation (jmad → JMA-family)
+
+`Animation::new(&tag)` walks a `model_animation_graph` and pairs each user-facing entry in `definitions/animations` with its `tag resource groups[r]/tag_resource/group_members[m]` runtime payload. Each `AnimationGroup` carries header metadata + the raw `animation_data` blob; call `decode()` to turn the blob into an `AnimationClip` with separately decoded static + animated tracks, per-bone flag bitarrays, and per-frame movement deltas. Compose against a `Skeleton` via `clip.pose(&skeleton)` and emit a `.JMM/.JMA/.JMT/.JMZ/.JMO/.JMR/.JMW` text file with `pose.write_jma`:
+
+```rust
+use blam_tags::{Animation, JmaKind, Skeleton, TagFile};
+use std::fs::File;
+use std::io::BufWriter;
+
+let tag = TagFile::read("masterchief.model_animation_graph")?;
+let animation = Animation::new(&tag)?;
+let skeleton = Skeleton::from_tag(&tag);
+
+for group in animation.iter() {
+    let clip = group.decode()?;
+    let pose = clip.pose(&skeleton);
+    let kind = JmaKind::from_metadata(
+        group.animation_type.as_deref(),
+        group.frame_info_type.as_deref(),
+    );
+    let path = format!("{}.{}", group.name.as_deref().unwrap_or("anim"), kind.extension());
+    let mut out = BufWriter::new(File::create(path)?);
+    pose.write_jma(&mut out, &skeleton, group.node_list_checksum, kind, "actor", Some(&clip.movement))?;
+}
+```
+
+Inheriting jmads (zero local animations, parent reference set) are a normal success: `Animation::new` returns with `len() == 0` and `parent()` non-null. Walk the parent and merge if you need the inherited animations.
+
+Codec coverage (validated against 36,270 / 36,270 H3 + Reach MCC animations):
+
+| Slot | Codec | Status |
+|---|---|---|
+| 1 | UncompressedStatic | ✓ |
+| 2 | UncompressedAnimated | ✓ (= slot 8 decoder) |
+| 3 | EightByteQuantizedRotationOnly | ✓ |
+| 4 | ByteKeyframeLightlyQuantized | ✓ |
+| 5 | WordKeyframeLightlyQuantized | ✓ |
+| 6 | ReverseByteKeyframeLightlyQuantized | ✓ (= slot 4 decoder; reverse is a compressor-side variant) |
+| 7 | ReverseWordKeyframeLightlyQuantized | ✓ (= slot 5) |
+| 8 | BlendScreen | ✓ |
+| 9 | Curve | ✓ |
+| 10 | RevisedCurve (H4-era) | ✓ ("cache" rotation_layout) |
+| 11 | SharedStatic (HO+) | not implemented (graph-level shared codec pool, 0 anims in MCC corpus) |
+
+Engine-aware blob layout: H3 uses a hardcoded section ordering; Reach uses cumulative-sum from positional indices in a renamed-but-misleading `data sizes` struct (the Reach schema kept H3 field names but several slots were repurposed — position 0 is the static codec stream regardless of what the field is called). The engine-aware path is internal to `decode()`; the public API doesn't expose the distinction.
+
+JMA-family export applies the per-format conventions at write time only — translation `× 100` (cm convention), quaternion **conjugate** serialization, and Foundry-style local→world `dx/dy` rotation by accumulated yaw (per Foundry commit `850d680d`, which fixes TagTool's actor-slides-backwards bug on yawed-during-walk animations). The codec-decoded values stay in raw engine units so callers can render or re-encode without unwinding.
+
+Two corpus-wide validators live in `examples/`:
+
+```sh
+# Decode every animation, tally per-codec status:
+cargo run --release -p blam-tags --example jmad_decode_sweep -- \
+    out_dir /path/to/halo3_mcc/tags /path/to/haloreach_mcc/tags
+
+# Run the JMA writer end-to-end against a sink:
+cargo run --release -p blam-tags --example jmad_export_sweep -- \
+    /path/to/halo3_mcc/tags /path/to/haloreach_mcc/tags
+```
+
+### JMS (render / collision / physics → JMS)
+
+`JmsFile` reconstructs a Bungie Joint Model Skeleton (`.JMS`, version 8213) from a parsed `render_model`, `collision_model`, or `physics_model` tag. The three constructors emit per-purpose JMS files — render geometry only, collision BSP only, or physics primitives + constraints — so callers can split them across the H3EK source-tree layout (`render/`, `collision/`, `physics/`).
+
+```rust
+use blam_tags::{JmsFile, TagFile};
+use std::fs::File;
+use std::io::BufWriter;
+
+let render_tag = TagFile::read("masterchief.render_model")?;
+let render_jms = JmsFile::from_render_model(&render_tag)?;
+
+// Collision and physics need the render_model's skeleton for
+// world-space placement (their own nodes carry only names + tree links).
+let coll_tag = TagFile::read("masterchief.collision_model")?;
+let coll_jms = JmsFile::from_collision_model_with_skeleton(&coll_tag, &render_jms.nodes)?;
+
+let phmo_tag = TagFile::read("masterchief.physics_model")?;
+let phmo_jms = JmsFile::from_physics_model_with_skeleton(&phmo_tag, &render_jms.nodes)?;
+
+for (kind, jms) in [("render", &render_jms), ("collision", &coll_jms), ("physics", &phmo_jms)] {
+    let mut out = BufWriter::new(File::create(format!("masterchief.{kind}.jms"))?);
+    jms.write(&mut out)?;
+}
+```
+
+Render path walks `regions × permutations × meshes × parts`, decompresses bounds-quantized positions/UVs against `render geometry/compression info[0]`, and converts triangle strips to lists with restart-aware parity + degenerate-triangle filtering. Collision path walks each BSP's `surfaces[]` via the edge-ring algorithm (each edge belongs to two surfaces; the matching side decides start-vs-end vertex emission), fan-triangulates each ring, and emits world-space vertices through the supplied skeleton. Physics path emits Havok shape primitives (sphere, box, pill, polyhedron) plus ragdoll/hinge constraints, using the skeleton for world-space anchor placement.
+
+Validated across the H3 MCC corpus: 4,354 / 4,354 reconstructions clean across `render_model`, `collision_model`, and `physics_model`. 89.7% of render-model JMSes have ≥99% bounding-box match against the embedded source JMS; 86.8% have ≥99% position coverage at 10 cm precision.
+
+```sh
+cargo run --release -p blam-tags --example jms_corpus_sweep -- \
+    /path/to/halo3_mcc/tags
+```
+
+### ASS (scenario_structure_bsp → ASS)
+
+`AssFile` reconstructs a Bungie Amalgam scene (`.ASS`, version 7) from a parsed `scenario_structure_bsp` tag. ASS is the level-geometry counterpart to JMS — same family but for static scene structure rather than rigged objects. The reconstruction walks every category needed for re-import as artist source:
+
+```rust
+use blam_tags::{AssFile, TagFile};
+use std::fs::File;
+use std::io::BufWriter;
+
+let bsp_tag = TagFile::read("construct.scenario_structure_bsp")?;
+let mut ass = AssFile::from_scenario_structure_bsp(&bsp_tag)?;
+
+// Layer in lighting from the paired scenario_structure_lighting_info tag
+// (real BM_LIGHTING_BASIC/ATTEN/FRUS metadata + GENERIC_LIGHT objects).
+let stli_tag = TagFile::read("construct.scenario_structure_lighting_info")?;
+ass.add_lights_from_stli(&stli_tag)?;
+
+let mut out = BufWriter::new(File::create("construct.ASS")?);
+ass.write(&mut out)?;
+```
+
+Categories emitted: cluster MESHes (one per cluster), per-IGD-def MESHes (one per `instanced geometries definitions[]` entry, content-deduped) plus per-placement INSTANCEs, cluster portals (each as `+portal_N` MESH), weather polyhedra (convex hull from plane set, as `+weather_N`), structure collision BSP (one merged `@CollideOnly` MESH using the same edge-ring walker the JMS path uses), sbsp markers (SPHERE primitives), `environment_objects[]` xref-only OBJECTs, and SPOT/DIRECT/OMNI/AMBIENT generic lights from the `.stli`. Special-marker materials (`+portal`, `+weather`, `@collision_only`) are auto-appended so Tool.exe re-extracts each category back into its proper tag block on recompile.
+
+Validated across the H3 MCC corpus: 147 / 147 BSPs across 49 scenarios clean — 20,747 MESH + 6,605 GENERIC_LIGHT + ~150 SPHERE markers, 82k INSTANCEs, 19.9M verts, 14.9M tris. Source ASS files have a different mesh granularity (artist-named meshes vs our cluster aggregates) — that's compile-time information the tag doesn't carry.
+
+```sh
+cargo run --release -p blam-tags --example ass_corpus_sweep -- \
+    /path/to/halo3_mcc/tags
+```
+
 ### Optional streams (want / info / assd)
 
 Three optional streams can hang off the tag file — `want` (dependency list), `info` (import info), `assd` (asset-depot icon storage). They're off by default on freshly created tags; attach as needed:
@@ -268,7 +399,7 @@ if let Some(info) = tag.import_info() {
 }
 ```
 
-**Header checksum** is left at `0` on new tags, matching BCS's behaviour (see [`NOTES.md`](../NOTES.md) for the checksum-research trail — primitives are known but the byte-span isn't, deferred until a concrete load-failure forces the issue). A `TagFile::recompute_checksum()` stub exists for when we come back to it.
+**Header checksum** is left at `0` on new tags, matching BCS's behaviour. The algorithm is a reflected CRC32 (poly `0xEDB88320`) but the exact byte-span fed through it isn't pinned down — see the `TagFile::recompute_checksum` doc comment in [`src/file.rs`](src/file.rs) for the research trail. The method exists as a no-op for when we come back to it; callers that need a real checksum will get `0` for now.
 
 ### Roundtrip (read → write → compare)
 
@@ -339,12 +470,35 @@ Two facades sit on top of the raw storage types:
   `TagFieldDefinition`, `TagBlockDefinition`, `TagArrayDefinition`,
   `TagResourceDefinition`. Reachable from `TagFile::definitions()`.
 
-Plus a bitmap-specific helper layer:
+Plus four group-specific helper layers (all built on the `api` facade):
 
 - **[`bitmap`]** — `Bitmap`, `BitmapImage`, `BitmapFormat`, plus a
   `write_dds` writer covering the 18 formats observed in the
-  halo3_mcc + haloreach_mcc bitmap corpora. Built on top of the
-  `api` facade.
+  halo3_mcc + haloreach_mcc bitmap corpora.
+- **[`animation`]** — `Animation`, `AnimationGroup`, `AnimationClip`,
+  `AnimationTracks`, `MovementData`, `NodeFlags`, `Skeleton`, `Pose`,
+  `JmaKind`, `Codec`, `BitArray`. Decodes `model_animation_graph`
+  blobs across all 10 implemented codec slots and emits JMA-family
+  text files via `Pose::write_jma`. Engine-aware (H3 hardcoded layout
+  vs Reach cumulative-sum) under the hood; public API is uniform.
+- **[`jms`]** — `JmsFile` plus per-section types (`JmsNode`,
+  `JmsMaterial`, `JmsMarker`, `JmsVertex`, `JmsTriangle`, plus
+  collision/physics primitives `JmsSphere`/`JmsBox`/`JmsCapsule`/
+  `JmsConvex`/`JmsRagdoll`/`JmsHinge`). Reconstructs a JMS scene
+  (version 8213) from `render_model` / `collision_model` /
+  `physics_model` tags. Per-purpose constructors (render only,
+  collision-with-skeleton, physics-with-skeleton) match what
+  Tool.exe expects in each H3EK source-tree subdirectory.
+- **[`ass`]** — `AssFile` plus per-section types (`AssMaterial`,
+  `AssObject` / `AssObjectPayload`, `AssLight` / `AssLightKind`,
+  `AssVertex`, `AssTriangle`, `AssInstance`). Reconstructs a
+  Bungie Amalgam scene (version 7) from `scenario_structure_bsp` +
+  `scenario_structure_lighting_info` pairs.
+
+A small private [`geometry`] module carries the helpers shared
+between `jms` and `ass` (compression-bounds decoder, triangle-strip
+→ list, BSP edge-ring walker, quaternion math, generic field
+readers). Not part of the public API.
 
 Everything the user-facing code should need is one of these.
 Lower-level modules (`data`, `path`, `stream`, `io`, `layout::TagLayout`) are available but no user code in this workspace (CLI, examples) reaches into them.

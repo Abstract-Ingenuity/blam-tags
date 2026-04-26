@@ -27,46 +27,23 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Show tag/cache file header metadata
-    Header {
-        /// Path to a tag or cache file
-        file: String,
-        /// Emit JSON
-        #[arg(long)]
-        json: bool,
+    /// Interactive shell — open a tag and run commands against it
+    /// without re-parsing on every invocation
+    Repl {
+        /// Optional tag to load at startup
+        file: Option<String>,
     },
 
-    /// Walk a directory for tags; filter + list, or summarize by group
-    List {
-        /// Directory to walk
-        dir: String,
-        /// Filter by group tag (e.g. "bipd")
+    /// Create a new tag from a group schema. Reads the schema JSON
+    /// at `definitions/<game>/<group>.json` (game from the global
+    /// `--game` flag) and writes a zero-filled tag to
+    /// `<group>.<group>` (or `--output`).
+    New {
+        /// Group name (matches the schema filename, e.g. `biped`)
+        group: String,
+        /// Output path (default: `<group>.<group>` in cwd)
         #[arg(long)]
-        group: Option<String>,
-        /// Only tags whose filename starts with this prefix
-        #[arg(long = "starts-with")]
-        starts_with: Option<String>,
-        /// Only tags whose path contains this substring
-        #[arg(long)]
-        contains: Option<String>,
-        /// Only tags whose filename ends with this suffix (useful for extensions)
-        #[arg(long = "ends-with")]
-        ends_with: Option<String>,
-        /// Only tags whose full path matches this regex
-        #[arg(long)]
-        regex: Option<String>,
-        /// Read candidate tag paths from this file (one per line) instead of walking
-        #[arg(long = "from-file")]
-        from_file: Option<String>,
-        /// Group/extension tally instead of a path list
-        #[arg(long)]
-        summary: bool,
-        /// Sort summary rows by count (desc) instead of name
-        #[arg(long = "sort-by-count")]
-        sort_by_count: bool,
-        /// Emit JSON
-        #[arg(long)]
-        json: bool,
+        output: Option<String>,
     },
 
     /// Show field tree
@@ -149,6 +126,17 @@ enum Commands {
         dry_run: bool,
     },
 
+    /// List enum/flag options for a field
+    Options {
+        /// Path to a tag file
+        file: String,
+        /// Field path to an enum or flags field
+        path: String,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Block element operations
     Block {
         /// Path to a tag file
@@ -173,25 +161,6 @@ enum Commands {
         json: bool,
     },
 
-    /// List enum/flag options for a field
-    Options {
-        /// Path to a tag file
-        file: String,
-        /// Field path to an enum or flags field
-        path: String,
-        /// Emit JSON
-        #[arg(long)]
-        json: bool,
-    },
-
-    /// Diff the layouts of two tag files
-    LayoutDiff {
-        /// First tag file
-        file_a: String,
-        /// Second tag file
-        file_b: String,
-    },
-
     /// List all tag_reference fields in a tag
     Deps {
         /// Path to a tag file
@@ -199,6 +168,39 @@ enum Commands {
         /// De-duplicate repeated references
         #[arg(long)]
         unique: bool,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Walk a directory for tags; filter + list, or summarize by group
+    List {
+        /// Directory to walk
+        dir: String,
+        /// Filter by group tag (e.g. "bipd")
+        #[arg(long)]
+        group: Option<String>,
+        /// Only tags whose filename starts with this prefix
+        #[arg(long = "starts-with")]
+        starts_with: Option<String>,
+        /// Only tags whose path contains this substring
+        #[arg(long)]
+        contains: Option<String>,
+        /// Only tags whose filename ends with this suffix (useful for extensions)
+        #[arg(long = "ends-with")]
+        ends_with: Option<String>,
+        /// Only tags whose full path matches this regex
+        #[arg(long)]
+        regex: Option<String>,
+        /// Read candidate tag paths from this file (one per line) instead of walking
+        #[arg(long = "from-file")]
+        from_file: Option<String>,
+        /// Group/extension tally instead of a path list
+        #[arg(long)]
+        summary: bool,
+        /// Sort summary rows by count (desc) instead of name
+        #[arg(long = "sort-by-count")]
+        sort_by_count: bool,
         /// Emit JSON
         #[arg(long)]
         json: bool,
@@ -227,47 +229,6 @@ enum Commands {
         strict: bool,
     },
 
-    /// Extract a `.bitmap` tag's images as DDS files (one DDS per
-    /// image; multi-image tags get a directory)
-    ExtractBitmap {
-        /// Path to a `.bitmap` tag file
-        file: String,
-        /// Output path. If it ends in `.dds`, writes that exact
-        /// filename (single-image tags only). Otherwise treated as
-        /// a directory: 1-image tags emit `<dir>/<tag_stem>.dds`,
-        /// N-image tags emit `<dir>/<tag_stem>/<i>.dds`.
-        /// Default: current directory.
-        #[arg(long)]
-        output: Option<String>,
-    },
-
-    /// Dump a tag's state as `set` commands that reproduce it —
-    /// diffable between tags and replayable against another
-    Export {
-        /// Path to a tag file
-        file: String,
-        /// Optional field path; only export fields under this subtree
-        subtree: Option<String>,
-        /// Write to a file instead of stdout
-        #[arg(long)]
-        output: Option<String>,
-    },
-
-    /// Compare two tags' *values* at every leaf path (distinct from
-    /// `layout-diff`, which compares schemas)
-    DataDiff {
-        /// First tag file
-        file_a: String,
-        /// Second tag file
-        file_b: String,
-        /// Optional subtree to restrict both walks to
-        #[arg(long)]
-        only: Option<String>,
-        /// Emit JSON
-        #[arg(long)]
-        json: bool,
-    },
-
     /// Integrity check — flag enum/flag/real/reference anomalies
     Check {
         /// Path to a tag file
@@ -286,23 +247,142 @@ enum Commands {
         strict: bool,
     },
 
-    /// Interactive shell — open a tag and run commands against it
-    /// without re-parsing on every invocation
-    Repl {
-        /// Optional tag to load at startup
-        file: Option<String>,
+    /// Show tag/cache file header metadata
+    Header {
+        /// Path to a tag or cache file
+        file: String,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
     },
 
-    /// Create a new tag from a group schema. Reads the schema JSON
-    /// at `definitions/<game>/<group>.json` (game from the global
-    /// `--game` flag) and writes a zero-filled tag to
-    /// `<group>.<group>` (or `--output`).
-    New {
-        /// Group name (matches the schema filename, e.g. `biped`)
-        group: String,
-        /// Output path (default: `<group>.<group>` in cwd)
+    /// Diff the layouts of two tag files
+    LayoutDiff {
+        /// First tag file
+        file_a: String,
+        /// Second tag file
+        file_b: String,
+    },
+
+    /// Compare two tags' *values* at every leaf path (distinct from
+    /// `layout-diff`, which compares schemas)
+    DataDiff {
+        /// First tag file
+        file_a: String,
+        /// Second tag file
+        file_b: String,
+        /// Optional subtree to restrict both walks to
+        #[arg(long)]
+        only: Option<String>,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Dump a tag's state as `set` commands that reproduce it —
+    /// diffable between tags and replayable against another
+    Export {
+        /// Path to a tag file
+        file: String,
+        /// Optional field path; only export fields under this subtree
+        subtree: Option<String>,
+        /// Write to a file instead of stdout
         #[arg(long)]
         output: Option<String>,
+    },
+
+    /// Extract a `.bitmap` tag's images as DDS files (one DDS per
+    /// image; multi-image tags get a directory)
+    ExtractBitmap {
+        /// Path to a `.bitmap` tag file
+        file: String,
+        /// Output path. If it ends in `.dds`, writes that exact
+        /// filename (single-image tags only). Otherwise treated as
+        /// a directory: 1-image tags emit `<dir>/<tag_stem>.dds`,
+        /// N-image tags emit `<dir>/<tag_stem>/<i>.dds`.
+        /// Default: current directory.
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// Extract a `.model` (hlmt) tag's referenced render / collision /
+    /// physics children as JMS files matching the H3 source-tree
+    /// authoring layout (`render/`, `collision/`, `physics/`).
+    ExtractJms {
+        /// Path to a `.model` tag file (hlmt). Other tag groups are
+        /// rejected — extract through the .model so the skeleton is
+        /// available to coll/phmo for world-space placement.
+        file: String,
+        /// Which sub-models to extract. Multi-select, in any order.
+        /// Accepted: `render`, `collision`, `physics`, `all`.
+        /// Default if omitted: `all`.
+        #[arg(value_parser = ["render", "collision", "physics", "all"])]
+        kinds: Vec<String>,
+        /// Output directory (default: current directory). The
+        /// command writes `<DIR>/<stem>/{render,collision,physics}/<stem>.JMS`
+        /// — re-importable by H3EK / Tool.exe.
+        #[arg(long)]
+        output: Option<String>,
+        /// Flatten the layout: emit `<DIR>/<stem>.<kind>.jms` instead
+        /// of nested subdirs. Useful for ad-hoc inspection.
+        #[arg(long)]
+        flat: bool,
+    },
+
+    /// Extract a `.scenario_structure_bsp` (sbsp) tag's cluster
+    /// geometry as an ASS file (Bungie Amalgam, version 7 for H3) —
+    /// the static-scene counterpart to JMS.
+    ExtractAss {
+        /// Path to a `.scenario_structure_bsp` tag file.
+        file: String,
+        /// Output root directory (default: current directory). The
+        /// command writes `<DIR>/<stem>/structure/<stem>.ASS` to
+        /// match the H3EK source-tree convention.
+        #[arg(long)]
+        output: Option<String>,
+        /// Flatten: emit `<DIR>/<stem>.ass` instead of nested.
+        #[arg(long)]
+        flat: bool,
+    },
+
+    /// Write the bytes of a single `tag_data` field to a file
+    ExtractData {
+        /// Path to a tag file
+        file: String,
+        /// Field path to a `tag_data` field
+        path: String,
+        /// Output file path. Default: `<tag_stem>.<field_name>.bin`
+        /// in the current directory.
+        #[arg(long)]
+        output: Option<String>,
+    },
+
+    /// List the animations in a `model_animation_graph` tag (header
+    /// metadata only — no codec decode)
+    ListAnimations {
+        /// Path to a `.model_animation_graph` tag file
+        file: String,
+        /// Emit JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Decode a single animation from a `model_animation_graph` tag.
+    /// Default output is a JMA-family text file (`.JMM/.JMA/.JMT/...`)
+    /// re-importable by Halo content tooling. `--format json` emits
+    /// the full per-frame transform table for diagnostics.
+    ExtractAnimation {
+        /// Path to a `.model_animation_graph` tag file
+        file: String,
+        /// Animation index (`definitions/animations[N]`) or name
+        anim: String,
+        /// Output path. Default: `<tag_stem>.<anim_name>.<EXT>` in cwd
+        /// for `jma` format, stdout for `json`.
+        #[arg(long)]
+        output: Option<String>,
+        /// Output format
+        #[arg(long, value_enum, default_value_t = commands::extract_animation::Format::Jma)]
+        format: commands::extract_animation::Format,
     },
 
     /// Attach an empty dependency-list stream to a tag
@@ -381,25 +461,8 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
     match cmd {
         Commands::Repl { .. } => anyhow::bail!("`repl` is only valid at the top level"),
 
-        Commands::Header { file, json } => {
-            ensure_loaded(ctx, &file, reload_tag)?;
-            commands::header::run(ctx, json)
-        }
-
-        Commands::List {
-            dir, group, starts_with, contains, ends_with, regex, from_file, summary, sort_by_count, json,
-        } => {
-            let filters = commands::list::ListFilters {
-                group, starts_with, contains, ends_with, regex, from_file,
-            };
-            let mode = if json {
-                commands::list::OutputMode::Json
-            } else if summary {
-                commands::list::OutputMode::Summary { sort_by_count }
-            } else {
-                commands::list::OutputMode::Paths
-            };
-            commands::list::run(ctx, &dir, filters, mode)
+        Commands::New { group, output } => {
+            commands::new::run(ctx, &group, output.as_deref())
         }
 
         Commands::Inspect { file, path, all, full, json, filter, filter_not, filter_value } => {
@@ -433,26 +496,56 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::flag::run(ctx, &path, &flag_name, action.as_deref(), output.as_deref(), dry_run)
         }
 
-        Commands::Block { file, path, action, index, index2, output, dry_run, json } => {
-            ensure_loaded(ctx, &file, reload_tag)?;
-            commands::block::run(ctx, &path, action, index, index2, output.as_deref(), dry_run, json)
-        }
-
         Commands::Options { file, path, json } => {
             ensure_loaded(ctx, &file, reload_tag)?;
             commands::options::run(ctx, &path, json)
         }
 
-        Commands::LayoutDiff { file_a, file_b } => commands::layout_diff::run(&file_a, &file_b),
+        Commands::Block { file, path, action, index, index2, output, dry_run, json } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::block::run(ctx, &path, action, index, index2, output.as_deref(), dry_run, json)
+        }
 
         Commands::Deps { file, unique, json } => {
             ensure_loaded(ctx, &file, reload_tag)?;
             commands::deps::run(ctx, unique, json)
         }
 
+        Commands::List {
+            dir, group, starts_with, contains, ends_with, regex, from_file, summary, sort_by_count, json,
+        } => {
+            let filters = commands::list::ListFilters {
+                group, starts_with, contains, ends_with, regex, from_file,
+            };
+            let mode = if json {
+                commands::list::OutputMode::Json
+            } else if summary {
+                commands::list::OutputMode::Summary { sort_by_count }
+            } else {
+                commands::list::OutputMode::Paths
+            };
+            commands::list::run(ctx, &dir, filters, mode)
+        }
+
         Commands::Find { dir, value, group, field_name, regex, json, strict } => {
             let filters = commands::find::FindFilters { group, field_name, regex, json, strict };
             commands::find::run(ctx, &dir, &value, filters)
+        }
+
+        Commands::Check { file, tags_root, only, json, strict } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::check::run(ctx, tags_root.as_deref(), only.as_deref(), json, strict)
+        }
+
+        Commands::Header { file, json } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::header::run(ctx, json)
+        }
+
+        Commands::LayoutDiff { file_a, file_b } => commands::layout_diff::run(&file_a, &file_b),
+
+        Commands::DataDiff { file_a, file_b, only, json } => {
+            commands::data_diff::run(ctx, &file_a, &file_b, only.as_deref(), json)
         }
 
         Commands::Export { file, subtree, output } => {
@@ -465,17 +558,29 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::extract_bitmap::run(ctx, output.as_deref())
         }
 
-        Commands::Check { file, tags_root, only, json, strict } => {
+        Commands::ExtractJms { file, kinds, output, flat } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::check::run(ctx, tags_root.as_deref(), only.as_deref(), json, strict)
+            commands::extract_jms::run(ctx, &kinds, output.as_deref(), flat)
         }
 
-        Commands::DataDiff { file_a, file_b, only, json } => {
-            commands::data_diff::run(ctx, &file_a, &file_b, only.as_deref(), json)
+        Commands::ExtractAss { file, output, flat } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::extract_ass::run(ctx, output.as_deref(), flat)
         }
 
-        Commands::New { group, output } => {
-            commands::new::run(ctx, &group, output.as_deref())
+        Commands::ExtractData { file, path, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::extract_data::run(ctx, &path, output.as_deref())
+        }
+
+        Commands::ListAnimations { file, json } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::list_animations::run(ctx, json)
+        }
+
+        Commands::ExtractAnimation { file, anim, output, format } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::extract_animation::run(ctx, &anim, output.as_deref(), format)
         }
 
         Commands::AddDependencyList { file, output } => {

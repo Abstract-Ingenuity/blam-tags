@@ -3,8 +3,9 @@
 //! Resolves the schema at `definitions/<game>/<group>.json` (game
 //! comes from the global `--game` flag via [`CliContext::game`]) and
 //! calls `TagFile::new`. Writes to `./<group>.<group>` in the cwd. No
-//! optional streams attached by default — use `add-want` / `add-info`
-//! afterward if you want them.
+//! optional streams attached by default — use `add-dependency-list` /
+//! `add-import-info` / `add-asset-depot-storage` afterward if you
+//! want them.
 
 use std::path::PathBuf;
 

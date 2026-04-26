@@ -9,3 +9,4 @@ serde_json = { version = "1", features = ["preserve_order"] }
 
 [dev-dependencies]
 md5 = "0.7"
+flate2 = "1"

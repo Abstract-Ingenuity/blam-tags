@@ -1,6 +1,8 @@
 //! Tag file: the outermost container. A tag file is a fixed-width
-//! 64-byte [`TagFileHeader`] followed by a mandatory `tag!` stream and
-//! two optional streams (`want` dependency list, `info` import info).
+//! 64-byte [`TagFileHeader`] followed by a mandatory `tag!` stream
+//! and up to three optional streams in fixed order: `want`
+//! (dependency list), `info` (import info), `assd` (asset depot
+//! storage).
 
 use std::error::Error;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -117,7 +119,7 @@ pub struct TagFile {
 
 impl TagFile {
     /// Create a fresh tag file from a JSON schema dumped by
-    /// `h3_guerilla_dump_tag_definitions_json.py`. The resulting file
+    /// `halo3_dump_tag_definitions_json.py`. The resulting file
     /// has:
     ///
     /// - A header with `group_tag` / `group_version` pulled from the
@@ -241,10 +243,11 @@ impl TagFile {
         })
     }
 
-    /// Write this tag file to `path`. Mirrors `TagFile::read`: file header,
-    /// then `tag!` stream, then optional `want` and `info` streams in that
-    /// order. IMPORTANT: never write to the source tag path — write to a
-    /// temp file, then read it back for byte-exact roundtrip verification.
+    /// Write this tag file to `path`. Mirrors `TagFile::read`: file
+    /// header, then `tag!` stream, then any attached `want`, `info`,
+    /// `assd` streams in that fixed order. IMPORTANT: never write to
+    /// the source tag path — write to a temp file, then read it back
+    /// for byte-exact roundtrip verification.
     pub fn write<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
         let file = std::fs::File::create(path)?;
         let mut writer = std::io::BufWriter::with_capacity(64 * 1024, file);
@@ -279,7 +282,7 @@ impl TagFile {
     //
     // Optional-stream attach/detach/rebuild. Stream schemas are
     // loaded from JSON (as dumped by
-    // `h3_guerilla_dump_tag_definitions_json.py`) — typically
+    // `halo3_dump_tag_definitions_json.py`) — typically
     // `tag_dependency_list.json` for `want` and
     // `tag_import_information.json` for `info`.
     //

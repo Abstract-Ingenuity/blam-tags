@@ -230,6 +230,7 @@ impl<'a> TagBlockDefinition<'a> {
         Self { layout, block_layout_index }
     }
 
+    /// Block display name (e.g. `"materials"`, `"contact points"`).
     pub fn name(&self) -> &'a str {
         let record = &self.layout.block_layouts[self.block_layout_index];
         self.layout.get_string(record.name_offset).unwrap_or("")
@@ -260,6 +261,7 @@ impl<'a> TagArrayDefinition<'a> {
         Self { layout, array_layout_index }
     }
 
+    /// Array display name.
     pub fn name(&self) -> &'a str {
         let record = &self.layout.array_layouts[self.array_layout_index];
         self.layout.get_string(record.name_offset).unwrap_or("")
@@ -320,6 +322,7 @@ impl<'a> TagResourceDefinition<'a> {
         Self { layout, resource_layout_index }
     }
 
+    /// Resource definition display name.
     pub fn name(&self) -> &'a str {
         let record = &self.layout.resource_layouts[self.resource_layout_index];
         self.layout.get_string(record.name_offset).unwrap_or("")

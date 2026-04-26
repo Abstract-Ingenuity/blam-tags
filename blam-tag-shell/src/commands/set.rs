@@ -23,7 +23,7 @@ pub fn run(
 ) -> Result<()> {
     let resolved = ctx.resolve_path(path);
 
-    // Phase 1: capture the previous value (for the "(was …)" suffix)
+    // First, capture the previous value (for the "(was …)" suffix)
     // and parse the new value. Both go through the immutable handle
     // so dry-run is touch-free and the borrow checker is happy when
     // we re-borrow `ctx` mutably below.
@@ -49,7 +49,7 @@ pub fn run(
         return Ok(());
     }
 
-    // Phase 2: apply via mutable borrow. No `ctx` access here — the
+    // Then apply via mutable borrow. No `ctx` access here — the
     // typed `field.set(value)` only needs the layout the field
     // already holds.
     let loaded = ctx.loaded_mut("set")?;

@@ -156,12 +156,9 @@ pub(crate) fn read_tag_chunk_content<R: Read + Seek>(
 }
 
 //================================================================================
-// Typed-error chunk-header readers (Phase-1 helpers for the 7d
-// migration). These return `Result<_, TagReadError>` so the read-side
-// modules can propagate `?` cleanly into their own typed-error
-// returns. They sit alongside the boxed-error helpers above; once
-// every module is migrated to `TagReadError`, the boxed variants can
-// retire.
+// Typed-error chunk-header readers. These return
+// `Result<_, TagReadError>` so the read-side modules can propagate
+// `?` cleanly into their own typed-error returns.
 //================================================================================
 
 /// Read a 12-byte chunk header without any signature/version validation.

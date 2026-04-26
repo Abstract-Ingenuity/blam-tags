@@ -193,7 +193,11 @@ impl TagStructData {
 
             sub_chunks
         } else {
-            Vec::new()
+            // Empty tgst (size=0): no sub-chunk bytes on disk, but the
+            // struct may still hold fixed-size containers (Array,
+            // Struct) that need scaffolding to be navigable via the
+            // API. Same situation as a simple-block element.
+            TagStructData::new_default(layout, definition.index as usize).sub_chunks
         };
 
         Ok(Self {
@@ -825,12 +829,17 @@ impl TagBlockData {
                 elements.push(TagStructData::read(layout, struct_layout, reader)?);
             }
         } else {
-            // Simple block: raw bytes only, no per-element tgst, no sub-chunks.
+            // Simple block: raw bytes only, no per-element tgst on disk.
+            // Even so, container fields (Array, Struct, ...) still need
+            // in-memory sub_chunk entries for the API to navigate them
+            // — those entries don't consume any disk bytes since their
+            // payload is fully fixed-size and lives inline in raw_data.
+            // Going through new_default builds that scaffolding.
             for _ in 0..block_element_count {
-                elements.push(TagStructData {
-                    struct_index: struct_layout.index,
-                    sub_chunks: Vec::new(),
-                });
+                elements.push(TagStructData::new_default(
+                    layout,
+                    struct_layout.index as usize,
+                ));
             }
         }
 
