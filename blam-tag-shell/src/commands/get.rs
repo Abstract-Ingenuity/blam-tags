@@ -64,8 +64,13 @@ fn container_summary(field: &blam_tags::TagField<'_>) -> Option<String> {
     if let Some(array) = field.as_array() {
         return Some(format!("array [{} elements]", array.len()));
     }
-    if field.as_resource().is_some() {
-        return Some("pageable_resource".into());
+    if let Some(resource) = field.as_resource() {
+        let kind = match resource.kind() {
+            blam_tags::TagResourceKind::Null => "null",
+            blam_tags::TagResourceKind::Exploded => "exploded",
+            blam_tags::TagResourceKind::Xsync => "xsync",
+        };
+        return Some(format!("pageable_resource [{kind}]"));
     }
     None
 }

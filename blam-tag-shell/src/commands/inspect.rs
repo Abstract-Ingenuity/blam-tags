@@ -1,12 +1,14 @@
 //! `inspect` — the workhorse tree view. Walks structs/blocks/arrays
-//! under `path` (or the current REPL nav, if no path) to a bounded
-//! `--depth`, with name / value filters. Text mode goes through the
-//! shared [`walk`] visitor; JSON mode stays bespoke because its
-//! naturally-recursive output shape is awkward to emit through the
-//! flat visitor protocol.
+//! under `path` (or the current REPL nav, if no path), with name /
+//! value filters. Two modes: **flat** (default) recurses through
+//! structs / arrays / pageable_resources but stops at blocks (just
+//! shows the count); **`--full`** recurses through blocks too. Text
+//! mode goes through the shared [`walk`] visitor; JSON mode stays
+//! bespoke because its naturally-recursive output shape is awkward
+//! to emit through the flat visitor protocol.
 
 use anyhow::{Context, Result};
-use blam_tags::{TagArray, TagBlock, TagField, TagStruct};
+use blam_tags::{TagArray, TagBlock, TagField, TagResource, TagResourceKind, TagStruct};
 use serde_json::{json, Value};
 
 use crate::context::CliContext;
@@ -48,9 +50,8 @@ impl InspectFilters {
 pub fn run(
     ctx: &mut CliContext,
     path: Option<&str>,
-    depth: usize,
     show_all: bool,
-    expand_blocks: bool,
+    full: bool,
     json_output: bool,
     filters: InspectFilters,
 ) -> Result<()> {
@@ -74,9 +75,9 @@ pub fn run(
                 .with_context(|| format!("nav path '{}' does not resolve to a struct", nav_path))?
         };
         if json_output {
-            println!("{}", serde_json::to_string_pretty(&struct_to_json(ctx, target, depth, &filters, show_all, expand_blocks))?);
+            println!("{}", serde_json::to_string_pretty(&struct_to_json(ctx, target, &filters, show_all, full))?);
         } else {
-            print_via_walker(ctx, target, depth, &filters, show_all, expand_blocks);
+            print_via_walker(ctx, target, &filters, show_all, full);
         }
         return Ok(());
     }
@@ -93,9 +94,9 @@ pub fn run(
         && let Some(target) = root.descend(p)
     {
         if json_output {
-            println!("{}", serde_json::to_string_pretty(&struct_to_json(ctx, target, depth, &filters, show_all, expand_blocks))?);
+            println!("{}", serde_json::to_string_pretty(&struct_to_json(ctx, target, &filters, show_all, full))?);
         } else {
-            print_via_walker(ctx, target, depth, &filters, show_all, expand_blocks);
+            print_via_walker(ctx, target, &filters, show_all, full);
         }
         return Ok(());
     }
@@ -104,45 +105,44 @@ pub fn run(
 
     if let Some(nested) = field.as_struct() {
         if json_output {
-            println!("{}", serde_json::to_string_pretty(&struct_to_json(ctx, nested, depth, &filters, show_all, expand_blocks))?);
+            println!("{}", serde_json::to_string_pretty(&struct_to_json(ctx, nested, &filters, show_all, full))?);
         } else {
-            print_via_walker(ctx, nested, depth, &filters, show_all, expand_blocks);
+            print_via_walker(ctx, nested, &filters, show_all, full);
         }
     } else if let Some(block) = field.as_block() {
-        print_block(ctx, block, p, depth, json_output, &filters, show_all, expand_blocks)?;
+        print_block(ctx, block, p, json_output, &filters, show_all, full)?;
     } else if let Some(array) = field.as_array() {
-        print_array(ctx, array, p, depth, json_output, &filters, show_all, expand_blocks)?;
+        print_array(ctx, array, p, json_output, &filters, show_all, full)?;
+    } else if let Some(resource) = field.as_resource() {
+        print_resource(ctx, resource, p, json_output, &filters, show_all, full)?;
     } else {
-        anyhow::bail!("field '{}' is not a struct, block, or array", p);
+        anyhow::bail!("field '{}' is not a struct, block, array, or pageable_resource", p);
     }
 
     Ok(())
 }
 
 /// Text-mode tree walker. Uses the shared [`FieldVisitor`]
-/// infrastructure — depth limiting comes from walker-provided
-/// depth plus the user's `--depth` cap, indent is derived from
-/// depth.
-fn print_via_walker(ctx: &CliContext, start: TagStruct<'_>, max_depth: usize, filters: &InspectFilters, show_all: bool, expand_blocks: bool) {
+/// infrastructure; indent is derived from walker-provided depth.
+fn print_via_walker(ctx: &CliContext, start: TagStruct<'_>, filters: &InspectFilters, show_all: bool, full: bool) {
     let mut visitor = InspectText {
         ctx,
-        max_depth,
         filters,
         show_all,
-        expand_blocks,
+        full,
     };
     walk(start, &mut visitor);
 }
 
 struct InspectText<'a> {
     ctx: &'a CliContext,
-    max_depth: usize,
     filters: &'a InspectFilters,
     show_all: bool,
-    /// When false, `enter_block` prints the count line and stops
-    /// (does not descend into elements). Arrays always descend
-    /// regardless — they're fixed-count from the schema.
-    expand_blocks: bool,
+    /// Recursively expand everything. When false (flat mode),
+    /// `enter_block` prints the count line and stops; structs /
+    /// arrays / resources still recurse so the user sees one-step
+    /// descents. When true, blocks recurse too.
+    full: bool,
 }
 
 impl<'a> InspectText<'a> {
@@ -188,24 +188,21 @@ impl<'a> FieldVisitor for InspectText<'a> {
         if !self.filters.is_active() {
             println!("{}{}: struct", self.indent(depth), field.name());
         }
-        if depth < self.max_depth { VisitControl::Descend } else { VisitControl::Skip }
+        VisitControl::Descend
     }
 
     fn enter_block(&mut self, _path: &str, depth: usize, field: TagField<'_>, block: TagBlock<'_>) -> VisitControl {
         if !self.filters.is_active() {
             println!("{}{}: block [{} elements]", self.indent(depth), field.name(), block.len());
         }
-        if !self.expand_blocks {
-            return VisitControl::Skip;
-        }
-        if depth < self.max_depth { VisitControl::Descend } else { VisitControl::Skip }
+        if self.full { VisitControl::Descend } else { VisitControl::Skip }
     }
 
     fn enter_array(&mut self, _path: &str, depth: usize, field: TagField<'_>, array: TagArray<'_>) -> VisitControl {
         if !self.filters.is_active() {
             println!("{}{}: array [{} elements]", self.indent(depth), field.name(), array.len());
         }
-        if depth < self.max_depth { VisitControl::Descend } else { VisitControl::Skip }
+        VisitControl::Descend
     }
 
     fn enter_element(&mut self, _path: &str, depth: usize, index: usize, elem: TagStruct<'_>) -> VisitControl {
@@ -227,10 +224,16 @@ impl<'a> FieldVisitor for InspectText<'a> {
         VisitControl::Descend
     }
 
-    fn visit_resource(&mut self, _path: &str, depth: usize, field: TagField<'_>) {
-        if !self.filters.is_active() || self.filters.leaf_matches(field.name(), None) {
-            println!("{}{}: pageable_resource", self.indent(depth), field.name());
+    fn enter_resource(&mut self, _path: &str, depth: usize, field: TagField<'_>, resource: TagResource<'_>) -> VisitControl {
+        if !self.filters.is_active() {
+            println!(
+                "{}{}: pageable_resource [{}]",
+                self.indent(depth),
+                field.name(),
+                format_resource_summary(resource),
+            );
         }
+        VisitControl::Descend
     }
 
     fn visit_leaf(&mut self, _path: &str, depth: usize, field: TagField<'_>) {
@@ -253,10 +256,10 @@ impl<'a> FieldVisitor for InspectText<'a> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn print_block(ctx: &CliContext, block: TagBlock<'_>, label: &str, depth: usize, json_output: bool, filters: &InspectFilters, show_all: bool, expand_blocks: bool) -> Result<()> {
+fn print_block(ctx: &CliContext, block: TagBlock<'_>, label: &str, json_output: bool, filters: &InspectFilters, show_all: bool, full: bool) -> Result<()> {
     if json_output {
-        if expand_blocks {
-            let values: Vec<Value> = block.iter().map(|s| struct_to_json(ctx, s, depth, filters, show_all, expand_blocks)).collect();
+        if full {
+            let values: Vec<Value> = block.iter().map(|s| struct_to_json(ctx, s, filters, show_all, full)).collect();
             println!("{}", serde_json::to_string_pretty(&values)?);
         } else {
             println!("{}", serde_json::to_string_pretty(&json!({
@@ -266,9 +269,9 @@ fn print_block(ctx: &CliContext, block: TagBlock<'_>, label: &str, depth: usize,
         }
     } else {
         println!("{}: block [{} elements]", label, block.len());
-        if expand_blocks {
+        if full {
             for (i, s) in block.iter().enumerate() {
-                let mut v = InspectText { ctx, max_depth: depth, filters, show_all, expand_blocks };
+                let mut v = InspectText { ctx, filters, show_all, full };
                 if !v.try_inline_element(1, i, s) {
                     println!("  [{}]", i);
                     walk(s, &mut v);
@@ -282,16 +285,49 @@ fn print_block(ctx: &CliContext, block: TagBlock<'_>, label: &str, depth: usize,
 }
 
 #[allow(clippy::too_many_arguments)]
-fn print_array(ctx: &CliContext, array: TagArray<'_>, label: &str, depth: usize, json_output: bool, filters: &InspectFilters, show_all: bool, expand_blocks: bool) -> Result<()> {
-    // Arrays are fixed-count from the schema, so they're not gated
-    // by `--full` — they're always expanded.
+fn print_resource(ctx: &CliContext, resource: TagResource<'_>, label: &str, json_output: bool, filters: &InspectFilters, show_all: bool, full: bool) -> Result<()> {
+    // Resources walk as their header struct (Exploded only) — same
+    // dispatch shape as `as_struct`. Null and Xsync just print the
+    // summary line; there's no parsed tree to descend into.
     if json_output {
-        let values: Vec<Value> = array.iter().map(|s| struct_to_json(ctx, s, depth, filters, show_all, expand_blocks)).collect();
+        let mut obj = serde_json::Map::new();
+        obj.insert("kind".into(), json!("pageable_resource"));
+        obj.insert("resource_kind".into(), json!(match resource.kind() {
+            TagResourceKind::Null => "null",
+            TagResourceKind::Exploded => "exploded",
+            TagResourceKind::Xsync => "xsync",
+        }));
+        if let Some(payload) = resource.exploded_payload() {
+            obj.insert("payload_bytes".into(), json!(payload.len()));
+        }
+        if let Some(payload) = resource.xsync_payload() {
+            obj.insert("payload_bytes".into(), json!(payload.len()));
+        }
+        if let Some(header) = resource.as_struct() {
+            obj.insert("fields".into(), struct_to_json(ctx, header, filters, show_all, full));
+        }
+        println!("{}", serde_json::to_string_pretty(&Value::Object(obj))?);
+    } else {
+        println!("{}: pageable_resource [{}]", label, format_resource_summary(resource));
+        if let Some(header) = resource.as_struct() {
+            let mut v = InspectText { ctx, filters, show_all, full };
+            walk(header, &mut v);
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn print_array(ctx: &CliContext, array: TagArray<'_>, label: &str, json_output: bool, filters: &InspectFilters, show_all: bool, full: bool) -> Result<()> {
+    // Arrays are fixed-count from the schema, so they're always
+    // expanded regardless of `--full`.
+    if json_output {
+        let values: Vec<Value> = array.iter().map(|s| struct_to_json(ctx, s, filters, show_all, full)).collect();
         println!("{}", serde_json::to_string_pretty(&values)?);
     } else {
         println!("{}: array [{} elements]", label, array.len());
         for (i, s) in array.iter().enumerate() {
-            let mut v = InspectText { ctx, max_depth: depth, filters, show_all, expand_blocks };
+            let mut v = InspectText { ctx, filters, show_all, full };
             if !v.try_inline_element(1, i, s) {
                 println!("  [{}]", i);
                 walk(s, &mut v);
@@ -307,43 +343,46 @@ fn print_array(ctx: &CliContext, array: TagArray<'_>, label: &str, depth: usize,
 // more complexity than it removes.
 //================================================================================
 
-fn struct_to_json(ctx: &CliContext, s: TagStruct<'_>, depth: usize, filters: &InspectFilters, show_all: bool, expand_blocks: bool) -> Value {
+fn struct_to_json(ctx: &CliContext, s: TagStruct<'_>, filters: &InspectFilters, show_all: bool, full: bool) -> Value {
     let iter: Box<dyn Iterator<Item = TagField<'_>>> =
         if show_all { Box::new(s.fields_all()) } else { Box::new(s.fields()) };
     let fields: Vec<Value> = iter
-        .filter_map(|field| field_to_json(ctx, field, depth, filters, show_all, expand_blocks))
+        .filter_map(|field| field_to_json(ctx, field, filters, show_all, full))
         .collect();
     json!(fields)
 }
 
-fn field_to_json(ctx: &CliContext, field: TagField<'_>, depth: usize, filters: &InspectFilters, show_all: bool, expand_blocks: bool) -> Option<Value> {
+fn field_to_json(ctx: &CliContext, field: TagField<'_>, filters: &InspectFilters, show_all: bool, full: bool) -> Option<Value> {
     let name = field.name();
     let mut obj = serde_json::Map::new();
     obj.insert("name".into(), json!(name));
     obj.insert("type".into(), json!(field.type_name()));
 
     if let Some(nested) = field.as_struct() {
-        if depth > 0 {
-            obj.insert("fields".into(), struct_to_json(ctx, nested, depth - 1, filters, show_all, expand_blocks));
-        }
+        obj.insert("fields".into(), struct_to_json(ctx, nested, filters, show_all, full));
     } else if let Some(block) = field.as_block() {
         obj.insert("count".into(), json!(block.len()));
-        if expand_blocks && depth > 0 {
-            let elements: Vec<Value> = block.iter().map(|s| struct_to_json(ctx, s, depth - 1, filters, show_all, expand_blocks)).collect();
+        if full {
+            let elements: Vec<Value> = block.iter().map(|s| struct_to_json(ctx, s, filters, show_all, full)).collect();
             obj.insert("elements".into(), json!(elements));
         }
     } else if let Some(array) = field.as_array() {
-        // Arrays are fixed-count and not gated by `--full`.
+        // Arrays are fixed-count, always expanded.
         obj.insert("count".into(), json!(array.len()));
-        if depth > 0 {
-            let elements: Vec<Value> = array.iter().map(|s| struct_to_json(ctx, s, depth - 1, filters, show_all, expand_blocks)).collect();
-            obj.insert("elements".into(), json!(elements));
-        }
-    } else if field.as_resource().is_some() {
-        if filters.is_active() && !filters.leaf_matches(name, None) {
-            return None;
-        }
+        let elements: Vec<Value> = array.iter().map(|s| struct_to_json(ctx, s, filters, show_all, full)).collect();
+        obj.insert("elements".into(), json!(elements));
+    } else if let Some(resource) = field.as_resource() {
         obj.insert("kind".into(), json!("pageable_resource"));
+        obj.insert("resource_kind".into(), json!(resource_kind_str(resource.kind())));
+        if let Some(payload) = resource.exploded_payload() {
+            obj.insert("payload_bytes".into(), json!(payload.len()));
+        }
+        if let Some(payload) = resource.xsync_payload() {
+            obj.insert("payload_bytes".into(), json!(payload.len()));
+        }
+        if let Some(header) = resource.as_struct() {
+            obj.insert("fields".into(), struct_to_json(ctx, header, filters, show_all, full));
+        }
     } else if let Some(value) = field.value() {
         let formatted = format_value(ctx, &value, false);
         if filters.is_active() && !filters.leaf_matches(name, Some(&formatted)) {
@@ -355,4 +394,23 @@ fn field_to_json(ctx: &CliContext, field: TagField<'_>, depth: usize, filters: &
     }
 
     Some(Value::Object(obj))
+}
+
+fn resource_kind_str(kind: TagResourceKind) -> &'static str {
+    match kind {
+        TagResourceKind::Null => "null",
+        TagResourceKind::Exploded => "exploded",
+        TagResourceKind::Xsync => "xsync",
+    }
+}
+
+fn format_resource_summary(resource: TagResource<'_>) -> String {
+    let kind = resource_kind_str(resource.kind());
+    if let Some(payload) = resource.exploded_payload() {
+        format!("{kind}, payload {} bytes", payload.len())
+    } else if let Some(payload) = resource.xsync_payload() {
+        format!("{kind}, payload {} bytes", payload.len())
+    } else {
+        kind.to_string()
+    }
 }

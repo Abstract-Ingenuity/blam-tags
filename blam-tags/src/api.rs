@@ -356,6 +356,20 @@ impl<'a> TagField<'a> {
         })
     }
 
+    /// Borrowed slice of the bytes carried by a `data` field —
+    /// avoids the clone that [`TagField::value`] performs for the
+    /// `TagFieldData::Data` variant. Returns `None` for non-data
+    /// fields.
+    pub fn as_data(&self) -> Option<&'a [u8]> {
+        if self.layout.fields[self.field_index].field_type != TagFieldType::Data {
+            return None;
+        }
+        match self.sub_chunk()? {
+            TagSubChunkContent::Data(bytes) => Some(bytes.as_slice()),
+            _ => None,
+        }
+    }
+
     pub fn as_resource(&self) -> Option<TagResource<'a>> {
         if self.layout.fields[self.field_index].field_type != TagFieldType::PageableResource {
             return None;
@@ -366,7 +380,12 @@ impl<'a> TagField<'a> {
                 TagSubChunkContent::Resource(r) => Some(r),
                 _ => None,
             })?;
-        Some(TagResource { chunk })
+        Some(TagResource {
+            layout: self.layout,
+            chunk,
+            parent_raw: self.struct_raw,
+            field_index: self.field_index,
+        })
     }
 
     /// For enum or flags fields: variant / bit names plus current
@@ -521,12 +540,34 @@ fn element_struct_size(layout: &TagLayout, array_layout_index: u32) -> usize {
     layout.struct_layouts[element_struct_index].size
 }
 
-/// Read-only view onto a pageable resource field. Exposes shape
-/// discriminant only — payload bytes are intentionally not surfaced
-/// at the facade level (they're opaque engine data).
+/// Read-only view onto a pageable resource field.
+///
+/// Three byte regions coexist:
+///
+/// - The **inline 8 bytes** in the enclosing struct's raw region at
+///   this field's offset. The `tag_resource` field type always
+///   occupies 8 inline bytes — typically a runtime handle stub the
+///   engine fills in at load time; on disk it's frequently zeros or
+///   leftover memory state. Exposed via [`TagResource::inline_bytes`].
+/// - The **resource header struct** — schema described by the
+///   resource's layout (`TagResourceDefinition::struct_definition`).
+///   For Exploded resources, the struct's raw bytes live in the
+///   `tgdt` chunk payload (whose size matches the struct's declared
+///   size), and its sub-chunk tree (nested blocks/data/etc.) lives
+///   in the trailing `tgst`. Walkable via [`TagResource::as_struct`].
+/// - The **post-struct payload** — for Exploded resources whose
+///   tgdt is larger than the header struct's size, the trailing bytes
+///   are opaque per-group data (e.g. animation codec stream, vertex
+///   buffer). Reachable via [`TagResource::exploded_payload`] sliced
+///   beyond `struct_size`.
 #[derive(Clone, Copy)]
 pub struct TagResource<'a> {
+    layout: &'a TagLayout,
     chunk: &'a TagResourceChunk,
+    /// The enclosing element's raw region — used to surface the 8
+    /// inline bytes at this field's offset.
+    parent_raw: &'a [u8],
+    field_index: usize,
 }
 
 impl<'a> TagResource<'a> {
@@ -535,6 +576,65 @@ impl<'a> TagResource<'a> {
             TagResourceChunk::Null => TagResourceKind::Null,
             TagResourceChunk::Exploded { .. } => TagResourceKind::Exploded,
             TagResourceChunk::Xsync(_) => TagResourceKind::Xsync,
+        }
+    }
+
+    /// The schema side of this resource — the resource definition
+    /// declared in the layout.
+    pub fn definition(&self) -> crate::TagResourceDefinition<'a> {
+        let resource_layout_index =
+            self.layout.fields[self.field_index].definition as usize;
+        crate::TagResourceDefinition::new(self.layout, resource_layout_index)
+    }
+
+    /// The 8 inline bytes for this `tag_resource` field as they
+    /// appear in the enclosing struct's raw region. These are
+    /// preserved verbatim through roundtrip; their interpretation is
+    /// engine-internal (typically a runtime handle).
+    pub fn inline_bytes(&self) -> &'a [u8] {
+        let offset = self.layout.fields[self.field_index].offset as usize;
+        // tag_resource is always 8 inline bytes per the schema.
+        &self.parent_raw[offset..offset + 8]
+    }
+
+    /// The resource header as a walkable struct. Returns `Some` only
+    /// for Exploded resources, where the header struct's raw bytes
+    /// live in the `tgdt` payload and its sub-chunk tree was parsed.
+    /// Null and Xsync have no parsed struct to descend into.
+    pub fn as_struct(&self) -> Option<TagStruct<'a>> {
+        let TagResourceChunk::Exploded { struct_data, exploded } = self.chunk else {
+            return None;
+        };
+        let struct_size =
+            self.layout.struct_layouts[struct_data.struct_index as usize].size;
+        // The struct's raw bytes are the leading `struct_size` bytes
+        // of the tgdt payload. Anything past that is opaque
+        // per-group data — see [`exploded_payload`].
+        let struct_raw = exploded.get(..struct_size)?;
+        Some(TagStruct {
+            layout: self.layout,
+            struct_data,
+            struct_raw,
+        })
+    }
+
+    /// The raw `tgdt` payload bytes for an Exploded resource. The
+    /// leading `struct_size` bytes are the header struct's raw bytes
+    /// (also reachable via [`as_struct`]); any trailing bytes are
+    /// opaque per-group data.
+    pub fn exploded_payload(&self) -> Option<&'a [u8]> {
+        match self.chunk {
+            TagResourceChunk::Exploded { exploded, .. } => Some(exploded.as_slice()),
+            _ => None,
+        }
+    }
+
+    /// The opaque XSync payload bytes. Not seen in the Halo 3 / Reach
+    /// MCC corpus; present so future tags don't panic.
+    pub fn xsync_payload(&self) -> Option<&'a [u8]> {
+        match self.chunk {
+            TagResourceChunk::Xsync(bytes) => Some(bytes.as_slice()),
+            _ => None,
         }
     }
 }

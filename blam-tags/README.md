@@ -203,6 +203,46 @@ cargo run --release -p blam-tags --example schema_match -- \
     definitions/halo3_mcc /path/to/halo3_mcc/tags
 ```
 
+### Bitmap → DDS extraction
+
+`Bitmap::new(&tag)` wraps a parsed `.bitmap` tag and exposes per-image metadata + a sliced view of the inline pixel buffer. Each `BitmapImage` knows its format, dimensions, mipmap chain, and texture type, and can write itself out as a valid DDS file:
+
+```rust
+use blam_tags::{Bitmap, TagFile};
+use std::fs::File;
+use std::io::BufWriter;
+
+let tag = TagFile::read("masterchief.bitmap")?;
+let bitmap = Bitmap::new(&tag)?;
+
+for (i, image) in bitmap.iter().enumerate() {
+    let mut out = BufWriter::new(File::create(format!("face_{i}.dds"))?);
+    image.write_dds(&mut out)?;
+    println!("{i}: {}x{} {} ({} mip{})",
+        image.width(), image.height(),
+        image.format_name().unwrap_or_default(),
+        image.mipmap_levels(),
+        if image.mipmap_levels() == 1 { "" } else { "s" });
+}
+```
+
+Format coverage (validated against 25,908 / 25,908 bitmap-tag images across halo3_mcc + haloreach_mcc):
+
+| Path | Formats |
+|---|---|
+| **Legacy DDS** (fourcc or pixelformat masks) | `dxt1` `dxt3` `dxt5` `dxt5a` `dxn` `a8` `y8` `r8` `ay8` `a8y8` `a4r4g4b4` `x8r8g8b8` `a8r8g8b8` `v8u8` `q8w8v8u8` `abgrfp16` `abgrfp32` `a16b16g16r16` |
+| **DXT10 extension** (`arraySize`, DXGI format) | array textures of any of the above + `signedr16g16b16a16` |
+| **CPU decode → A8R8G8B8** | `dxn_mono_alpha` (BC5-shaped, mono+alpha semantics — port of TagTool's `DecompressDXNMonoAlpha`) |
+
+Pure-tag-file: pixels come from the top-level `processed pixel data` blob, no resource cache lookup. `BitmapError::PixelSliceOutOfBounds` / `FormatNotSupported` / `UnsupportedTextureType` surface the failure modes.
+
+The corpus-wide validator lives in [`examples/extract_bitmap_sweep.rs`](examples/extract_bitmap_sweep.rs):
+
+```sh
+cargo run --release -p blam-tags --example extract_bitmap_sweep -- \
+    /path/to/halo3_mcc/tags /path/to/haloreach_mcc/tags
+```
+
 ### Optional streams (want / info / assd)
 
 Three optional streams can hang off the tag file — `want` (dependency list), `info` (import info), `assd` (asset-depot icon storage). They're off by default on freshly created tags; attach as needed:
@@ -299,7 +339,14 @@ Two facades sit on top of the raw storage types:
   `TagFieldDefinition`, `TagBlockDefinition`, `TagArrayDefinition`,
   `TagResourceDefinition`. Reachable from `TagFile::definitions()`.
 
-Everything the user-facing code should need is one or the other.
+Plus a bitmap-specific helper layer:
+
+- **[`bitmap`]** — `Bitmap`, `BitmapImage`, `BitmapFormat`, plus a
+  `write_dds` writer covering the 18 formats observed in the
+  halo3_mcc + haloreach_mcc bitmap corpora. Built on top of the
+  `api` facade.
+
+Everything the user-facing code should need is one of these.
 Lower-level modules (`data`, `path`, `stream`, `io`, `layout::TagLayout`) are available but no user code in this workspace (CLI, examples) reaches into them.
 
 Error types:
@@ -331,6 +378,6 @@ Field names are case-sensitive; `Type:` filters are case-insensitive.
 | V3 layouts (adds `]==[` interop)               | ✓    | ✓     | Main Halo 3 / Reach format. |
 | V4 layouts (`stv4` with per-struct version)    | ✓    | ✓     | Exercised on H4 / H2A MP tags in the community corpus sweep. |
 
-Pageable-resource shapes handled: `tg\0c` (null), `tgrc` (exploded with inner `tgdt` + nested struct), `tgxc` (xsync, opaque payload).
+Pageable-resource shapes handled: `tg\0c` (null), `tgrc` (exploded with inner `tgdt` + nested struct), `tgxc` (xsync, opaque payload). Exploded resources are *navigable*: `TagResource::as_struct()` returns a `TagStruct` view onto the header struct (raw bytes from the leading `struct_size` bytes of the `tgdt` payload, sub-chunks parsed from the trailing `tgst`). The path resolver and REPL `cd` step through `pageable_resource` segments transparently. The 8 inline handle bytes (engine memory state, runtime-junk in MCC tags) are exposed via `TagResource::inline_bytes()` for diagnostic tooling. Bitmaps in halo3_mcc / haloreach_mcc keep their pixel data in the top-level `processed pixel data` field rather than a pageable resource — see [`bitmap`] for the extraction path.
 ApiInterop (`ti][`) fields are parsed into `TagFieldData::ApiInterop` with `descriptor` / `address` / `definition_address` accessors and a `reset()` builder for BCS's canonical `{0, UINT_MAX, 0}` pattern.
 VertexBuffer fields are preserved as raw bytes through the roundtrip but not yet parsed into typed values.

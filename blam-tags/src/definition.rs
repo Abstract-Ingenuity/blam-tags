@@ -316,6 +316,10 @@ pub struct TagResourceDefinition<'a> {
 }
 
 impl<'a> TagResourceDefinition<'a> {
+    pub(crate) fn new(layout: &'a TagLayout, resource_layout_index: usize) -> Self {
+        Self { layout, resource_layout_index }
+    }
+
     pub fn name(&self) -> &'a str {
         let record = &self.layout.resource_layouts[self.resource_layout_index];
         self.layout.get_string(record.name_offset).unwrap_or("")

@@ -41,29 +41,30 @@ The example commands below elide `--game` for readability — add it to every in
 
 | Command | Description |
 |-|-|
-| `header` | Show tag/cache file header metadata |
-| `list` | Walk a directory for tags; filter + list, or summarize by group |
-| `inspect` | Show the field tree |
-| `get` | Read a field value |
-| `set` | Write a field value |
-| `flag` | Get or set a flag bit by name |
-| `options` | List enum/flag options for a field |
-| `block` | Block element operations (count, add, insert, duplicate, delete, clear, swap, move) |
-| `layout-diff` | Diff the **schemas** of two tag files |
-| `data-diff` | Diff the **values** of two tag files |
-| `deps` | List every `tag_reference` in a tag |
-| `find` | Search a directory of tags for fields whose value matches a query |
-| `export` | Dump a tag's state as replayable `set` commands |
-| `check` | Integrity check — flag enum / flag / real / reference anomalies |
-| `new` | Create a fresh tag from a schema JSON |
-| `add-dependency-list` | Attach an empty dependency-list stream |
-| `remove-dependency-list` | Drop the dependency-list stream |
-| `rebuild-dependency-list` | Repopulate the dependency list from the tag's own tag_references |
-| `add-import-info` | Attach an empty import-info stream |
-| `remove-import-info` | Drop the import-info stream |
-| `add-asset-depot-storage` | Attach an empty asset-depot-storage stream |
-| `remove-asset-depot-storage` | Drop the asset-depot-storage stream |
-| `repl` | Interactive shell against a loaded tag |
+| [`header`](#header--file-metadata) | Show tag/cache file header metadata |
+| [`list`](#list--walk-a-directory-for-tags) | Walk a directory for tags; filter + list, or summarize by group |
+| [`inspect`](#inspect--show-field-tree) | Show the field tree |
+| [`get`](#get--read-a-field-value) | Read a field value |
+| [`set`](#set--write-a-field-value) | Write a field value |
+| [`flag`](#flag--get-or-set-a-flag-bit) | Get or set a flag bit by name |
+| [`options`](#options--list-enumflag-options) | List enum/flag options for a field |
+| [`block`](#block--block-element-operations) | Block element operations (count, add, insert, duplicate, delete, clear, swap, move) |
+| [`layout-diff`](#layout-diff--compare-tag-schemas) | Diff the **schemas** of two tag files |
+| [`data-diff`](#data-diff--compare-two-tag-values) | Diff the **values** of two tag files |
+| [`deps`](#deps--list-tag-references) | List every `tag_reference` in a tag |
+| [`find`](#find--search-values-across-a-directory) | Search a directory of tags for fields whose value matches a query |
+| [`export`](#export--dump-tag-state-as-replay-commands) | Dump a tag's state as replayable `set` commands |
+| [`extract-bitmap`](#extract-bitmap--bitmap-to-dds) | Extract a `.bitmap` tag's images as DDS files (one per image) |
+| [`check`](#check--integrity-validator) | Integrity check — flag enum / flag / real / reference anomalies |
+| [`new`](#new--create-a-fresh-tag-from-a-schema) | Create a fresh tag from a schema JSON |
+| [`add-dependency-list`](#optional-stream-commands) | Attach an empty dependency-list stream |
+| [`remove-dependency-list`](#optional-stream-commands) | Drop the dependency-list stream |
+| [`rebuild-dependency-list`](#optional-stream-commands) | Repopulate the dependency list from the tag's own tag_references |
+| [`add-import-info`](#optional-stream-commands) | Attach an empty import-info stream |
+| [`remove-import-info`](#optional-stream-commands) | Drop the import-info stream |
+| [`add-asset-depot-storage`](#optional-stream-commands) | Attach an empty asset-depot-storage stream |
+| [`remove-asset-depot-storage`](#optional-stream-commands) | Drop the asset-depot-storage stream |
+| [`repl`](#repl--interactive-shell) | Interactive shell against a loaded tag |
 
 ---
 
@@ -143,15 +144,14 @@ $ blam-tag-shell list /path/to/tags --summary --sort-by-count --json
 
 | Long | Description |
 |-|-|
-| `--depth <N>` | Maximum depth to display (default `1`). |
 | `--all` | Include schema padding / explanation / skip / unknown fields. |
-| `--full` | Expand block elements. Default: print only the count. Drill into a single element with `<path>[<index>]` instead. |
+| `--full` | Recursively expand everything — including block elements. Default (flat): walk through structs / arrays / pageable_resources, but stop at blocks (display the count only). Drill into a single block element with `<path>[<index>]` instead. |
 | `--json` | Emit JSON. |
 | `--filter <S,...>` | Only show fields whose name contains any of the comma-separated substrings. |
 | `--filter-not <S,...>` | Skip fields whose name contains any of these. |
 | `--filter-value <S>` | Only leaves whose rendered value contains `S`. |
 
-By default, blocks (variable-count tag-data lists) print as `<name>: block [<n> elements]` and stop — for tags with many entries this keeps `inspect` output to a screenful. Pass `--full` to expand every block recursively, or descend into one element with the `[<index>]` path syntax. Arrays (fixed-count from the schema) always expand regardless.
+Two modes — flat (default) and full. **Flat** recurses through structs, arrays, and pageable_resources (the resource header struct walks like any other container) but stops at blocks: each block shows its `[<n> elements]` count and nothing more. **Full** recurses through blocks too. Arrays always expand regardless, since they're fixed-count from the schema.
 
 When a block or array element collapses to a single scalar leaf (e.g. spherical-harmonic coefficient arrays where each element is a one-field `coefficient: real`), the `[i]` header and its leaf are merged onto a single line:
 
@@ -176,18 +176,20 @@ unit: struct
 jump velocity: real = 3.08
 
 # Drill into a single element — blocks below it still gated by --full
-$ blam-tag-shell inspect masterchief.biped "unit/seats[0]" --depth 2
+$ blam-tag-shell inspect masterchief.biped "unit/seats[0]"
 
-# Show the contents of every block too
-$ blam-tag-shell inspect masterchief.biped --full --depth 5
+# Recursively expand everything, including blocks
+$ blam-tag-shell inspect masterchief.biped --full
 
 # Filter by name + value
-$ blam-tag-shell inspect masterchief.biped --depth 5 \
+$ blam-tag-shell inspect masterchief.biped --full \
     --filter velocity --filter-value 3
 
-# Full tree as JSON (still gated by --full for blocks)
-$ blam-tag-shell inspect masterchief.biped --depth 3 --json
+# Full tree as JSON
+$ blam-tag-shell inspect masterchief.biped --full --json
 ```
+
+A `pageable_resource` field renders the same way a struct does — its header struct walks like a normal container, so `cd "tag resource groups[0]/tag_resource"` lands inside the resource and `inspect --full` prints its fields and any nested blocks / data. Null and Xsync resources have no parsed tree, so they print just the kind summary line and stop.
 
 ---
 
@@ -464,6 +466,45 @@ $ diff -u /tmp/a.clean /tmp/b.clean
 
 # Scope to a subtree
 $ blam-tag-shell export masterchief.biped 'unit/unit camera' --output cam.cmds
+```
+
+---
+
+### `extract-bitmap` — Bitmap to DDS
+
+| Argument | Description |
+|-|-|
+| `<FILE>` | Path to a `.bitmap` tag file. |
+
+| Long | Description |
+|-|-|
+| `--output <DIR>` | Output directory (default: current directory). |
+
+Reads pixel bytes straight from the tag's `processed pixel data` blob and emits one DDS per image. No resource cache files needed — halo3_mcc / haloreach_mcc bitmaps keep their pixels inline. Validated against 25,908 / 25,908 bitmap-tag images across both corpora.
+
+Output naming:
+
+- 1-image tag → `<tag_stem>.dds` in `<DIR>`.
+- N-image tag → `<DIR>/<tag_stem>/<i>.dds` (one subdirectory per tag, one file per image).
+
+Format coverage:
+
+- **Legacy DDS** (fourcc / pixelformat masks): `dxt1`, `dxt3`, `dxt5`, `dxt5a`, `dxn`, `a8`, `y8`, `r8`, `ay8`, `a8y8`, `a4r4g4b4`, `x8r8g8b8`, `a8r8g8b8`, `v8u8`, `q8w8v8u8`, `abgrfp16`, `abgrfp32`, `a16b16g16r16`.
+- **DXT10 extension**: array textures of any of the above + `signedr16g16b16a16`.
+- **CPU-decoded to A8R8G8B8**: `dxn_mono_alpha` (BC5-shaped layout with luminance + alpha sub-blocks — port of TagTool's `DecompressDXNMonoAlpha`).
+
+```sh
+$ blam-tag-shell extract-bitmap masterchief.bitmap
+masterchief.dds: 256×256 a8r8g8b8 (2D texture, 9 mips)
+
+$ blam-tag-shell extract-bitmap envmap.bitmap --output extracted/
+extracted/envmap.dds: 256×256 dxt5 (cube map, 9 mips)
+
+# Multi-image tag → directory of DDS files
+$ blam-tag-shell extract-bitmap weapon_atlas.bitmap --output extracted/
+extracted/weapon_atlas/0.dds: 512×512 dxt1 (2D texture, 10 mips)
+extracted/weapon_atlas/1.dds: 256×256 dxt5 (2D texture, 9 mips)
+…
 ```
 
 ---

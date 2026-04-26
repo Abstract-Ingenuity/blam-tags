@@ -16,7 +16,7 @@
 //! Visitors use it for depth-limited traversal without having to
 //! maintain their own counters.
 
-use blam_tags::{TagArray, TagBlock, TagField, TagStruct};
+use blam_tags::{TagArray, TagBlock, TagField, TagResource, TagStruct};
 
 /// Returned from container enter-hooks to control whether the walker
 /// recurses into the container's children.
@@ -38,9 +38,20 @@ pub trait FieldVisitor {
     /// No recursion follows. Default: noop.
     fn visit_leaf(&mut self, _path: &str, _depth: usize, _field: TagField<'_>) {}
 
-    /// A `pageable_resource` field. Engine-opaque; no recursion.
-    /// Default: noop.
-    fn visit_resource(&mut self, _path: &str, _depth: usize, _field: TagField<'_>) {}
+    /// Entering a `pageable_resource` field. The header struct is
+    /// reachable via `resource.as_struct()` (Exploded only); the
+    /// `tgdt` exploded payload is opaque per-group bytes and is not
+    /// walked. Return `Skip` to suppress descent into the header.
+    /// Default: `Descend`.
+    fn enter_resource(
+        &mut self,
+        _path: &str,
+        _depth: usize,
+        _field: TagField<'_>,
+        _resource: TagResource<'_>,
+    ) -> VisitControl {
+        VisitControl::Descend
+    }
 
     /// Entering a struct field (the nested struct is reachable via
     /// `field.as_struct()`). Return `Skip` to suppress recursion.
@@ -131,8 +142,12 @@ fn walk_struct<V: FieldVisitor>(
             if matches!(visitor.enter_array(path, depth, field, array), VisitControl::Descend) {
                 walk_elements(array.iter(), path, depth, visitor);
             }
-        } else if field.as_resource().is_some() {
-            visitor.visit_resource(path, depth, field);
+        } else if let Some(resource) = field.as_resource() {
+            if matches!(visitor.enter_resource(path, depth, field, resource), VisitControl::Descend)
+                && let Some(header) = resource.as_struct()
+            {
+                walk_struct(header, path, depth + 1, visitor);
+            }
         } else {
             visitor.visit_leaf(path, depth, field);
         }

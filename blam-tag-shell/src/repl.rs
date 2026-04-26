@@ -233,9 +233,17 @@ fn repl_edit_block(ctx: &mut CliContext, rest: &[String]) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("field '{}' not found", prospective_path))?;
     let navigable = field.as_struct().is_some()
         || field.as_block().is_some()
-        || field.as_array().is_some();
+        || field.as_array().is_some()
+        || field.as_resource().and_then(|r| r.as_struct()).is_some();
     if !navigable {
-        anyhow::bail!("field '{}' is not a navigable struct / block / array", prospective_path);
+        if let Some(resource) = field.as_resource() {
+            anyhow::bail!(
+                "field '{}' is a {:?} pageable_resource — only Exploded resources can be navigated",
+                prospective_path,
+                resource.kind(),
+            );
+        }
+        anyhow::bail!("field '{}' is not a navigable struct / block / array / pageable_resource", prospective_path);
     }
 
     ctx.nav = prospective;

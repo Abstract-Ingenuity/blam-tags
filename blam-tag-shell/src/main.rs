@@ -75,14 +75,13 @@ enum Commands {
         file: String,
         /// Field path to start from
         path: Option<String>,
-        /// Maximum depth to display
-        #[arg(long, default_value_t = 1)]
-        depth: usize,
         /// Show all fields including hidden
         #[arg(long)]
         all: bool,
-        /// Expand block elements. Default: show only the count and stop.
-        /// Drill into a specific element with `<path>[<index>]` instead.
+        /// Recursively expand everything — including block elements.
+        /// Default (flat): show the target's fields and one-step descents
+        /// (struct/array/resource), but stop at blocks (display count only).
+        /// Drill into a specific block element with `<path>[<index>]`.
         #[arg(long)]
         full: bool,
         /// Output as JSON
@@ -226,6 +225,16 @@ enum Commands {
         /// Fail on any unreadable / malformed tag encountered
         #[arg(long)]
         strict: bool,
+    },
+
+    /// Extract a `.bitmap` tag's images as DDS files (one DDS per
+    /// image; multi-image tags get a directory)
+    ExtractBitmap {
+        /// Path to a `.bitmap` tag file
+        file: String,
+        /// Output directory (default: current directory)
+        #[arg(long)]
+        output: Option<String>,
     },
 
     /// Dump a tag's state as `set` commands that reproduce it —
@@ -389,12 +398,11 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::list::run(ctx, &dir, filters, mode)
         }
 
-        Commands::Inspect { file, path, depth, all, full, json, filter, filter_not, filter_value } => {
+        Commands::Inspect { file, path, all, full, json, filter, filter_not, filter_value } => {
             ensure_loaded(ctx, &file, reload_tag)?;
             commands::inspect::run(
                 ctx,
                 path.as_deref(),
-                depth,
                 all,
                 full,
                 json,
@@ -446,6 +454,11 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
         Commands::Export { file, subtree, output } => {
             ensure_loaded(ctx, &file, reload_tag)?;
             commands::export::run(ctx, subtree.as_deref(), output.as_deref())
+        }
+
+        Commands::ExtractBitmap { file, output } => {
+            ensure_loaded(ctx, &file, reload_tag)?;
+            commands::extract_bitmap::run(ctx, output.as_deref())
         }
 
         Commands::Check { file, tags_root, only, json, strict } => {

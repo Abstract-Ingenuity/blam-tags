@@ -8,8 +8,8 @@ No ManagedBlam, no .NET, no engine required. The parser reads each tag's embedde
 
 | Crate | Role |
 |---|---|
-| [`blam-tags`](./blam-tags/) | The library. Reads, writes, navigates, and edits tag files. |
-| [`blam-tag-shell`](./blam-tag-shell/) | Command-line front-end + interactive REPL. Subcommands for header metadata, directory listing / search / dependency walking, field tree inspection, get / set / flag / block edits, options enumeration, schema and value diffing, integrity checks, and replay-script export. |
+| [<code>blam&#8209;tags</code>](./blam-tags/) | The library. Reads, writes, navigates, and edits tag files. |
+| [<code>blam&#8209;tag&#8209;shell</code>](./blam-tag-shell/) | Command-line front-end + interactive REPL. Subcommands for header metadata, directory listing / search / dependency walking, field tree inspection, get / set / flag / block edits, options enumeration, schema and value diffing, integrity checks, replay-script export, and bitmap-tag → DDS extraction. |
 
 Each crate has its own README with API shape / command reference.
 
@@ -20,6 +20,10 @@ Each crate has its own README with API shape / command reference.
 - **Layout versions 1 – 4** all read/write and exercised in the above sweep.
 
 - **Read path is panic-free on malformed input.** Every wire-format failure surfaces as a typed [`TagReadError`](blam-tags/src/error.rs) — `BadChunkSignature`, `BadChunkVersion`, `ChunkSizeMismatch`, `CountMismatch`, `InvalidUtf8`, etc. Corruption-suite tests live at [`blam-tags/tests/corruption.rs`](blam-tags/tests/corruption.rs).
+
+- **Pageable resources walk like any other container.** Exploded resources expose a `TagResource::as_struct()` view onto the header struct (raw bytes pulled from the `tgdt` payload, sub-chunks parsed from `tgst`); the path resolver, REPL `cd`, and `inspect` all step through them transparently.
+
+- **Bitmap → DDS extraction with 100% format coverage** across the halo3_mcc + haloreach_mcc bitmap corpora (25,908 / 25,908 images). Pure-tag-file path: pixels come from `processed pixel data`, DDS wrapper is generated per format (legacy fourcc/pixelformat for the common cases, DXT10 for arrays and `signedr16g16b16a16`, CPU decode to A8R8G8B8 for `dxn_mono_alpha`). See [`blam-tag-shell extract-bitmap`](./blam-tag-shell/README.md#extract-bitmap--bitmap-tag--dds) and the [`blam_tags::bitmap`](./blam-tags/src/bitmap.rs) module.
 
 ## Build
 

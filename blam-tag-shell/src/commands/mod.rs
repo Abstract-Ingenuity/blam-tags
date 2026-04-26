@@ -11,6 +11,7 @@ pub mod check;
 pub mod data_diff;
 pub mod deps;
 pub mod export;
+pub mod extract_bitmap;
 pub mod find;
 pub mod flag;
 pub mod get;

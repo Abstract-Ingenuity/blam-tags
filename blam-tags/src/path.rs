@@ -22,7 +22,7 @@
 //! primitives via [`TagFieldCursor::parse`]; write via
 //! [`TagFieldCursorMut::set`].
 
-use crate::data::{TagBlockData, TagStructData, TagSubChunkContent};
+use crate::data::{TagBlockData, TagResourceChunk, TagStructData, TagSubChunkContent};
 use crate::fields::TagFieldType;
 use crate::layout::TagLayout;
 
@@ -91,6 +91,11 @@ pub(crate) fn lookup_from_struct<'a>(
                 let elements = descend_array(current_struct, field_index)?;
                 current_struct = elements.get(element_index)?;
             }
+            TagFieldType::PageableResource => {
+                let (nested, nested_raw) = descend_resource(layout, current_struct, field_index)?;
+                current_raw = nested_raw;
+                current_struct = nested;
+            }
             _ => return None,
         }
     }
@@ -149,6 +154,11 @@ pub(crate) fn descend_from_struct<'a>(
                 current_raw = &current_raw[start..start + element_def.size];
                 let elements = descend_array(current_struct, field_index)?;
                 current_struct = elements.get(element_index)?;
+            }
+            TagFieldType::PageableResource => {
+                let (nested, nested_raw) = descend_resource(layout, current_struct, field_index)?;
+                current_raw = nested_raw;
+                current_struct = nested;
             }
             _ => return None,
         }
@@ -210,6 +220,11 @@ pub(crate) fn lookup_mut_from_struct<'a>(
                 let new_raw = &mut current_raw[offset..offset + size];
                 let elements = descend_array_mut(current_struct, field_index)?;
                 let new_struct = elements.get_mut(element_index)?;
+                current_raw = new_raw;
+                current_struct = new_struct;
+            }
+            TagFieldType::PageableResource => {
+                let (new_struct, new_raw) = descend_resource_mut(layout, current_struct, field_index)?;
                 current_raw = new_raw;
                 current_struct = new_struct;
             }
@@ -350,4 +365,46 @@ fn descend_array_mut(
         TagSubChunkContent::Array(elements) => Some(elements),
         _ => None,
     }
+}
+
+/// Step into a `PageableResource` field. The resource's header struct
+/// lives in the `tgdt` payload bytes (the leading `struct_size` of
+/// them); `struct_data` is the parsed sub-chunk tree. Returns `None`
+/// for null / xsync resources, where there's no parsed struct.
+fn descend_resource<'a>(
+    layout: &'a TagLayout,
+    struct_data: &'a TagStructData,
+    field_index: usize,
+) -> Option<(&'a TagStructData, &'a [u8])> {
+    let entry = struct_data
+        .sub_chunks
+        .iter()
+        .find(|entry| entry.field_index == Some(field_index as u32))?;
+    let TagSubChunkContent::Resource(TagResourceChunk::Exploded { struct_data, exploded }) =
+        &entry.content
+    else {
+        return None;
+    };
+    let struct_size = layout.struct_layouts[struct_data.struct_index as usize].size;
+    let header_raw = exploded.get(..struct_size)?;
+    Some((struct_data, header_raw))
+}
+
+fn descend_resource_mut<'a>(
+    layout: &'a TagLayout,
+    struct_data: &'a mut TagStructData,
+    field_index: usize,
+) -> Option<(&'a mut TagStructData, &'a mut [u8])> {
+    let entry = struct_data
+        .sub_chunks
+        .iter_mut()
+        .find(|entry| entry.field_index == Some(field_index as u32))?;
+    let TagSubChunkContent::Resource(TagResourceChunk::Exploded { struct_data, exploded }) =
+        &mut entry.content
+    else {
+        return None;
+    };
+    let struct_size = layout.struct_layouts[struct_data.struct_index as usize].size;
+    let header_raw = exploded.get_mut(..struct_size)?;
+    Some((struct_data, header_raw))
 }

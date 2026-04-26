@@ -74,6 +74,7 @@ pub mod stream;
 pub mod file;
 pub mod api;
 pub mod definition;
+pub mod bitmap;
 
 // Facade re-exports — the recommended surface for editing tags.
 pub use api::{
@@ -93,3 +94,4 @@ pub use error::TagReadError;
 pub use file::TagFile;
 pub use layout::TagLayout;
 pub use schema::{TagGroupMeta, TagSchemaError};
+pub use bitmap::{Bitmap, BitmapError, BitmapFormat, BitmapImage};
