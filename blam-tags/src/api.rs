@@ -332,52 +332,81 @@ impl<'a> TagStruct<'a> {
     }
 
     /// Read a `real_quaternion` field as `[i, j, k, w]`. Returns the
-    /// identity quaternion `[0, 0, 0, 1]` for missing or non-quat
-    /// fields — convenient default for walkers that always want a
-    /// usable rotation.
-    pub fn read_quat(&self, name: &str) -> [f32; 4] {
+    /// Read a `real_quaternion` field. Returns
+    /// [`RealQuaternion::IDENTITY`] when the field is *missing* (not
+    /// present in this struct). **Panics** if the field is present
+    /// but has a non-quaternion type — that's a code-vs-schema
+    /// mismatch, not a runtime data issue, and silent defaults would
+    /// hide it.
+    pub fn read_quat(&self, name: &str) -> crate::math::RealQuaternion {
         match self.field(name).and_then(|f| f.value()) {
-            Some(TagFieldData::RealQuaternion(q)) => [q.i, q.j, q.k, q.w],
-            _ => [0.0, 0.0, 0.0, 1.0],
+            Some(TagFieldData::RealQuaternion(q)) => q,
+            None => crate::math::RealQuaternion::IDENTITY,
+            Some(other) => type_mismatch_panic(name, "RealQuaternion", &other),
         }
     }
 
-    /// Read a `real_point_3d` (or `real_vector_3d`) field as `[x, y, z]`.
-    /// Returns `[0, 0, 0]` for missing or wrong-typed fields.
-    pub fn read_point3d(&self, name: &str) -> [f32; 3] {
+    /// Read a `real_point_3d` field. Returns [`RealPoint3d::ZERO`]
+    /// when the field is missing. **Panics** if the field is present
+    /// but has a different math type — for `real_vector_3d` use
+    /// [`Self::read_vec3`].
+    pub fn read_point3d(&self, name: &str) -> crate::math::RealPoint3d {
         match self.field(name).and_then(|f| f.value()) {
-            Some(TagFieldData::RealPoint3d(p)) => [p.x, p.y, p.z],
-            Some(TagFieldData::RealVector3d(v)) => [v.i, v.j, v.k],
-            _ => [0.0; 3],
+            Some(TagFieldData::RealPoint3d(p)) => p,
+            None => crate::math::RealPoint3d::ZERO,
+            Some(other) => type_mismatch_panic(name, "RealPoint3d", &other),
         }
     }
 
-    /// Read a `real_vector_3d` (or `real_point_3d`) field as
-    /// `[i, j, k]`. Returns `[0, 0, 0]` for missing or wrong-typed
-    /// fields.
-    pub fn read_vec3(&self, name: &str) -> [f32; 3] {
+    /// Read a `real_vector_3d` field. Returns [`RealVector3d::ZERO`]
+    /// when the field is missing. **Panics** on type mismatch — see
+    /// [`Self::read_point3d`].
+    pub fn read_vec3(&self, name: &str) -> crate::math::RealVector3d {
         match self.field(name).and_then(|f| f.value()) {
-            Some(TagFieldData::RealVector3d(v)) => [v.i, v.j, v.k],
-            Some(TagFieldData::RealPoint3d(p)) => [p.x, p.y, p.z],
-            _ => [0.0; 3],
+            Some(TagFieldData::RealVector3d(v)) => v,
+            None => crate::math::RealVector3d::ZERO,
+            Some(other) => type_mismatch_panic(name, "RealVector3d", &other),
         }
     }
 
-    /// Read a `real_rgb_color` field as `[r, g, b]`. Returns
-    /// `[0, 0, 0]` for missing or wrong-typed fields.
-    pub fn read_rgb(&self, name: &str) -> [f32; 3] {
+    /// Read a `real_point_2d` field. Returns [`RealPoint2d::ZERO`]
+    /// when the field is missing. **Panics** on type mismatch.
+    pub fn read_point2d(&self, name: &str) -> crate::math::RealPoint2d {
         match self.field(name).and_then(|f| f.value()) {
-            Some(TagFieldData::RealRgbColor(c)) => [c.red, c.green, c.blue],
-            _ => [0.0; 3],
+            Some(TagFieldData::RealPoint2d(p)) => p,
+            None => crate::math::RealPoint2d::ZERO,
+            Some(other) => type_mismatch_panic(name, "RealPoint2d", &other),
         }
     }
 
-    /// Read a `real_bounds` field as `(lower, upper)`. Returns
-    /// `(0, 0)` for missing or wrong-typed fields.
-    pub fn read_real_bounds(&self, name: &str) -> (f32, f32) {
+    /// Read a `real_plane_3d` field. Returns the default (zero
+    /// normal, zero offset) when missing. **Panics** on type
+    /// mismatch.
+    pub fn read_plane3d(&self, name: &str) -> crate::math::RealPlane3d {
         match self.field(name).and_then(|f| f.value()) {
-            Some(TagFieldData::RealBounds(b)) => (b.lower, b.upper),
-            _ => (0.0, 0.0),
+            Some(TagFieldData::RealPlane3d(p)) => p,
+            None => crate::math::RealPlane3d::default(),
+            Some(other) => type_mismatch_panic(name, "RealPlane3d", &other),
+        }
+    }
+
+    /// Read a `real_rgb_color` field. Returns the default (all
+    /// zeros) when missing. **Panics** on type mismatch.
+    pub fn read_rgb(&self, name: &str) -> crate::math::RealRgbColor {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealRgbColor(c)) => c,
+            None => crate::math::RealRgbColor::default(),
+            Some(other) => type_mismatch_panic(name, "RealRgbColor", &other),
+        }
+    }
+
+    /// Read a `real_bounds` field. Returns the default (`lower = 0`,
+    /// `upper = 0`) when missing. **Panics** on type mismatch.
+    pub fn read_real_bounds(&self, name: &str) -> crate::math::RealBounds {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealBounds(b)) => b,
+            None => crate::math::RealBounds::default(),
+            Some(other) => type_mismatch_panic(name, "RealBounds", &other),
         }
     }
 
@@ -387,6 +416,21 @@ impl<'a> TagStruct<'a> {
     pub fn read_block_index(&self, name: &str) -> i16 {
         self.read_int_any(name).map(|v| v as i16).unwrap_or(-1)
     }
+}
+
+/// Surface a code-vs-schema type mismatch as a loud panic. Called
+/// from the typed-math readers (`read_quat` / `read_point3d` /
+/// `read_vec3` / etc.) when the named field exists but has a
+/// different math type than the reader expects. Silent defaults
+/// would let bugs like "calling `read_point3d` on a
+/// `real_vector_3d` field" sit undetected.
+#[cold]
+#[track_caller]
+fn type_mismatch_panic(field: &str, expected: &str, actual: &TagFieldData) -> ! {
+    panic!(
+        "field `{field}` is a `{actual:?}`, but reader expected `{expected}` \
+         — schema and code disagree (use the matching reader for the actual type)"
+    );
 }
 
 /// A resolved field within a [`TagStruct`]. Carries the field's

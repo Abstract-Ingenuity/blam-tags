@@ -95,6 +95,8 @@ pub fn run(ctx: &CliContext, dir: &str, filters: ListFilters, mode: OutputMode) 
         matched.push((path.clone(), ext.to_string()));
     }
 
+    matched.sort();
+
     match mode {
         OutputMode::Paths => {
             for (path, _) in &matched {

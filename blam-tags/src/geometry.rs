@@ -12,31 +12,32 @@
 //! - **Strip → list conversion**: restart-aware (`0xFFFF` sentinel)
 //!   triangle-strip decoder with parity-flip windings + degenerate
 //!   filtering. Matches TagTool's `ReadTriangleStrip` exactly.
-//! - **Quaternion math**: `(i, j, k, w)` order to match
-//!   [`crate::fields::TagFieldData::RealQuaternion`]. Includes
-//!   matrix-basis-to-quat construction, multiplication, rotation,
-//!   negation.
-//! - **3-vector math**: add, sub, scale, length, cross.
-//! - **Generic field readers** for the schema patterns that come up
-//!   in every walker: integer-shaped scalars (handles 13 variants),
-//!   string ids, points, quaternions, reals, vec3s, tag references.
 //! - **BSP edge-ring walker**: shared between `collision_model` and
 //!   `scenario_structure_bsp` (both have the same Halo BSP shape —
 //!   surfaces walk an edge ring, each edge belongs to two surfaces,
 //!   matching side decides start-vs-end vertex emission).
+//!
+//! Vector / quaternion / point math is now expressed via inherent
+//! methods + `Ops` impls on the [`crate::math`] types
+//! ([`crate::math::RealVector3d`], [`crate::math::RealPoint3d`],
+//! [`crate::math::RealQuaternion`], [`crate::math::RealPlane3d`]).
+//! Use those.
 //!
 //! World-units → JMS/ASS centimeter scale factor [`SCALE`] also
 //! lives here so both format modules use the same value.
 
 use crate::api::TagStruct;
 use crate::fields::TagFieldData;
+use crate::math::{RealPoint2d, RealPoint3d};
 
 /// World-units → centimeter scale factor used by JMS / ASS export
-/// (`position × SCALE` everywhere positions cross into the artist
+/// (`position * SCALE` everywhere positions cross into the artist
 /// source format).
 pub(crate) const SCALE: f32 = 100.0;
 
-// ---- compression bounds ----
+//================================================================================
+// CompressionBounds
+//================================================================================
 
 /// Per-axis dequantization bounds for a `compression info[i]` entry.
 /// Position and texcoord components are stored as 0..1 normalized
@@ -70,23 +71,23 @@ impl CompressionBounds {
 
     /// Map a 0..1 quantized position back into world units.
     /// Passthrough when [`Self::pos_compressed`] is `false`.
-    pub(crate) fn decompress_position(&self, p: [f32; 3]) -> [f32; 3] {
+    pub(crate) fn decompress_position(&self, p: RealPoint3d) -> RealPoint3d {
         if !self.pos_compressed { return p; }
-        [
-            self.px_min + p[0] * (self.px_max - self.px_min),
-            self.py_min + p[1] * (self.py_max - self.py_min),
-            self.pz_min + p[2] * (self.pz_max - self.pz_min),
-        ]
+        RealPoint3d {
+            x: self.px_min + p.x * (self.px_max - self.px_min),
+            y: self.py_min + p.y * (self.py_max - self.py_min),
+            z: self.pz_min + p.z * (self.pz_max - self.pz_min),
+        }
     }
 
     /// Map a 0..1 quantized texcoord back into uv units.
     /// Passthrough when [`Self::uv_compressed`] is `false`.
-    pub(crate) fn decompress_texcoord(&self, uv: [f32; 2]) -> [f32; 2] {
+    pub(crate) fn decompress_texcoord(&self, uv: RealPoint2d) -> RealPoint2d {
         if !self.uv_compressed { return uv; }
-        [
-            self.u_min + uv[0] * (self.u_max - self.u_min),
-            self.v_min + uv[1] * (self.v_max - self.v_min),
-        ]
+        RealPoint2d {
+            x: self.u_min + uv.x * (self.u_max - self.u_min),
+            y: self.v_min + uv.y * (self.v_max - self.v_min),
+        }
     }
 }
 
@@ -111,25 +112,31 @@ pub(crate) fn read_compression_bounds_at(root: &TagStruct<'_>, index: usize) -> 
         pos_compressed = (value & 0x0001) != 0;
         uv_compressed = (value & 0x0002) != 0;
     }
+    // Six floats packed as the sequential tuple
+    // `[xmin, xmax, ymin, ymax, zmin, zmax]` across two
+    // `real_point_3d` fields. Despite the field type, this is NOT a
+    // min/max corner pair.
     let pb0 = ci.read_point3d("position bounds 0");
     let pb1 = ci.read_point3d("position bounds 1");
     let tb0 = match ci.field("texcoord bounds 0").and_then(|f| f.value()) {
-        Some(TagFieldData::RealPoint2d(p)) => [p.x, p.y], _ => [0.0, 1.0],
+        Some(TagFieldData::RealPoint2d(p)) => p, _ => RealPoint2d { x: 0.0, y: 1.0 },
     };
     let tb1 = match ci.field("texcoord bounds 1").and_then(|f| f.value()) {
-        Some(TagFieldData::RealPoint2d(p)) => [p.x, p.y], _ => [0.0, 1.0],
+        Some(TagFieldData::RealPoint2d(p)) => p, _ => RealPoint2d { x: 0.0, y: 1.0 },
     };
     CompressionBounds {
         pos_compressed, uv_compressed,
-        px_min: pb0[0], px_max: pb0[1],
-        py_min: pb0[2], py_max: pb1[0],
-        pz_min: pb1[1], pz_max: pb1[2],
-        u_min: tb0[0], u_max: tb0[1],
-        v_min: tb1[0], v_max: tb1[1],
+        px_min: pb0.x, px_max: pb0.y,
+        py_min: pb0.z, py_max: pb1.x,
+        pz_min: pb1.y, pz_max: pb1.z,
+        u_min: tb0.x, u_max: tb0.y,
+        v_min: tb1.x, v_max: tb1.y,
     }
 }
 
-// ---- triangle-strip → list ----
+//================================================================================
+// Triangle-strip → list
+//================================================================================
 
 /// Restart-aware (`0xFFFF` sentinel) triangle-strip decoder. Splits
 /// the strip on restart sentinels, then within each sub-strip flips
@@ -149,109 +156,9 @@ pub(crate) fn strip_to_list(strip: &[u16]) -> Vec<(u16, u16, u16)> {
     out
 }
 
-// ---- quaternion math (i, j, k, w order) ----
-
-/// Hamilton product `a * b`. Component order is `(i, j, k, w)`.
-pub(crate) fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
-    let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
-    let (bx, by, bz, bw) = (b[0], b[1], b[2], b[3]);
-    [
-        aw * bx + ax * bw + ay * bz - az * by,
-        aw * by - ax * bz + ay * bw + az * bx,
-        aw * bz + ax * by - ay * bx + az * bw,
-        aw * bw - ax * bx - ay * by - az * bz,
-    ]
-}
-
-/// Apply a quaternion rotation to a vector via the optimized
-/// two-cross-product form: `v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)`.
-pub(crate) fn quat_rotate(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
-    let (qx, qy, qz, qw) = (q[0], q[1], q[2], q[3]);
-    let (vx, vy, vz) = (v[0], v[1], v[2]);
-    let tx = 2.0 * (qy * vz - qz * vy);
-    let ty = 2.0 * (qz * vx - qx * vz);
-    let tz = 2.0 * (qx * vy - qy * vx);
-    [
-        vx + qw * tx + (qy * tz - qz * ty),
-        vy + qw * ty + (qz * tx - qx * tz),
-        vz + qw * tz + (qx * ty - qy * tx),
-    ]
-}
-
-/// Negate every component. Represents the same rotation as `q`
-/// (quaternions are double-cover); used by the JMS phmo path where
-/// stored ragdoll quats need to flip sign vs source.
-pub(crate) fn quat_negate(q: [f32; 4]) -> [f32; 4] { [-q[0], -q[1], -q[2], -q[3]] }
-
-/// Construct a quaternion `(i, j, k, w)` from three column basis
-/// vectors of an orthonormal rotation matrix. Standard
-/// trace-and-largest-diagonal extraction.
-pub(crate) fn quat_from_basis_columns(c0: [f32; 3], c1: [f32; 3], c2: [f32; 3]) -> [f32; 4] {
-    let m00 = c0[0]; let m10 = c0[1]; let m20 = c0[2];
-    let m01 = c1[0]; let m11 = c1[1]; let m21 = c1[2];
-    let m02 = c2[0]; let m12 = c2[1]; let m22 = c2[2];
-    let trace = m00 + m11 + m22;
-    if trace > 0.0 {
-        let s = (trace + 1.0).sqrt() * 2.0;
-        [(m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s, 0.25 * s]
-    } else if m00 > m11 && m00 > m22 {
-        let s = (1.0 + m00 - m11 - m22).sqrt() * 2.0;
-        [0.25 * s, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s]
-    } else if m11 > m22 {
-        let s = (1.0 + m11 - m00 - m22).sqrt() * 2.0;
-        [(m01 + m10) / s, 0.25 * s, (m12 + m21) / s, (m02 - m20) / s]
-    } else {
-        let s = (1.0 + m22 - m00 - m11).sqrt() * 2.0;
-        [(m02 + m20) / s, (m12 + m21) / s, 0.25 * s, (m10 - m01) / s]
-    }
-}
-
-// ---- 3-vector math ----
-
-/// Component-wise sum.
-pub(crate) fn vec3_add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-}
-
-/// Component-wise difference.
-pub(crate) fn vec3_sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-
-/// Multiply every component by `k`.
-pub(crate) fn vec3_scale(a: [f32; 3], k: f32) -> [f32; 3] {
-    [a[0] * k, a[1] * k, a[2] * k]
-}
-
-/// Euclidean length.
-pub(crate) fn vec3_len(a: [f32; 3]) -> f32 {
-    (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt()
-}
-
-/// 3D cross product `a × b`.
-pub(crate) fn vec3_cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
-}
-
-/// Length-normalize, returning `[0, 0, 0]` for zero/near-zero
-/// vectors rather than NaNs.
-pub(crate) fn vec3_normalize(v: [f32; 3]) -> [f32; 3] {
-    let m = vec3_len(v);
-    if m < 1e-12 { [0.0, 0.0, 0.0] } else { [v[0] / m, v[1] / m, v[2] / m] }
-}
-
-/// Apply [`SCALE`] to every component — world-units → JMS/ASS cm.
-pub(crate) fn scale_point(p: [f32; 3]) -> [f32; 3] {
-    [p[0] * SCALE, p[1] * SCALE, p[2] * SCALE]
-}
-
-// (typed field readers — `read_int_any` / `read_real` / `read_quat`
-// / `read_point3d` / `read_vec3` / `read_string_id` / `read_enum_name`
-// / `read_tag_ref_path` / `read_rgb` / `read_real_bounds` /
-// `read_block_index` — all live as inherent methods on
-// `crate::api::TagStruct`.)
-
-// ---- BSP edge-ring walker ----
+//================================================================================
+// BSP edge-ring walker
+//================================================================================
 
 /// Cached row of a Halo BSP `edges[]` block. Walking a surface's
 /// polygon ring hammers these fields tens of thousands of times in

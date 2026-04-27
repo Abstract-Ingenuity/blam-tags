@@ -1,440 +1,31 @@
-//! `model_animation_graph` (jmad) animation extraction.
+//! Codec dispatch + per-slot decoders for jmad animation blobs.
 //!
-//! [`Animation::new(&tag)`] walks the user-facing `definitions/animations`
-//! block (or `resources/animations` for older inline-layout tags) and
-//! pairs each entry with its `tag resource groups[r]/tag_resource/
-//! group_members[m]` runtime payload. Each [`AnimationGroup`] carries
-//! header metadata + the raw `animation_data` blob; call
-//! [`AnimationGroup::decode`] to turn the blob into an
-//! [`AnimationClip`] (static + animated tracks + flags + movement),
-//! then [`AnimationClip::pose`] composes against a [`Skeleton`] and
-//! [`Pose::write_jma`] emits a JMA-family text file.
+//! Slots 0..=8 are present in Halo 3 (verified against
+//! `g_codec_descriptions[9]` at `0x181170f90` in
+//! `halo3_dllcache_play.dll`). Slots 9..=11 added in Reach / Halo
+//! Online / later. Each decoder turns a contiguous run of bytes
+//! starting with the codec selector into an [`AnimationTracks`]
+//! (`(rotations, translations, scales)` outer-indexed by codec node,
+//! inner-indexed by frame). Compose against a [`super::Skeleton`]
+//! via [`super::AnimationClip::pose`] to get a per-frame transform
+//! table.
 //!
-//! Inheriting jmads (zero local animations, parent reference set) are
-//! a normal success: `Animation::len() == 0` with `parent()` non-null.
-//!
-//! See `project_jmad_extraction_shipped` in auto-memory for the
-//! engine-specific blob layouts (H3 hardcoded vs Reach cumulative-sum)
-//! and the binary references they were verified against.
+//! Engine-specific ordering quirks (H3 hardcoded total counts vs
+//! Reach cumulative-sum) are handled by the offsets we read out of
+//! the codec header rather than per-slot branches. See
+//! `project_jmad_extraction_shipped` in auto-memory for the
+//! reference binaries.
 
-use crate::api::TagStruct;
-use crate::fields::TagFieldData;
-use crate::file::TagFile;
-use crate::math::{RealPoint3d, RealQuaternion};
+use crate::math::{RealPoint3d, RealQuaternion, RealVector3d};
 
-/// Errors returned by [`Animation::new`] / [`AnimationGroup::decode`].
-#[derive(Debug)]
-pub enum AnimationError {
-    /// Root struct doesn't expose the fields we expect from a jmad
-    /// (no `definitions/animations` block).
-    NotAnAnimationGraph,
-    /// Animation has no codec payload (empty `animation_data` blob).
-    /// Either the animation is inherited or the tag is malformed.
-    NoCodecPayload,
-    /// First byte of the codec stream isn't a recognized
-    /// `e_animation_codec_types` value (0..=11).
-    UnknownCodec(u8),
-    /// Codec recognized but no decoder implemented for this slot.
-    UnsupportedCodec(Codec),
-    /// Codec stream is shorter than the codec's required header bytes.
-    TruncatedHeader { codec: Codec, want: usize, have: usize },
-    /// A computed slice into the codec stream goes past the blob's
-    /// end. Common cause: the codec header's offsets disagree with
-    /// the engine's actual layout.
-    TruncatedPayload { codec: Codec, want_end: usize, blob_size: usize },
-}
+use super::{
+    AnimatedStreamStatus, AnimationClip, AnimationError, AnimationGroup, AnimationTracks,
+    BitArray, MovementData, MovementFrame, MovementKind, NodeFlags, SizeLayout,
+};
 
-impl std::fmt::Display for AnimationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NotAnAnimationGraph => write!(f, "tag is not a recognizable model_animation_graph (missing `definitions/animations`)"),
-            Self::NoCodecPayload => write!(f, "animation has no codec payload (empty blob)"),
-            Self::UnknownCodec(b) => write!(f, "unknown codec byte 0x{b:02x} (expected 0..=11)"),
-            Self::UnsupportedCodec(c) => write!(f, "codec {c:?} not yet supported"),
-            Self::TruncatedHeader { codec, want, have } =>
-                write!(f, "{codec:?} header: need {want} bytes, blob has {have}"),
-            Self::TruncatedPayload { codec, want_end, blob_size } =>
-                write!(f, "{codec:?} payload: slice ends at {want_end} but blob is {blob_size} bytes"),
-        }
-    }
-}
-
-impl std::error::Error for AnimationError {}
-
-/// Per-animation `data sizes` breakdown — the engine's record of how
-/// the `animation_data` blob is internally partitioned. Useful for
-/// sanity-checking total length against the sum of subsections.
-///
-/// Held as a name/value list rather than a fixed struct because the
-/// shape varies by engine: H3 uses `packed_data_sizes_struct` (16
-/// bytes, mixed i8/i16/i32), Reach widens to a `_reach` variant with
-/// 17+ i32 fields (`blend_screen_data`, `object_space_offset_data`,
-/// `ik_chain_*`, `uncompressed_object_space_data`, …). All fields
-/// are byte counts and decode losslessly to i64.
-#[derive(Debug, Clone, Default)]
-pub struct PackedDataSizes {
-    pub fields: Vec<(String, i64)>,
-}
-
-impl PackedDataSizes {
-    /// Sum of all subsection bytes — what the blob length should equal
-    /// in a well-formed tag.
-    pub fn total(&self) -> i64 {
-        self.fields.iter().map(|(_, v)| *v).sum()
-    }
-
-    /// Lookup a named subsection size. Returns 0 if absent.
-    pub fn get(&self, name: &str) -> i64 {
-        self.fields.iter().find(|(n, _)| n == name).map(|(_, v)| *v).unwrap_or(0)
-    }
-
-    /// Which engine's `data sizes` struct this is. H3 uses
-    /// `packed_data_sizes_struct` (0x10 bytes, 7 mixed-width fields);
-    /// Reach widens to `packed_data_sizes_reach_struct` (0x44 bytes,
-    /// 17 i32 fields adding `blend_screen_data`, `object_space_*`,
-    /// `ik_chain_*`, `compressed_event_curve`, etc.). The presence of
-    /// any of those Reach-only fields tells us we're reading a
-    /// Reach-style blob, where the schema field NAMES are kept but
-    /// their SEMANTICS shift (e.g. `static_node_flags` becomes the
-    /// static-codec byte size, not the static-flag byte size).
-    pub fn layout(&self) -> SizeLayout {
-        let reach_only = ["blend_screen_data", "object_space_offset_data", "ik_chain_event_data"];
-        if self.fields.iter().any(|(n, _)| reach_only.iter().any(|r| r == n)) {
-            SizeLayout::Reach
-        } else {
-            SizeLayout::H3
-        }
-    }
-}
-
-/// Engine-version flavor of the `data sizes` struct. Determines how
-/// the blob's sections are addressed: H3 packs the static codec
-/// stream first then a single animated codec; Reach uses the same
-/// names but with different meanings (the `static_node_flags` field
-/// is repurposed to carry the static codec stream's byte size).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SizeLayout {
-    /// Pre-Reach (H3, ODST). 7 fields, mixed widths.
-    H3,
-    /// Reach onward. 17 fields, all i32. Field names kept the same,
-    /// but several now carry codec/flag sizes rather than what the
-    /// names suggest. See [`Self::reach_static_codec_size`] etc.
-    Reach,
-}
-
-/// One animation entry — header metadata from `animations[i]` joined
-/// with the matching `group_members[m]` runtime payload.
-#[derive(Debug)]
-pub struct AnimationGroup<'a> {
-    /// Index in `definitions/animations[]`.
-    pub index: usize,
-    /// Resolved `name` string-id.
-    pub name: Option<String>,
-    /// `animation type` enum name (`base`, `overlay`, `replacement`,
-    /// `world`, …).
-    pub animation_type: Option<String>,
-    /// `frame info type` enum name from `animations[i]`. The matching
-    /// resource group_member's `movement_data_type` should agree;
-    /// disagreement is surfaced via [`Self::movement_type_mismatch`].
-    pub frame_info_type: Option<String>,
-    /// Engine-recorded `frame count` (from `animations[i]`).
-    pub frame_count: i16,
-    /// Engine-recorded `node count` (from `animations[i]`).
-    pub node_count: i8,
-    /// `node list checksum` from `animations[i]` — used to verify the
-    /// jmad targets the same skeleton as the consuming render_model.
-    pub node_list_checksum: i32,
-    /// `(resource_group, resource_group_member)` pair from
-    /// `animations[i]`. `(-1, -1)` is a valid sentinel meaning the
-    /// animation has no local payload (inherited).
-    pub resource_group: i16,
-    pub resource_group_member: i16,
-    /// `animation_checksum` from the matching group_member. `None` if
-    /// the group_member couldn't be resolved.
-    pub checksum: Option<i32>,
-    /// `frame count*` from the matching group_member — the codec
-    /// stream's frame count, which can differ from the animation's
-    /// user-visible `frame_count` (notably for slot-8 BlendScreen
-    /// animations, where the codec count is the number of variants
-    /// in the screen, not the playback length). Falls back to
-    /// `frame_count` when the group_member isn't resolved.
-    pub codec_frame_count: Option<i16>,
-    /// `movement_data_type` enum name from the matching group_member.
-    pub movement_type: Option<String>,
-    /// `data sizes` struct from the matching group_member.
-    pub data_sizes: Option<PackedDataSizes>,
-    /// First byte of the `animation_data` blob — the codec enum value
-    /// per `e_animation_codec_types` (0..=8 for Halo 3, 0..=11 for
-    /// Reach+). `None` if blob is empty or missing.
-    pub codec_byte: Option<u8>,
-    /// Raw `animation_data` blob bytes. Empty slice if the
-    /// group_member is missing or its data field is empty.
-    pub blob: &'a [u8],
-}
-
-impl<'a> AnimationGroup<'a> {
-    /// True when the per-animation `frame info type` and the
-    /// group_member's `movement_data_type` disagree. Indicates the
-    /// tag was authored against a different schema than what the
-    /// consumer expects — usually benign but worth flagging in sweeps.
-    pub fn movement_type_mismatch(&self) -> bool {
-        match (&self.frame_info_type, &self.movement_type) {
-            (Some(a), Some(b)) => a != b,
-            _ => false,
-        }
-    }
-
-    /// Codec byte for the **animated** stream that follows the static
-    /// rest-pose stream. Engine-aware: H3 reads `default_data` (the
-    /// static codec stream's size = animated stream offset); Reach
-    /// reads positional index 0 (= `static_node_flags` field, but
-    /// semantically the static codec stream's size in Reach's
-    /// repurposed field naming). When the offset is 0 there's no
-    /// static stream at all, so the byte at offset 0 IS the animated
-    /// codec — return that.
-    pub fn animated_codec_byte(&self) -> Option<u8> {
-        let sizes = self.data_sizes.as_ref()?;
-        let off = match sizes.layout() {
-            SizeLayout::H3 => sizes.get("default_data") as usize,
-            SizeLayout::Reach => sizes.fields.first().map(|(_, v)| *v as usize).unwrap_or(0),
-        };
-        self.blob.get(off).copied()
-    }
-}
-
-/// All animations in a jmad, paired with their per-animation payload
-/// from the tag's resource groups. Construct via [`Animation::new`].
-pub struct Animation<'a> {
-    animations: Vec<AnimationGroup<'a>>,
-    parent: Option<String>,
-}
-
-/// Top-level struct name varies by jmad layout version: newer tags
-/// call it `definitions`, older ones (e.g. mongoose, layout version
-/// ~4601) call it `resources`. Try both.
-const TOP_LEVEL_NAMES: &[&str] = &["definitions", "resources"];
-
-impl<'a> Animation<'a> {
-    /// Walk a parsed `model_animation_graph` tag and pair each
-    /// per-animation entry with its `tag resource groups[]` runtime
-    /// payload. Inheriting tags (zero local animations + non-null
-    /// `parent animation graph`) succeed with `len() == 0` and a
-    /// non-`None` [`Self::parent`].
-    pub fn new(tag: &'a TagFile) -> Result<Self, AnimationError> {
-        let root = tag.root();
-
-        let top_prefix = TOP_LEVEL_NAMES.iter().copied()
-            .find(|name| root.field_path(&format!("{name}/animations")).is_some())
-            .ok_or(AnimationError::NotAnAnimationGraph)?;
-
-        let animations_block = root
-            .field_path(&format!("{top_prefix}/animations"))
-            .and_then(|f| f.as_block())
-            .ok_or(AnimationError::NotAnAnimationGraph)?;
-
-        // Pre-walk all `tag resource groups[]` entries. Each one is a
-        // `tag_resource` field; its `as_struct()` exposes a
-        // `group_members` block whose elements carry the per-animation
-        // payload. Build a (resource_group, resource_group_member) →
-        // group_member-struct lookup so the per-animation join below
-        // stays O(1) per lookup.
-        let resource_groups_block = root
-            .field_path("tag resource groups")
-            .and_then(|f| f.as_block());
-
-        let mut group_member_table: Vec<Option<Vec<TagStruct<'a>>>> = Vec::new();
-        if let Some(rg) = resource_groups_block {
-            for r in 0..rg.len() {
-                let elem = match rg.element(r) {
-                    Some(e) => e,
-                    None => { group_member_table.push(None); continue; }
-                };
-                let resource = elem.field("tag_resource").and_then(|f| f.as_resource());
-                let header = match resource.and_then(|r| r.as_struct()) {
-                    Some(h) => h,
-                    None => { group_member_table.push(None); continue; }
-                };
-                let members_block = header.field("group_members").and_then(|f| f.as_block());
-                let members = match members_block {
-                    Some(b) => (0..b.len()).filter_map(|i| b.element(i)).collect(),
-                    None => Vec::new(),
-                };
-                group_member_table.push(Some(members));
-            }
-        }
-
-        // Walk per-animation entries.
-        let mut animations = Vec::with_capacity(animations_block.len());
-        for i in 0..animations_block.len() {
-            let anim = match animations_block.element(i) {
-                Some(a) => a,
-                None => continue,
-            };
-            let name = anim.read_string_id("name");
-
-            // Reach moved most per-animation codec metadata into a
-            // nested `shared animation data[0]` block. H3-era tags keep
-            // it on the outer `animations[i]` struct directly. Pick
-            // whichever struct actually carries the metadata fields.
-            let metadata = anim
-                .field("shared animation data")
-                .and_then(|f| f.as_block())
-                .and_then(|b| b.element(0))
-                .filter(|s| s.field("resource_group").is_some()
-                         || s.field("frame count").is_some())
-                .unwrap_or(anim);
-
-            // Older layouts (e.g. mongoose, version ~4601) call this
-            // field `type`; newer ones name it `animation type`.
-            let animation_type = metadata.read_enum_name("animation type")
-                .or_else(|| metadata.read_enum_name("type"));
-            let frame_info_type = metadata.read_enum_name("frame info type");
-            let frame_count = metadata.read_int_any("frame count").unwrap_or(0) as i16;
-            let node_count = metadata.read_int_any("node count").unwrap_or(0) as i8;
-            let node_list_checksum = metadata.read_int_any("node list checksum").unwrap_or(0) as i32;
-            let resource_group = metadata.read_int_any("resource_group").unwrap_or(-1) as i16;
-            let resource_group_member = metadata.read_int_any("resource_group_member").unwrap_or(-1) as i16;
-
-            let (mut checksum, mut codec_frame_count, mut movement_type, mut data_sizes, mut codec_byte, mut blob) =
-                resolve_member(&group_member_table, resource_group, resource_group_member);
-
-            // Inline payload — older layouts skip the tgrc resource and
-            // store `animation data` / `data sizes` directly on each
-            // animation block element. Try inline only when the
-            // resource lookup didn't find anything.
-            if blob.is_empty() && data_sizes.is_none() {
-                if let Some(inline_blob) = read_inline_animation_data(&metadata) {
-                    blob = inline_blob;
-                    codec_byte = blob.first().copied();
-                }
-                data_sizes = read_packed_data_sizes(&metadata);
-                if movement_type.is_none() {
-                    movement_type = frame_info_type.clone();
-                }
-                if checksum.is_none() {
-                    checksum = metadata.read_int_any("production checksum").map(|v| v as i32);
-                }
-                if codec_frame_count.is_none() {
-                    codec_frame_count = Some(frame_count);
-                }
-            }
-
-            animations.push(AnimationGroup {
-                index: i,
-                name,
-                animation_type,
-                frame_info_type,
-                frame_count,
-                node_count,
-                node_list_checksum,
-                resource_group,
-                resource_group_member,
-                checksum,
-                codec_frame_count,
-                movement_type,
-                data_sizes,
-                codec_byte,
-                blob,
-            });
-        }
-
-        // Parent reference for the inheritance case. Same prefix as
-        // the animations block.
-        let parent = root
-            .field_path(&format!("{top_prefix}/parent animation graph"))
-            .and_then(|f| f.value())
-            .and_then(|v| match v {
-                TagFieldData::TagReference(r) => r.group_tag_and_name.map(|(_, p)| p),
-                _ => None,
-            })
-            .filter(|p| !p.is_empty());
-
-        Ok(Self { animations, parent })
-    }
-
-    /// Number of animations in `definitions/animations[]`. Zero on
-    /// inheriting tags.
-    pub fn len(&self) -> usize { self.animations.len() }
-
-    /// `true` when there are no local animations (commonly because
-    /// the tag inherits from [`Self::parent`]).
-    pub fn is_empty(&self) -> bool { self.animations.is_empty() }
-
-    /// Iterate every animation group in declaration order.
-    pub fn iter(&self) -> impl Iterator<Item = &AnimationGroup<'a>> {
-        self.animations.iter()
-    }
-
-    /// Look up an animation by index into `definitions/animations[]`.
-    pub fn get(&self, index: usize) -> Option<&AnimationGroup<'a>> {
-        self.animations.get(index)
-    }
-
-    /// Look up an animation by its resolved string-id name.
-    pub fn find(&self, name: &str) -> Option<&AnimationGroup<'a>> {
-        self.animations.iter().find(|a| a.name.as_deref() == Some(name))
-    }
-
-    /// Path of `definitions/parent animation graph` if non-null.
-    /// Inheriting jmads with `len() == 0` will typically have this set.
-    pub fn parent(&self) -> Option<&str> { self.parent.as_deref() }
-
-    /// Count of animations whose `(resource_group, resource_group_member)`
-    /// didn't resolve. In a typical jmad this is 0; inheriting tags
-    /// may have many.
-    pub fn unresolved_count(&self) -> usize {
-        self.animations.iter().filter(|a| a.checksum.is_none()).count()
-    }
-}
-
-fn resolve_member<'a>(
-    table: &[Option<Vec<TagStruct<'a>>>],
-    rg: i16,
-    rgm: i16,
-) -> (Option<i32>, Option<i16>, Option<String>, Option<PackedDataSizes>, Option<u8>, &'a [u8]) {
-    if rg < 0 || rgm < 0 {
-        return (None, None, None, None, None, &[]);
-    }
-    let Some(Some(members)) = table.get(rg as usize) else {
-        return (None, None, None, None, None, &[]);
-    };
-    let Some(member) = members.get(rgm as usize) else {
-        return (None, None, None, None, None, &[]);
-    };
-
-    let checksum = member.read_int_any("animation_checksum").map(|v| v as i32);
-    let codec_frame_count = member.read_int_any("frame count").map(|v| v as i16);
-    let movement_type = member.read_enum_name("movement_data_type");
-    let data_sizes = read_packed_data_sizes(member);
-    let blob = member.field("animation_data").and_then(|f| f.as_data()).unwrap_or(&[]);
-    let codec_byte = blob.first().copied();
-
-    (checksum, codec_frame_count, movement_type, data_sizes, codec_byte, blob)
-}
-
-/// Inline `animation data` field on an `animations[i]` element —
-/// the older layout's storage spot. Tries underscore and space
-/// variants of the field name.
-fn read_inline_animation_data<'a>(anim: &TagStruct<'a>) -> Option<&'a [u8]> {
-    anim.field("animation data").and_then(|f| f.as_data())
-        .or_else(|| anim.field("animation_data").and_then(|f| f.as_data()))
-}
-
-fn read_packed_data_sizes(member: &TagStruct<'_>) -> Option<PackedDataSizes> {
-    let s = member.field("data sizes").and_then(|f| f.as_struct())?;
-    let mut fields = Vec::new();
-    for f in s.fields() {
-        let name = f.name().to_string();
-        if let Some(v) = s.read_int_any(&name) {
-            fields.push((name, v));
-        }
-    }
-    Some(PackedDataSizes { fields })
-}
-
-// ---------------------------------------------------------------------
-// Codec dispatch + per-slot decoders.
-// ---------------------------------------------------------------------
+//================================================================================
+// Codec dispatch + per-slot decoders
+//================================================================================
 
 /// Animation codec selector — the first byte of every animation's
 /// codec stream. Slots 0..=8 are present in Halo 3; 9..=11 added in
@@ -568,210 +159,6 @@ impl KeyframeCodecHeader {
         })
     }
 }
-
-/// One codec stream's worth of decoded transforms, indexed by
-/// `[codec_node_index][frame_index]`. The outer index is the codec's
-/// own node enumeration (as counted by `total_*_nodes` in the codec
-/// header) — NOT the global skeleton node index. Composition with the
-/// per-bone flag bitarrays maps back to skeleton nodes; that step
-/// happens in [`AnimationClip::pose`].
-///
-/// Translations are in **codec-native units** (raw `real_point3d`
-/// floats — no `×100` JMA convention applied here). Rotations are
-/// normalized quaternions. Scales are raw f32. `frame_count` is `1`
-/// for static codecs; it's the animation's frame count for animated
-/// codecs.
-#[derive(Debug, Clone)]
-pub struct AnimationTracks {
-    pub codec: Codec,
-    pub frame_count: u16,
-    pub rotations: Vec<Vec<RealQuaternion>>,
-    pub translations: Vec<Vec<RealPoint3d>>,
-    pub scales: Vec<Vec<f32>>,
-}
-
-/// Animated-stream decode outcome attached to [`AnimationClip`] when
-/// the animated codec wasn't (yet) decoded. `Unsupported` carries the
-/// codec we recognized but can't yet decode (slot 4/5/6/7/8 etc.);
-/// `Unknown` carries the raw byte when it didn't map to a known slot.
-#[derive(Debug, Clone)]
-pub enum AnimatedStreamStatus {
-    /// `data sizes/default_data == 0` — animation is static-only.
-    NoAnimatedStream,
-    /// Decoded successfully — values live in `clip.animated_tracks`.
-    Decoded,
-    /// Recognized codec but no decoder yet.
-    Unsupported(Codec),
-    /// Codec byte ∉ 0..=11.
-    Unknown(u8),
-}
-
-/// A fully-decoded animation. The blob's two codec streams come back
-/// separately:
-///
-/// - [`static_tracks`](Self::static_tracks): the rest-pose / default
-///   section, addressed by the *static* node-flag bitarrays (which
-///   bones use this fixed transform). For most MCC animations this is
-///   [`Codec::UncompressedStatic`].
-/// - [`animated_tracks`](Self::animated_tracks): the per-frame
-///   section, addressed by the *animated* node-flag bitarrays. `None`
-///   when `data sizes/default_data == 0` (the animation is purely a
-///   rest pose with no per-frame motion). The animated codec varies:
-///   slot 3 (8-byte fullframe), slot 4/5/6/7 (keyframe), slot 8
-///   (blend-screen) all common.
-///
-/// Combining the two via the bitarray flags into a single `(node,
-/// frame) → transform` table happens in [`AnimationClip::pose`]; the
-/// data model here keeps them separate so the JMA exporter, JSON
-/// dump, and any future GUI can compose them differently.
-#[derive(Debug, Clone)]
-pub struct AnimationClip {
-    pub frame_count: u16,
-    pub static_tracks: AnimationTracks,
-    pub animated_tracks: Option<AnimationTracks>,
-    /// Why `animated_tracks` is what it is. `Decoded` when the animated
-    /// codec was recognized and read; `NoAnimatedStream` for purely
-    /// static animations; `Unsupported(_)` / `Unknown(_)` when the
-    /// animated stream exists but couldn't be decoded — the static
-    /// tracks are still valid in those cases (rest pose).
-    pub animated_status: AnimatedStreamStatus,
-    /// Per-component node-flag bitarrays for static and animated
-    /// streams. `None` when the blob doesn't carry them (older inline
-    /// layouts) — composition then falls back to "all bones use
-    /// static_tracks" for static-only animations.
-    pub node_flags: Option<NodeFlags>,
-    /// Per-frame root-bone movement (dx/dy/dz/dyaw deltas). Empty
-    /// when the animation has no movement (`frame info type = none`).
-    pub movement: MovementData,
-}
-
-/// Per-frame root-bone movement deltas, keyed by `frame_info_type`.
-/// All values are **local-space** as stored on disk — JMA's
-/// world-space convention is applied at export time only.
-///
-/// - [`DxDy`](MovementKind::DxDy): 2 f32 per frame (dx, dy).
-/// - [`DxDyDyaw`](MovementKind::DxDyDyaw): 3 f32 per frame (dx, dy, dyaw radians).
-/// - [`DxDyDzDyaw`](MovementKind::DxDyDzDyaw): 4 f32 (dx, dy, dz, dyaw radians).
-///
-/// Layout matches TagTool's `MovementData.Read` (per-frame, packed
-/// little-endian floats).
-#[derive(Debug, Clone, Default)]
-pub struct MovementData {
-    pub kind: MovementKind,
-    pub frames: Vec<MovementFrame>,
-}
-
-/// Kind of per-frame root movement encoded in the animation —
-/// matches the schema's `frame_info_type_enum`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum MovementKind {
-    #[default]
-    None,
-    DxDy,
-    DxDyDyaw,
-    DxDyDzDyaw,
-    /// `DxDyDz + angle_axis` — Reach addition. Read but not yet
-    /// supported in JMA export.
-    DxDyDzDangleAxis,
-}
-
-impl MovementKind {
-    /// Bytes per frame on disk for this kind.
-    pub fn bytes_per_frame(self) -> usize {
-        match self {
-            Self::None => 0,
-            Self::DxDy => 8,
-            Self::DxDyDyaw => 12,
-            Self::DxDyDzDyaw => 16,
-            Self::DxDyDzDangleAxis => 24,
-        }
-    }
-
-    /// Resolve the `frame_info_type_enum` schema option name to a
-    /// [`MovementKind`]. Unknown / missing names map to [`Self::None`].
-    pub fn from_schema_name(name: &str) -> Self {
-        match name {
-            "dx,dy" => Self::DxDy,
-            "dx,dy,dyaw" => Self::DxDyDyaw,
-            "dx,dy,dz,dyaw" => Self::DxDyDzDyaw,
-            "dx,dy,dz,dangle_axis" => Self::DxDyDzDangleAxis,
-            _ => Self::None,
-        }
-    }
-}
-
-/// One frame of root-bone movement. Unused fields stay at default
-/// (0.0) — the [`MovementKind`] tells you which fields are populated.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct MovementFrame {
-    pub dx: f32,
-    pub dy: f32,
-    pub dz: f32,
-    /// Yaw delta in **radians** (matches the engine's stored unit).
-    /// `DxDyDyaw` and `DxDyDzDyaw` populate this; `DxDyDzDangleAxis`
-    /// stores a 3-vector that gets folded into a quaternion at export.
-    pub dyaw: f32,
-}
-
-/// Per-component node-flag bitarrays for static + animated codec
-/// streams. Six BitArrays total (rotation, translation, scale × static,
-/// animated). Bone N is "static-rotated" iff
-/// `static_rotation.bit(N)` is set; in that case its codec_node_index
-/// in `static_tracks.rotations` is `popcount(static_rotation[0..N])`.
-#[derive(Debug, Clone, Default)]
-pub struct NodeFlags {
-    pub static_rotation: BitArray,
-    pub static_translation: BitArray,
-    pub static_scale: BitArray,
-    pub animated_rotation: BitArray,
-    pub animated_translation: BitArray,
-    pub animated_scale: BitArray,
-}
-
-/// Tightly-packed bit array used by the animation flag tables. Stored
-/// as `u32` words (matching how the engine writes them).
-#[derive(Debug, Clone, Default)]
-pub struct BitArray {
-    /// Underlying u32 words, little-endian on disk.
-    pub words: Vec<u32>,
-}
-
-impl BitArray {
-    /// Parse a tightly packed flag bitarray from little-endian u32
-    /// words. Trailing bytes that don't fill a full u32 are dropped.
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        let words = bytes
-            .chunks_exact(4)
-            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
-            .collect();
-        Self { words }
-    }
-
-    /// Read a single bit. Returns `false` for indices past the end.
-    pub fn bit(&self, index: usize) -> bool {
-        let (w, b) = (index / 32, index % 32);
-        self.words.get(w).copied().unwrap_or(0) & (1u32 << b) != 0
-    }
-
-    /// Number of set bits in `[0..bound)`. Used to translate a
-    /// skeleton-bone index into the codec's own flat node enumeration.
-    pub fn popcount_below(&self, bound: usize) -> usize {
-        let full_words = bound / 32;
-        let mut count = 0u32;
-        for w in self.words.iter().take(full_words) {
-            count += w.count_ones();
-        }
-        if let Some(&w) = self.words.get(full_words) {
-            let trailing_bits = bound % 32;
-            if trailing_bits > 0 {
-                let mask = (1u32 << trailing_bits) - 1;
-                count += (w & mask).count_ones();
-            }
-        }
-        count as usize
-    }
-}
-
 impl<'a> AnimationGroup<'a> {
     /// Decode the blob into an [`AnimationClip`] — both the static
     /// rest-pose stream and the per-frame animated stream, plus
@@ -1211,7 +598,7 @@ fn decode_fullframe(
                     w: f32_at(blob, off + 12),
                 }
             };
-            frames_vec.push(normalize_quat(q));
+            frames_vec.push(q.normalized());
         }
         rotations.push(frames_vec);
     }
@@ -1400,13 +787,13 @@ fn decode_keyframe(
         header.rotation_key_payload_offset as usize,
         /*element_size=*/8,
         rot_packs.into_iter(),
-        identity_quat(),
-        |b, off| normalize_quat(RealQuaternion {
+        RealQuaternion::IDENTITY,
+        |b, off| RealQuaternion {
             i: i16_to_unit(b, off),
             j: i16_to_unit(b, off + 2),
             k: i16_to_unit(b, off + 4),
             w: i16_to_unit(b, off + 6),
-        }),
+        }.normalized(),
         nlerp_short_arc,
     )?;
     let translations = decode_component(
@@ -1439,9 +826,6 @@ fn decode_keyframe(
     Ok(AnimationTracks { codec, frame_count, rotations, translations, scales })
 }
 
-fn identity_quat() -> RealQuaternion {
-    RealQuaternion { i: 0.0, j: 0.0, k: 0.0, w: 1.0 }
-}
 
 /// Tiny seekable byte cursor — lets the curve decoder mirror Foundry's
 /// position-based read pattern (read forward, occasionally `skip(-6)`
@@ -1603,8 +987,8 @@ fn read_curve_rotation_node(c: &mut Cursor<'_>, frames: usize, revised: bool) ->
     };
 
     let mut out = Vec::with_capacity(frames);
-    let mut p1 = identity_quat();
-    let mut p2 = identity_quat();
+    let mut p1 = RealQuaternion::IDENTITY;
+    let mut p2 = RealQuaternion::IDENTITY;
     let mut tangent_bytes = [0u8; 4];
     let mut current_kf = 0u32;
     let mut next_kf = 0u32;
@@ -1781,9 +1165,7 @@ fn decompress_curve_quat(i: f32, j: f32, w: f32) -> RealQuaternion {
     if w < 0.0 { k = -k; }
     let w_unfolded = w.abs() * 2.0 - 1.0;
     let scale = (1.0 - w_unfolded * w_unfolded).max(0.0).sqrt();
-    normalize_quat(RealQuaternion {
-        i: i * scale, j: j * scale, k: k * scale, w: w_unfolded,
-    })
+    RealQuaternion { i: i * scale, j: j * scale, k: k * scale, w: w_unfolded }.normalized()
 }
 
 /// Slot 10 (RevisedCurve, H4-era) quaternion decompression. Stores 3
@@ -1816,9 +1198,7 @@ fn decompress_revised_quat(v3: i16, v4: i16, v5: i16) -> RealQuaternion {
     output[(component_index + 2) & 3] = j; // (-2 mod 4) == +2
     output[(component_index + 3) & 3] = k; // (-1 mod 4) == +3
     output[component_index] = missing;
-    normalize_quat(RealQuaternion {
-        i: output[0], j: output[1], k: output[2], w: output[3],
-    })
+    RealQuaternion { i: output[0], j: output[1], k: output[2], w: output[3] }.normalized()
 }
 
 /// Curve tangent for a single component. `tangent_signed` is the
@@ -1829,21 +1209,21 @@ fn curve_tangent_scalar(tangent_signed: i32, p1: f32, p2: f32) -> f32 {
     t.abs() * (t * 0.300_000_011_920_929) + (p2 - p1)
 }
 
-fn curve_tangent_quat(it: i32, jt: i32, kt: i32, wt: i32, p1: RealQuaternion, p2: RealQuaternion) -> [f32; 4] {
-    [
-        curve_tangent_scalar(it, p1.i, p2.i),
-        curve_tangent_scalar(jt, p1.j, p2.j),
-        curve_tangent_scalar(kt, p1.k, p2.k),
-        curve_tangent_scalar(wt, p1.w, p2.w),
-    ]
+fn curve_tangent_quat(it: i32, jt: i32, kt: i32, wt: i32, p1: RealQuaternion, p2: RealQuaternion) -> RealQuaternion {
+    RealQuaternion {
+        i: curve_tangent_scalar(it, p1.i, p2.i),
+        j: curve_tangent_scalar(jt, p1.j, p2.j),
+        k: curve_tangent_scalar(kt, p1.k, p2.k),
+        w: curve_tangent_scalar(wt, p1.w, p2.w),
+    }
 }
 
-fn curve_tangent_vec(xt: i32, yt: i32, zt: i32, p1: RealPoint3d, p2: RealPoint3d) -> [f32; 3] {
-    [
-        curve_tangent_scalar(xt, p1.x, p2.x),
-        curve_tangent_scalar(yt, p1.y, p2.y),
-        curve_tangent_scalar(zt, p1.z, p2.z),
-    ]
+fn curve_tangent_vec(xt: i32, yt: i32, zt: i32, p1: RealPoint3d, p2: RealPoint3d) -> RealVector3d {
+    RealVector3d {
+        i: curve_tangent_scalar(xt, p1.x, p2.x),
+        j: curve_tangent_scalar(yt, p1.y, p2.y),
+        k: curve_tangent_scalar(zt, p1.z, p2.z),
+    }
 }
 
 /// Cubic Hermite curve evaluation at `time` ∈ [0, 1].
@@ -1857,38 +1237,33 @@ fn curve_position_scalar(t: f32, tan1: f32, tan2: f32, p1: f32, p2: f32) -> f32 
     h1 * p1 + h2 * tan1 + h3 * p2 + h4 * tan2
 }
 
-fn curve_position_quat(t: f32, tan1: [f32; 4], tan2: [f32; 4], p1: RealQuaternion, p2: RealQuaternion) -> RealQuaternion {
-    normalize_quat(RealQuaternion {
-        i: curve_position_scalar(t, tan1[0], tan2[0], p1.i, p2.i),
-        j: curve_position_scalar(t, tan1[1], tan2[1], p1.j, p2.j),
-        k: curve_position_scalar(t, tan1[2], tan2[2], p1.k, p2.k),
-        w: curve_position_scalar(t, tan1[3], tan2[3], p1.w, p2.w),
-    })
+fn curve_position_quat(t: f32, tan1: RealQuaternion, tan2: RealQuaternion, p1: RealQuaternion, p2: RealQuaternion) -> RealQuaternion {
+    RealQuaternion {
+        i: curve_position_scalar(t, tan1.i, tan2.i, p1.i, p2.i),
+        j: curve_position_scalar(t, tan1.j, tan2.j, p1.j, p2.j),
+        k: curve_position_scalar(t, tan1.k, tan2.k, p1.k, p2.k),
+        w: curve_position_scalar(t, tan1.w, tan2.w, p1.w, p2.w),
+    }
+    .normalized()
 }
 
-fn curve_position_vec(t: f32, tan1: [f32; 3], tan2: [f32; 3], p1: RealPoint3d, p2: RealPoint3d) -> RealPoint3d {
+fn curve_position_vec(t: f32, tan1: RealVector3d, tan2: RealVector3d, p1: RealPoint3d, p2: RealPoint3d) -> RealPoint3d {
     RealPoint3d {
-        x: curve_position_scalar(t, tan1[0], tan2[0], p1.x, p2.x),
-        y: curve_position_scalar(t, tan1[1], tan2[1], p1.y, p2.y),
-        z: curve_position_scalar(t, tan1[2], tan2[2], p1.z, p2.z),
+        x: curve_position_scalar(t, tan1.i, tan2.i, p1.x, p2.x),
+        y: curve_position_scalar(t, tan1.j, tan2.j, p1.y, p2.y),
+        z: curve_position_scalar(t, tan1.k, tan2.k, p1.z, p2.z),
     }
 }
 
-/// Short-arc normalized lerp for unit quaternions. Picks the sign of
-/// `b` that yields the shorter arc relative to `a` (so `slerp(a, -b)`
-/// = `slerp(a, b)` when they're 180° apart on the wrong side), then
-/// linearly interpolates and re-normalizes. Mirrors the H3 binary's
+/// Short-arc normalized lerp for unit quaternions. Thin wrapper over
+/// [`RealQuaternion::nlerp`] kept here because `decode_component` takes
+/// the interpolator as an `fn(&Q, &Q, f32) -> Q` pointer (so it can
+/// pass-through a `(p1, p2, _) -> p1` for non-quat tracks); the math
+/// type's inherent method has a `(self, Self, f32)` shape that doesn't
+/// match. Mirrors the H3 binary's
 /// `fast_short_arc_quaternion_interpolate_and_normalize`.
 fn nlerp_short_arc(a: &RealQuaternion, b: &RealQuaternion, t: f32) -> RealQuaternion {
-    let dot = a.i * b.i + a.j * b.j + a.k * b.k + a.w * b.w;
-    let s = if dot < 0.0 { -1.0 } else { 1.0 };
-    let one_minus_t = 1.0 - t;
-    normalize_quat(RealQuaternion {
-        i: a.i * one_minus_t + s * b.i * t,
-        j: a.j * one_minus_t + s * b.j * t,
-        k: a.k * one_minus_t + s * b.k * t,
-        w: a.w * one_minus_t + s * b.w * t,
-    })
+    a.nlerp(*b, t)
 }
 
 /// Decode an int16 component as `s / 32767.0`. Matches the H3 binary's
@@ -1901,348 +1276,6 @@ fn i16_to_unit(blob: &[u8], off: usize) -> f32 {
 
 fn f32_at(blob: &[u8], off: usize) -> f32 {
     f32::from_le_bytes(blob[off..off + 4].try_into().unwrap())
-}
-
-// ---------------------------------------------------------------------
-// Skeleton + Pose + JMA-family export.
-// ---------------------------------------------------------------------
-
-/// One node in the jmad's `definitions/skeleton nodes` block.
-#[derive(Debug, Clone)]
-pub struct SkeletonNode {
-    pub name: String,
-    /// Index into `Skeleton::nodes` of the first child, or `-1`.
-    pub first_child: i16,
-    /// Index of the next sibling under the same parent, or `-1`.
-    pub next_sibling: i16,
-    /// Index of the parent node, or `-1` for root.
-    pub parent: i16,
-}
-
-/// jmad skeleton — the bone hierarchy that animations target.
-#[derive(Debug, Clone)]
-pub struct Skeleton {
-    pub nodes: Vec<SkeletonNode>,
-}
-
-impl Skeleton {
-    /// Walk `definitions/skeleton nodes` (or `resources/skeleton nodes`
-    /// for older inline-layout tags) into a flat list of nodes.
-    /// Returns an empty skeleton if the block is missing.
-    pub fn from_tag(tag: &TagFile) -> Self {
-        let root = tag.root();
-        for prefix in TOP_LEVEL_NAMES {
-            if let Some(block) = root
-                .field_path(&format!("{prefix}/skeleton nodes"))
-                .and_then(|f| f.as_block())
-            {
-                let mut nodes = Vec::with_capacity(block.len());
-                for i in 0..block.len() {
-                    let Some(elem) = block.element(i) else { continue };
-                    let name = elem.read_string_id("name").unwrap_or_default();
-                    let first_child = elem.read_block_index("first child node index");
-                    let next_sibling = elem.read_block_index("next sibling node index");
-                    let parent = elem.read_block_index("parent node index");
-                    nodes.push(SkeletonNode { name, first_child, next_sibling, parent });
-                }
-                return Self { nodes };
-            }
-        }
-        Self { nodes: Vec::new() }
-    }
-
-    /// Number of skeleton nodes (bones).
-    pub fn len(&self) -> usize { self.nodes.len() }
-
-    /// `true` when the tag has no skeleton nodes (e.g. inheriting jmads).
-    pub fn is_empty(&self) -> bool { self.nodes.is_empty() }
-}
-
-/// One bone's transform at one frame — the unit JMA writes per
-/// `(frame, node)` cell.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NodeTransform {
-    pub rotation: RealQuaternion,
-    pub translation: RealPoint3d,
-    pub scale: f32,
-}
-
-/// Per-frame, per-bone transform table. `frames[frame_index][bone_index]`.
-#[derive(Debug, Clone)]
-pub struct Pose {
-    pub frames: Vec<Vec<NodeTransform>>,
-}
-
-impl AnimationClip {
-    /// Compose `static_tracks` + `animated_tracks` against the skeleton
-    /// using the per-component `node_flags` bitarrays. Result has one
-    /// `NodeTransform` per (frame, skeleton bone).
-    ///
-    /// Bones with neither flag set fall back to identity (rotation =
-    /// (0,0,0,1), translation = (0,0,0), scale = 1.0). This is wrong
-    /// for the rare bones whose rest pose lives in the skeleton's own
-    /// `z_pos`/`base_vector` fields, but most exported animations
-    /// have all bones in the static or animated set so the fallback
-    /// rarely matters in practice.
-    pub fn pose(&self, skeleton: &Skeleton) -> Pose {
-        let bones = skeleton.len();
-        let frames_n = self.frame_count.max(1) as usize;
-        let mut frames = Vec::with_capacity(frames_n);
-
-        // Pre-resolve every bone's source: which codec stream owns each
-        // component, and what the codec_node_index is.
-        let resolutions: Vec<BoneResolution> = (0..bones)
-            .map(|b| BoneResolution::for_bone(b, self.node_flags.as_ref()))
-            .collect();
-
-        for f in 0..frames_n {
-            let mut row = Vec::with_capacity(bones);
-            for res in &resolutions {
-                let rotation = pick_rotation(self, res, f).unwrap_or(identity_quat());
-                let translation = pick_translation(self, res, f).unwrap_or(RealPoint3d::default());
-                let scale = pick_scale(self, res, f).unwrap_or(1.0);
-                row.push(NodeTransform { rotation, translation, scale });
-            }
-            frames.push(row);
-        }
-        Pose { frames }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct BoneResolution {
-    rotation: TrackSource,
-    translation: TrackSource,
-    scale: TrackSource,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum TrackSource {
-    Static(usize),
-    Animated(usize),
-    Identity,
-}
-
-impl BoneResolution {
-    fn for_bone(bone: usize, flags: Option<&NodeFlags>) -> Self {
-        match flags {
-            None => {
-                // No flags available — fall back to "all bones use the
-                // static track in skeleton order". Right for the most
-                // common static-only case (mongoose-class inline
-                // layouts), wrong for tagged bone subsets — but those
-                // tags carry node_flags so we won't take this path.
-                Self {
-                    rotation: TrackSource::Static(bone),
-                    translation: TrackSource::Static(bone),
-                    scale: TrackSource::Static(bone),
-                }
-            }
-            Some(f) => Self {
-                rotation: pick_source(bone, &f.static_rotation, &f.animated_rotation),
-                translation: pick_source(bone, &f.static_translation, &f.animated_translation),
-                scale: pick_source(bone, &f.static_scale, &f.animated_scale),
-            }
-        }
-    }
-}
-
-fn pick_source(bone: usize, static_flags: &BitArray, animated_flags: &BitArray) -> TrackSource {
-    if static_flags.bit(bone) { TrackSource::Static(static_flags.popcount_below(bone)) }
-    else if animated_flags.bit(bone) { TrackSource::Animated(animated_flags.popcount_below(bone)) }
-    else { TrackSource::Identity }
-}
-
-fn pick_rotation(clip: &AnimationClip, res: &BoneResolution, frame: usize) -> Option<RealQuaternion> {
-    match res.rotation {
-        TrackSource::Static(i) => clip.static_tracks.rotations.get(i).and_then(|f| f.first()).copied(),
-        TrackSource::Animated(i) => clip.animated_tracks.as_ref()
-            .and_then(|t| t.rotations.get(i)).and_then(|f| f.get(frame.min(f.len() - 1))).copied(),
-        TrackSource::Identity => None,
-    }
-}
-fn pick_translation(clip: &AnimationClip, res: &BoneResolution, frame: usize) -> Option<RealPoint3d> {
-    match res.translation {
-        TrackSource::Static(i) => clip.static_tracks.translations.get(i).and_then(|f| f.first()).copied(),
-        TrackSource::Animated(i) => clip.animated_tracks.as_ref()
-            .and_then(|t| t.translations.get(i)).and_then(|f| f.get(frame.min(f.len() - 1))).copied(),
-        TrackSource::Identity => None,
-    }
-}
-fn pick_scale(clip: &AnimationClip, res: &BoneResolution, frame: usize) -> Option<f32> {
-    match res.scale {
-        TrackSource::Static(i) => clip.static_tracks.scales.get(i).and_then(|f| f.first()).copied(),
-        TrackSource::Animated(i) => clip.animated_tracks.as_ref()
-            .and_then(|t| t.scales.get(i)).and_then(|f| f.get(frame.min(f.len() - 1))).copied(),
-        TrackSource::Identity => None,
-    }
-}
-
-/// JMA-family file extension — picked from the animation's
-/// `animation type` × `frame info type`.
-#[derive(Debug, Clone, Copy)]
-pub enum JmaKind {
-    /// Base animation, no movement data.
-    Jmm,
-    /// Base + dx/dy.
-    Jma,
-    /// Base + dx/dy/dyaw.
-    Jmt,
-    /// Base + dx/dy/dz/dyaw.
-    Jmz,
-    /// Overlay animation.
-    Jmo,
-    /// Replacement animation.
-    Jmr,
-    /// World-relative (no movement).
-    Jmw,
-}
-
-impl JmaKind {
-    /// Uppercase JMA-family file extension (no leading dot).
-    pub fn extension(self) -> &'static str {
-        match self {
-            Self::Jmm => "JMM", Self::Jma => "JMA", Self::Jmt => "JMT", Self::Jmz => "JMZ",
-            Self::Jmo => "JMO", Self::Jmr => "JMR", Self::Jmw => "JMW",
-        }
-    }
-
-    /// Pick the right JMA-family kind from the per-animation metadata.
-    /// Defaults to JMM when no movement data and base-type.
-    pub fn from_metadata(animation_type: Option<&str>, frame_info_type: Option<&str>) -> Self {
-        match animation_type.unwrap_or("base") {
-            "overlay" => return Self::Jmo,
-            "replacement" => return Self::Jmr,
-            "world" => return Self::Jmw,
-            _ => {}
-        }
-        match frame_info_type.unwrap_or("none") {
-            "dx,dy" => Self::Jma,
-            "dx,dy,dyaw" => Self::Jmt,
-            "dx,dy,dz,dyaw" | "dx,dy,dz,dangle_axis" => Self::Jmz,
-            _ => Self::Jmm,
-        }
-    }
-
-    /// Whether this kind needs per-frame movement-data lines after
-    /// the per-bone transforms. JMM/JMW/JMO/JMR don't; JMA/JMT/JMZ do.
-    pub fn has_movement_data(self) -> bool {
-        matches!(self, Self::Jma | Self::Jmt | Self::Jmz)
-    }
-
-    /// Number of float components written per movement-data frame
-    /// (`0` when [`Self::has_movement_data`] is false).
-    pub fn movement_components(self) -> usize {
-        match self {
-            Self::Jma => 2, // dx, dy
-            Self::Jmt => 3, // dx, dy, dyaw
-            Self::Jmz => 4, // dx, dy, dz, dyaw
-            _ => 0,
-        }
-    }
-}
-
-impl Pose {
-    /// Write this pose as a JMA-family text file (.JMM/.JMA/.JMT/etc).
-    /// Applies the JMA-side conventions — translation `× 100` (Halo
-    /// world-units → JMA centimeter convention) and quaternion
-    /// **conjugate** serialization (JMA writes `(-i, -j, -k, w)`).
-    ///
-    /// `movement` carries per-frame root deltas in **local space** as
-    /// stored in the tag. For movement-bearing kinds (JMA/JMT/JMZ)
-    /// this writer composes them into **world space** at write time
-    /// per Foundry commit `850d680d`: dx/dy rotate by accumulated yaw
-    /// before the dyaw delta is applied. JMM/JMW/JMO/JMR ignore
-    /// `movement` entirely.
-    pub fn write_jma<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-        skeleton: &Skeleton,
-        node_list_checksum: i32,
-        kind: JmaKind,
-        actor_name: &str,
-        movement: Option<&MovementData>,
-    ) -> std::io::Result<()> {
-        // Header.
-        writeln!(writer, "16392")?;
-        writeln!(writer, "{}", self.frames.len())?;
-        writeln!(writer, "30")?;
-        writeln!(writer, "1")?;
-        writeln!(writer, "{actor_name}")?;
-        writeln!(writer, "{}", skeleton.len())?;
-        writeln!(writer, "{node_list_checksum}")?;
-
-        // Skeleton.
-        for node in &skeleton.nodes {
-            writeln!(writer, "{}", node.name)?;
-            writeln!(writer, "{}", node.first_child)?;
-            writeln!(writer, "{}", node.next_sibling)?;
-        }
-
-        // Frames + per-frame movement (composed local→world per Foundry).
-        let mut accumulated_yaw = 0.0f32;
-        for (frame_idx, frame) in self.frames.iter().enumerate() {
-            for transform in frame {
-                let t = transform.translation;
-                // Halo world-units → JMA "centimeter" convention.
-                write_floats(writer, &[t.x * 100.0, t.y * 100.0, t.z * 100.0])?;
-                let q = transform.rotation;
-                // JMA wants the conjugate: negate i,j,k, keep w.
-                write_floats(writer, &[-q.i, -q.j, -q.k, q.w])?;
-                write_floats(writer, &[transform.scale])?;
-            }
-            if kind.has_movement_data() {
-                let local = movement
-                    .and_then(|m| m.frames.get(frame_idx))
-                    .copied()
-                    .unwrap_or_default();
-                // Rotate dx/dy from local space into world by the
-                // yaw accumulated up through the previous frame
-                // (Foundry's order: rotate first, then accumulate
-                // this frame's dyaw).
-                let cos_y = accumulated_yaw.cos();
-                let sin_y = accumulated_yaw.sin();
-                let world_dx = local.dx * cos_y - local.dy * sin_y;
-                let world_dy = local.dx * sin_y + local.dy * cos_y;
-                // JMA-side translation scale is ×100 (cm convention).
-                let row: Vec<f32> = match kind {
-                    JmaKind::Jma => vec![world_dx * 100.0, world_dy * 100.0],
-                    JmaKind::Jmt => vec![world_dx * 100.0, world_dy * 100.0, local.dyaw],
-                    JmaKind::Jmz => vec![world_dx * 100.0, world_dy * 100.0, local.dz * 100.0, local.dyaw],
-                    _ => Vec::new(),
-                };
-                write_floats(writer, &row)?;
-                accumulated_yaw += local.dyaw;
-            }
-        }
-        writer.flush()?;
-        Ok(())
-    }
-}
-
-fn write_floats<W: std::io::Write>(writer: &mut W, values: &[f32]) -> std::io::Result<()> {
-    for (i, v) in values.iter().enumerate() {
-        let v = if *v == -0.0 { 0.0 } else { *v };
-        if i + 1 < values.len() {
-            write!(writer, "{:.10}\t", v)?;
-        } else {
-            writeln!(writer, "{:.10}", v)?;
-        }
-    }
-    Ok(())
-}
-
-/// Quaternion normalization. Mirrors `fast_quaternion_normalize` in
-/// the H3 binary — divides by the magnitude. Returns the input
-/// unchanged on a zero-magnitude quat (no `1/0` blow-up; callers can
-/// detect by looking at `i==j==k==w==0`).
-fn normalize_quat(q: RealQuaternion) -> RealQuaternion {
-    let mag2 = q.i * q.i + q.j * q.j + q.k * q.k + q.w * q.w;
-    if mag2 <= 0.0 || !mag2.is_finite() {
-        return q;
-    }
-    let inv = mag2.sqrt().recip();
-    RealQuaternion { i: q.i * inv, j: q.j * inv, k: q.k * inv, w: q.w * inv }
 }
 
 #[cfg(test)]
@@ -2556,7 +1589,7 @@ mod tests {
 
     #[test]
     fn nlerp_short_arc_picks_shorter_path() {
-        let a = identity_quat();
+        let a = RealQuaternion::IDENTITY;
         // -a should be treated as +a (same orientation, opposite sign).
         let neg_a = RealQuaternion { i: 0.0, j: 0.0, k: 0.0, w: -1.0 };
         let mid = nlerp_short_arc(&a, &neg_a, 0.5);
@@ -2601,18 +1634,7 @@ mod tests {
         assert!(matches!(err, AnimationError::TruncatedHeader { .. }));
     }
 
-    #[test]
-    fn quat_no_normalize_on_zero() {
-        let q = RealQuaternion { i: 0.0, j: 0.0, k: 0.0, w: 0.0 };
-        let n = normalize_quat(q);
-        assert_eq!(n.i, 0.0);
-        assert_eq!(n.w, 0.0);
-    }
-
-    #[test]
-    fn quat_normalize_unit_magnitude() {
-        let q = RealQuaternion { i: 2.0, j: 0.0, k: 0.0, w: 0.0 };
-        let n = normalize_quat(q);
-        assert!((n.i - 1.0).abs() < 1e-6);
-    }
+    // (Quaternion `normalized()` behavior — including the
+    // zero-magnitude no-op and unit-vector renormalize cases — is
+    // covered by tests in `crate::math`.)
 }

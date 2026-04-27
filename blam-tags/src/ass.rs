@@ -37,12 +37,9 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use crate::api::TagStruct;
-use crate::fields::TagFieldData;
 use crate::file::TagFile;
-use crate::geometry::{
-    quat_from_basis_columns, read_compression_bounds_at,
-    vec3_cross, vec3_normalize, CompressionBounds, SCALE,
-};
+use crate::geometry::{read_compression_bounds_at, CompressionBounds, SCALE};
+use crate::math::{RealPlane3d, RealPoint3d, RealQuaternion, RealRgbColor, RealVector3d};
 
 // SCALE constant lives in crate::geometry (re-exported above).
 
@@ -88,13 +85,16 @@ pub struct AssMaterial {
 /// component was added in v5 and is always emitted; we set it to 0.
 #[derive(Debug, Clone)]
 pub struct AssVertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub color: [f32; 3],
+    pub position: RealPoint3d,
+    pub normal: RealVector3d,
+    pub color: RealRgbColor,
     /// `(node_index, weight)` pairs — empty for static geometry,
     /// populated for skinned meshes.
     pub node_set: Vec<(i32, f32)>,
-    pub uvs: Vec<[f32; 3]>,
+    /// Texture coordinates as `(u, v, w)` triples. ASS v5 added the
+    /// `w` component (always 0 for the 2D textures we emit), so we
+    /// model the triple as a [`RealPoint3d`] in `(u, v, w)` order.
+    pub uvs: Vec<RealPoint3d>,
 }
 
 /// ASS triangle: material slot + 3 vertex indices into [`AssObject::vertices`].
@@ -135,7 +135,7 @@ pub enum AssObjectPayload {
 #[derive(Debug, Clone)]
 pub struct AssLight {
     pub kind: AssLightKind,
-    pub color: [f32; 3],
+    pub color: RealRgbColor,
     pub intensity: f32,
     /// Cone angles in DEGREES (tag stores radians; converted on read).
     pub hotspot_size: f32,
@@ -218,11 +218,11 @@ pub struct AssInstance {
     pub unique_id: i32,
     pub parent_id: i32,
     pub inheritance_flag: i32,
-    pub local_rotation: [f32; 4],
-    pub local_translation: [f32; 3],
+    pub local_rotation: RealQuaternion,
+    pub local_translation: RealPoint3d,
     pub local_scale: f32,
-    pub pivot_rotation: [f32; 4],
-    pub pivot_translation: [f32; 3],
+    pub pivot_rotation: RealQuaternion,
+    pub pivot_translation: RealPoint3d,
     pub pivot_scale: f32,
     pub bone_groups: Vec<i32>,
 }
@@ -232,11 +232,11 @@ impl Default for AssInstance {
         Self {
             object_index: 0, name: String::new(), unique_id: 0,
             parent_id: -1, inheritance_flag: 0,
-            local_rotation: [0.0, 0.0, 0.0, 1.0],
-            local_translation: [0.0, 0.0, 0.0],
+            local_rotation: RealQuaternion::IDENTITY,
+            local_translation: RealPoint3d::ZERO,
             local_scale: 1.0,
-            pivot_rotation: [0.0, 0.0, 0.0, 1.0],
-            pivot_translation: [0.0, 0.0, 0.0],
+            pivot_rotation: RealQuaternion::IDENTITY,
+            pivot_translation: RealPoint3d::ZERO,
             pivot_scale: 1.0,
             bone_groups: Vec::new(),
         }
@@ -330,11 +330,11 @@ impl AssFile {
             unique_id: 0,
             parent_id: -1,
             inheritance_flag: 0,
-            local_rotation: [0.0, 0.0, 0.0, 1.0],
-            local_translation: [0.0, 0.0, 0.0],
+            local_rotation: RealQuaternion::IDENTITY,
+            local_translation: RealPoint3d::ZERO,
             local_scale: 1.0,
-            pivot_rotation: [0.0, 0.0, 0.0, 1.0],
-            pivot_translation: [0.0, 0.0, 0.0],
+            pivot_rotation: RealQuaternion::IDENTITY,
+            pivot_translation: RealPoint3d::ZERO,
             pivot_scale: 1.0,
             bone_groups: Vec::new(),
         });
@@ -393,11 +393,11 @@ impl AssFile {
                     let pe = verts_block.element(vi).unwrap();
                     let p = pe.read_point3d("point");
                     verts.push(AssVertex {
-                        position: [p[0] * SCALE, p[1] * SCALE, p[2] * SCALE],
-                        normal: [0.0, 0.0, 1.0],
-                        color: [0.0, 0.0, 0.0],
+                        position: p * SCALE,
+                        normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
+                        color: RealRgbColor::default(),
                         node_set: Vec::new(),
-                        uvs: vec![[0.0, 0.0, 0.0]],
+                        uvs: vec![RealPoint3d::ZERO],
                     });
                 }
                 // Triangle-fan the convex polygon.
@@ -482,11 +482,13 @@ impl AssFile {
                 if def_idx < 0 || (def_idx as usize) >= def_object_index.len() { continue; }
                 let Some(object_index) = def_object_index[def_idx as usize] else { continue; };
                 let scale = inst.read_real("scale").unwrap_or(1.0);
-                let f = inst.read_point3d("forward");
-                let l = inst.read_point3d("left");
-                let u = inst.read_point3d("up");
+                // Schema: forward/left/up are `real_vector_3d`,
+                // position is `real_point_3d`.
+                let f = inst.read_vec3("forward");
+                let l = inst.read_vec3("left");
+                let u = inst.read_vec3("up");
                 let p = inst.read_point3d("position");
-                let rot = quat_from_basis_columns(f, l, u);
+                let rot = RealQuaternion::from_basis_columns(f, l, u);
                 let name = inst.read_string_id("name").unwrap_or_else(|| format!("instance_{ii}"));
                 instances.push(AssInstance {
                     object_index,
@@ -495,10 +497,10 @@ impl AssFile {
                     parent_id: 0, // Scene Root
                     inheritance_flag: 0,
                     local_rotation: rot,
-                    local_translation: [p[0] * SCALE, p[1] * SCALE, p[2] * SCALE],
+                    local_translation: p * SCALE,
                     local_scale: scale,
-                    pivot_rotation: [0.0, 0.0, 0.0, 1.0],
-                    pivot_translation: [0.0, 0.0, 0.0],
+                    pivot_rotation: RealQuaternion::IDENTITY,
+                    pivot_translation: RealPoint3d::ZERO,
                     pivot_scale: 1.0,
                     bone_groups: Vec::new(),
                 });
@@ -519,12 +521,10 @@ impl AssFile {
             for wi in 0..wp_block.len() {
                 let wp = wp_block.element(wi).unwrap();
                 let planes_block = match wp.field("planes").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
-                let mut planes: Vec<[f32; 4]> = Vec::with_capacity(planes_block.len());
+                let mut planes: Vec<RealPlane3d> = Vec::with_capacity(planes_block.len());
                 for pi in 0..planes_block.len() {
                     let pe = planes_block.element(pi).unwrap();
-                    if let Some(TagFieldData::RealPlane3d(p)) = pe.field("plane").and_then(|f| f.value()) {
-                        planes.push([p.i, p.j, p.k, p.d]);
-                    }
+                    planes.push(pe.read_plane3d("plane"));
                 }
                 if planes.len() < 4 { continue; }
                 let (verts, tris) = polyhedron_from_planes(&planes, weather_mat_idx);
@@ -571,10 +571,10 @@ impl AssFile {
                     parent_id: 0,
                     inheritance_flag: 0,
                     local_rotation: rot,
-                    local_translation: [pos[0] * SCALE, pos[1] * SCALE, pos[2] * SCALE],
+                    local_translation: pos * SCALE,
                     local_scale: 1.0,
-                    pivot_rotation: [0.0, 0.0, 0.0, 1.0],
-                    pivot_translation: [0.0, 0.0, 0.0],
+                    pivot_rotation: RealQuaternion::IDENTITY,
+                    pivot_translation: RealPoint3d::ZERO,
                     pivot_scale: 1.0,
                     bone_groups: Vec::new(),
                 });
@@ -622,10 +622,10 @@ impl AssFile {
                     parent_id: 0,
                     inheritance_flag: 0,
                     local_rotation: rot,
-                    local_translation: [pos[0] * SCALE, pos[1] * SCALE, pos[2] * SCALE],
+                    local_translation: pos * SCALE,
                     local_scale: scale,
-                    pivot_rotation: [0.0, 0.0, 0.0, 1.0],
-                    pivot_translation: [0.0, 0.0, 0.0],
+                    pivot_rotation: RealQuaternion::IDENTITY,
+                    pivot_translation: RealPoint3d::ZERO,
                     pivot_scale: 1.0,
                     bone_groups: Vec::new(),
                 });
@@ -663,9 +663,8 @@ impl AssFile {
                         right_surface: e.read_int_any("right surface").unwrap_or(-1) as i32,
                     }
                 }).collect();
-                let bsp_points: Vec<[f32; 3]> = (0..bsp_verts.len()).map(|k| {
-                    let p = bsp_verts.element(k).unwrap().read_point3d("point");
-                    [p[0] * SCALE, p[1] * SCALE, p[2] * SCALE]
+                let bsp_points: Vec<RealPoint3d> = (0..bsp_verts.len()).map(|k| {
+                    bsp_verts.element(k).unwrap().read_point3d("point") * SCALE
                 }).collect();
                 for si in 0..surfaces.len() {
                     let surface = surfaces.element(si).unwrap();
@@ -676,13 +675,13 @@ impl AssFile {
                     // Triangle-fan the convex polygon.
                     let base_for_fan = next_index;
                     for &vi in &polygon {
-                        let pos = bsp_points.get(vi as usize).copied().unwrap_or([0.0; 3]);
+                        let pos = bsp_points.get(vi as usize).copied().unwrap_or(RealPoint3d::ZERO);
                         coll_verts.push(AssVertex {
                             position: pos,
-                            normal: [0.0, 0.0, 1.0],
-                            color: [0.0, 0.0, 0.0],
+                            normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
+                            color: RealRgbColor::default(),
                             node_set: Vec::new(),
-                            uvs: vec![[0.0, 0.0, 0.0]],
+                            uvs: vec![RealPoint3d::ZERO],
                         });
                     }
                     let n = polygon.len() as u32;
@@ -766,16 +765,16 @@ impl AssFile {
                     write!(w, "{}", vertices.len())?;
                     for v in vertices {
                         write!(w, "\n")?;
-                        write_floats(w, &v.position)?;
-                        write_floats(w, &v.normal)?;
-                        write_floats(w, &v.color)?;
+                        write_floats(w, &v.position.to_array())?;
+                        write_floats(w, &v.normal.to_array())?;
+                        write_floats(w, &[v.color.red, v.color.green, v.color.blue])?;
                         write!(w, "{}", v.node_set.len())?;
                         for (idx, weight) in &v.node_set {
                             write!(w, "\n{}\t{:.10}", idx, weight)?;
                         }
                         write!(w, "\n{}", v.uvs.len())?;
                         for uv in &v.uvs {
-                            write!(w, "\n{:.10}\t{:.10}\t{:.10}\n", uv[0], uv[1], uv[2])?;
+                            write!(w, "\n{:.10}\t{:.10}\t{:.10}\n", uv.x, uv.y, uv.z)?;
                         }
                     }
                     write!(w, "\n{}", triangles.len())?;
@@ -790,7 +789,7 @@ impl AssFile {
                     // use_near, near_min, near_max, use_far,
                     // far_min, far_max, shape, aspect.
                     writeln!(w, "\"{}\"", l.kind.as_str())?;
-                    write_floats(w, &l.color)?;
+                    write_floats(w, &[l.color.red, l.color.green, l.color.blue])?;
                     writeln!(w, "{:.10}", l.intensity)?;
                     writeln!(w, "{:.10}", l.hotspot_size)?;
                     writeln!(w, "{:.10}", l.hotspot_falloff)?;
@@ -821,11 +820,11 @@ impl AssFile {
             writeln!(w, "{}", inst.unique_id)?;
             writeln!(w, "{}", inst.parent_id)?;
             writeln!(w, "{}", inst.inheritance_flag)?;
-            write_floats(w, &inst.local_rotation)?;
-            write_floats(w, &inst.local_translation)?;
+            write_floats(w, &inst.local_rotation.to_array())?;
+            write_floats(w, &inst.local_translation.to_array())?;
             writeln!(w, "{:.10}", inst.local_scale)?;
-            write_floats(w, &inst.pivot_rotation)?;
-            write_floats(w, &inst.pivot_translation)?;
+            write_floats(w, &inst.pivot_rotation.to_array())?;
+            write_floats(w, &inst.pivot_translation.to_array())?;
             writeln!(w, "{:.10}", inst.pivot_scale)?;
             for node_index in &inst.bone_groups {
                 writeln!(w, "{node_index}")?;
@@ -876,7 +875,7 @@ impl AssFile {
                     .unwrap_or(0.0).to_degrees();
                 self.materials[i].bm_strings.push(format!(
                     "BM_LIGHTING_BASIC {:.10} {:.10} {:.10} {:.10} {:.10} 0 {:.10}",
-                    power, color[0], color[1], color[2], quality, focus,
+                    power, color.red, color.green, color.blue, quality, focus,
                 ));
                 self.materials[i].bm_strings.push(format!(
                     "BM_LIGHTING_ATTEN {} {:.10} {:.10}",
@@ -916,8 +915,8 @@ impl AssFile {
             let flags = d.read_int_any("flags").unwrap_or(0);
             let use_near = (flags & 0x0001) != 0;
             let use_far = (flags & 0x0002) != 0;
-            let (near_lo, near_hi) = d.read_real_bounds("near attenuation bounds");
-            let (far_lo, far_hi) = d.read_real_bounds("far attenuation bounds");
+            let near = d.read_real_bounds("near attenuation bounds");
+            let far = d.read_real_bounds("far attenuation bounds");
             let shape = d.read_int_any("shape").unwrap_or(1) as i32;
             let aspect = d.read_real("aspect").unwrap_or(1.0);
 
@@ -925,11 +924,11 @@ impl AssFile {
                 kind, color, intensity,
                 hotspot_size, hotspot_falloff,
                 use_near_attenuation: use_near,
-                near_atten_min: near_lo * SCALE,
-                near_atten_max: near_hi * SCALE,
+                near_atten_min: near.lower * SCALE,
+                near_atten_max: near.upper * SCALE,
                 use_far_attenuation: use_far,
-                far_atten_min: far_lo * SCALE,
-                far_atten_max: far_hi * SCALE,
+                far_atten_min: far.lower * SCALE,
+                far_atten_max: far.upper * SCALE,
                 shape, aspect,
             };
             def_object_index[di] = Some(self.objects.len() as i32);
@@ -949,11 +948,12 @@ impl AssFile {
             let def_idx = inst.read_int_any("definition index").unwrap_or(-1);
             if def_idx < 0 || (def_idx as usize) >= def_object_index.len() { continue; }
             let Some(object_index) = def_object_index[def_idx as usize] else { continue; };
+            // Schema: origin is `real_point_3d`, forward/up are `real_vector_3d`.
             let origin = inst.read_point3d("origin");
-            let forward = inst.read_point3d("forward");
-            let up = inst.read_point3d("up");
-            let left = vec3_cross(up, forward);
-            let rot = quat_from_basis_columns(forward, left, up);
+            let forward = inst.read_vec3("forward");
+            let up = inst.read_vec3("up");
+            let left = up.cross(forward);
+            let rot = RealQuaternion::from_basis_columns(forward, left, up);
             self.instances.push(AssInstance {
                 object_index,
                 name: format!("light_{ii}"),
@@ -961,10 +961,10 @@ impl AssFile {
                 parent_id: 0, // Scene Root
                 inheritance_flag: 0,
                 local_rotation: rot,
-                local_translation: [origin[0] * SCALE, origin[1] * SCALE, origin[2] * SCALE],
+                local_translation: origin * SCALE,
                 local_scale: 1.0,
-                pivot_rotation: [0.0, 0.0, 0.0, 1.0],
-                pivot_translation: [0.0, 0.0, 0.0],
+                pivot_rotation: RealQuaternion::IDENTITY,
+                pivot_translation: RealPoint3d::ZERO,
                 pivot_scale: 1.0,
                 bone_groups: Vec::new(),
             });
@@ -973,7 +973,9 @@ impl AssFile {
     }
 }
 
-// ---- walkers ----
+//================================================================================
+// Walkers
+//================================================================================
 
 fn read_materials(root: &TagStruct<'_>) -> Result<Vec<AssMaterial>, AssError> {
     let block = root.field_path("materials").and_then(|f| f.as_block())
@@ -1145,20 +1147,19 @@ fn remap_vertex(
 
 fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> AssVertex {
     let raw_pos = v.read_point3d("position");
-    let pos = bounds.decompress_position(raw_pos);
-    let position = [pos[0] * SCALE, pos[1] * SCALE, pos[2] * SCALE];
-    let normal = v.read_point3d("normal");
-    let raw_uv = match v.field("texcoord").and_then(|f| f.value()) {
-        Some(TagFieldData::RealPoint2d(p)) => [p.x, p.y],
-        _ => [0.0, 0.0],
-    };
+    let position = bounds.decompress_position(raw_pos) * SCALE;
+    // The "normal" schema field is `real_point_3d` despite being a
+    // direction.
+    let normal = v.read_point3d("normal").as_vector();
+    let raw_uv = v.read_point2d("texcoord");
     let uv = bounds.decompress_texcoord(raw_uv);
     AssVertex {
         position,
         normal,
-        color: [0.0, 0.0, 0.0],
+        color: RealRgbColor::default(),
         node_set: Vec::new(),
-        uvs: vec![[uv[0], 1.0 - uv[1], 0.0]], // V-flip + zero w (v5+ convention)
+        // V-flip + zero w (v5+ convention).
+        uvs: vec![RealPoint3d { x: uv.x, y: 1.0 - uv.y, z: 0.0 }],
     }
 }
 
@@ -1166,15 +1167,14 @@ fn empty_mesh() -> AssObject { AssObject::empty_mesh() }
 
 fn default_vertex() -> AssVertex {
     AssVertex {
-        position: [0.0; 3],
-        normal: [0.0, 0.0, 1.0],
-        color: [0.0; 3],
+        position: RealPoint3d::ZERO,
+        normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
+        color: RealRgbColor::default(),
         node_set: Vec::new(),
-        uvs: vec![[0.0, 0.0, 0.0]],
+        uvs: vec![RealPoint3d::ZERO],
     }
 }
 
-// (field readers + math helpers all live in crate::geometry)
 
 /// Reconstruct a convex polyhedron's mesh from its bounding planes
 /// (each plane: `[i, j, k, d]` with `n·p + d = 0` and inside region
@@ -1182,21 +1182,23 @@ fn default_vertex() -> AssVertex {
 /// to those inside ALL planes (within an epsilon), then per face
 /// gathers on-plane vertices, sorts radially around the face centroid,
 /// and fan-triangulates. Vertices come out in centimeters.
-fn polyhedron_from_planes(planes: &[[f32; 4]], material_index: i32) -> (Vec<AssVertex>, Vec<AssTriangle>) {
+fn polyhedron_from_planes(planes: &[RealPlane3d], material_index: i32) -> (Vec<AssVertex>, Vec<AssTriangle>) {
     let n = planes.len();
     if n < 4 { return (Vec::new(), Vec::new()); }
 
-    // 1. Triple-plane intersections.
-    let mut candidates: Vec<[f32; 3]> = Vec::new();
+    // 1. Triple-plane intersections. `RealPlane3d::triple_intersection`
+    // already honors Halo's `n·p + d = 0` convention.
+    let mut candidates: Vec<RealPoint3d> = Vec::new();
     let eps = 1e-3_f32;
     for i in 0..n {
         for j in (i + 1)..n {
             for k in (j + 1)..n {
-                if let Some(p) = plane_triple_intersection(planes[i], planes[j], planes[k]) {
-                    // Filter: inside the region within epsilon.
+                if let Some(p) = RealPlane3d::triple_intersection(planes[i], planes[j], planes[k]) {
+                    // Filter: inside the region within epsilon
+                    // (`n·p + d <= 0` for every plane).
                     let mut inside = true;
-                    for m in 0..n {
-                        let d = planes[m][0] * p[0] + planes[m][1] * p[1] + planes[m][2] * p[2] + planes[m][3];
+                    for plane in planes {
+                        let d = plane.normal().dot(p.as_vector()) + plane.d;
                         if d > eps { inside = false; break; }
                     }
                     if inside { candidates.push(p); }
@@ -1208,24 +1210,23 @@ fn polyhedron_from_planes(planes: &[[f32; 4]], material_index: i32) -> (Vec<AssV
 
     // Dedup vertices that are within epsilon of an existing one,
     // preserving insertion order so face triangulation stays stable.
-    let mut unique: Vec<[f32; 3]> = Vec::new();
+    let mut unique: Vec<RealPoint3d> = Vec::new();
     let dedup_eps_sq = (eps * 10.0).powi(2);
     for c in &candidates {
         let mut dup = false;
         for u in &unique {
-            let dx = c[0] - u[0]; let dy = c[1] - u[1]; let dz = c[2] - u[2];
-            if dx*dx + dy*dy + dz*dz < dedup_eps_sq { dup = true; break; }
+            if c.distance_squared_to(*u) < dedup_eps_sq { dup = true; break; }
         }
         if !dup { unique.push(*c); }
     }
 
     // Build vertex list (× SCALE for cm).
     let vertices: Vec<AssVertex> = unique.iter().map(|p| AssVertex {
-        position: [p[0] * SCALE, p[1] * SCALE, p[2] * SCALE],
-        normal: [0.0, 0.0, 1.0],
-        color: [0.0, 0.0, 0.0],
+        position: *p * SCALE,
+        normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
+        color: RealRgbColor::default(),
         node_set: Vec::new(),
-        uvs: vec![[0.0, 0.0, 0.0]],
+        uvs: vec![RealPoint3d::ZERO],
     }).collect();
 
     // 2. Per face, gather vertices that lie on this plane (within
@@ -1235,31 +1236,38 @@ fn polyhedron_from_planes(planes: &[[f32; 4]], material_index: i32) -> (Vec<AssV
     let mut tris: Vec<AssTriangle> = Vec::new();
     let face_eps = eps * 100.0;
     for plane in planes {
-        let normal = [plane[0], plane[1], plane[2]];
+        let normal = plane.normal();
         let mut on_plane: Vec<u32> = Vec::new();
         for (vi, p) in unique.iter().enumerate() {
-            let d = (normal[0]*p[0] + normal[1]*p[1] + normal[2]*p[2] + plane[3]).abs();
+            let d = (normal.dot(p.as_vector()) + plane.d).abs();
             if d < face_eps { on_plane.push(vi as u32); }
         }
         if on_plane.len() < 3 { continue; }
         // Centroid + in-plane basis.
-        let mut centroid = [0.0_f32; 3];
+        let mut centroid = RealPoint3d::ZERO;
         for &vi in &on_plane {
             let p = unique[vi as usize];
-            centroid[0] += p[0]; centroid[1] += p[1]; centroid[2] += p[2];
+            centroid = RealPoint3d {
+                x: centroid.x + p.x,
+                y: centroid.y + p.y,
+                z: centroid.z + p.z,
+            };
         }
         let inv = 1.0 / on_plane.len() as f32;
-        centroid[0] *= inv; centroid[1] *= inv; centroid[2] *= inv;
+        centroid = centroid * inv;
         // Pick any reference axis perpendicular to normal.
-        let perp_seed = if normal[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
-        let u_axis = vec3_normalize(vec3_cross(normal, perp_seed));
-        let v_axis = vec3_normalize(vec3_cross(normal, u_axis));
+        let perp_seed = if normal.i.abs() < 0.9 {
+            RealVector3d { i: 1.0, j: 0.0, k: 0.0 }
+        } else {
+            RealVector3d { i: 0.0, j: 1.0, k: 0.0 }
+        };
+        let u_axis = normal.cross(perp_seed).normalized();
+        let v_axis = normal.cross(u_axis).normalized();
         // Sort by angle.
         let mut with_angle: Vec<(f32, u32)> = on_plane.iter().map(|&vi| {
-            let p = unique[vi as usize];
-            let dx = p[0] - centroid[0]; let dy = p[1] - centroid[1]; let dz = p[2] - centroid[2];
-            let u = u_axis[0]*dx + u_axis[1]*dy + u_axis[2]*dz;
-            let v = v_axis[0]*dx + v_axis[1]*dy + v_axis[2]*dz;
+            let offset = unique[vi as usize] - centroid;
+            let u = u_axis.dot(offset);
+            let v = v_axis.dot(offset);
             (v.atan2(u), vi)
         }).collect();
         with_angle.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -1273,31 +1281,6 @@ fn polyhedron_from_planes(planes: &[[f32; 4]], material_index: i32) -> (Vec<AssV
         }
     }
     (vertices, tris)
-}
-
-fn plane_triple_intersection(p1: [f32; 4], p2: [f32; 4], p3: [f32; 4]) -> Option<[f32; 3]> {
-    // Cramer's rule on the 3×3 normal matrix; rhs = -d.
-    let m = [
-        [p1[0], p1[1], p1[2]],
-        [p2[0], p2[1], p2[2]],
-        [p3[0], p3[1], p3[2]],
-    ];
-    let det = m[0][0]*(m[1][1]*m[2][2] - m[1][2]*m[2][1])
-            - m[0][1]*(m[1][0]*m[2][2] - m[1][2]*m[2][0])
-            + m[0][2]*(m[1][0]*m[2][1] - m[1][1]*m[2][0]);
-    if det.abs() < 1e-9 { return None; }
-    let inv_det = 1.0 / det;
-    let r = [-p1[3], -p2[3], -p3[3]];
-    let x = (r[0]*(m[1][1]*m[2][2] - m[1][2]*m[2][1])
-           - m[0][1]*(r[1]*m[2][2] - m[1][2]*r[2])
-           + m[0][2]*(r[1]*m[2][1] - m[1][1]*r[2])) * inv_det;
-    let y = (m[0][0]*(r[1]*m[2][2] - m[1][2]*r[2])
-           - r[0]*(m[1][0]*m[2][2] - m[1][2]*m[2][0])
-           + m[0][2]*(m[1][0]*r[2] - r[1]*m[2][0])) * inv_det;
-    let z = (m[0][0]*(m[1][1]*r[2] - r[1]*m[2][1])
-           - m[0][1]*(m[1][0]*r[2] - r[1]*m[2][0])
-           + r[0]*(m[1][0]*m[2][1] - m[1][1]*m[2][0])) * inv_det;
-    Some([x, y, z])
 }
 
 /// Find or append a "special" material (used by recompile-marker
@@ -1329,9 +1312,9 @@ fn object_content_key(obj: &AssObject) -> Vec<u8> {
         AssObjectPayload::Mesh { vertices, triangles } => {
             let mut key = Vec::with_capacity(vertices.len() * 12 + triangles.len() * 16);
             for v in vertices {
-                key.extend_from_slice(&v.position[0].to_le_bytes());
-                key.extend_from_slice(&v.position[1].to_le_bytes());
-                key.extend_from_slice(&v.position[2].to_le_bytes());
+                key.extend_from_slice(&v.position.x.to_le_bytes());
+                key.extend_from_slice(&v.position.y.to_le_bytes());
+                key.extend_from_slice(&v.position.z.to_le_bytes());
             }
             for t in triangles {
                 key.extend_from_slice(&t.material.to_le_bytes());

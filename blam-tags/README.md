@@ -502,8 +502,11 @@ Plus four group-specific helper layers (all built on the `api` facade):
   `AnimationTracks`, `MovementData`, `NodeFlags`, `Skeleton`, `Pose`,
   `JmaKind`, `Codec`, `BitArray`. Decodes `model_animation_graph`
   blobs across all 10 implemented codec slots and emits JMA-family
-  text files via `Pose::write_jma`. Engine-aware (H3 hardcoded layout
-  vs Reach cumulative-sum) under the hood; public API is uniform.
+  text files via `Pose::write_jma`. Submodules: `codec` (Codec
+  enum + headers + per-slot decoders), `pose` (Skeleton + Pose
+  composition), `jma` (JMA-family text writer). Engine-aware
+  (H3 hardcoded layout vs Reach cumulative-sum) under the hood;
+  public API is uniform.
 - **[`jms`]** — `JmsFile` plus per-section types (`JmsNode`,
   `JmsMaterial`, `JmsMarker`, `JmsVertex`, `JmsTriangle`, plus
   collision/physics primitives `JmsSphere`/`JmsBox`/`JmsCapsule`/
@@ -518,10 +521,34 @@ Plus four group-specific helper layers (all built on the `api` facade):
   Bungie Amalgam scene (version 7) from `scenario_structure_bsp` +
   `scenario_structure_lighting_info` pairs.
 
-A small private [`geometry`] module carries the helpers shared
-between `jms` and `ass` (compression-bounds decoder, triangle-strip
-→ list, BSP edge-ring walker, quaternion math, generic field
-readers). Not part of the public API.
+A small private [`geometry`] module carries the format-specific
+helpers shared between `jms` and `ass`: `CompressionBounds`
+(dequantize bounds-compressed positions / texcoords), restart-aware
+triangle-strip → list conversion, the Halo BSP edge-ring walker,
+and the world-units → centimeter `SCALE` constant. Not part of the
+public API. Generic vector / quaternion / point math lives on the
+[`math`] types directly (see below); typed field readers live as
+inherent methods on [`api::TagStruct`].
+
+The [`math`] module carries the canonical Halo `real_*` types
+(`RealPoint3d`, `RealVector3d`, `RealQuaternion`, `RealPlane3d`,
+`Bounds<T>`, color types, …) plus their inherent methods + standard
+`Ops` impls. Point-vs-vector semantics are enforced at the type
+level: `RealPoint3d + RealVector3d → RealPoint3d` (translate),
+`RealPoint3d - RealPoint3d → RealVector3d` (displacement),
+`RealPoint3d + RealPoint3d` is intentionally **not** implemented
+(use `as_vector()` to opt in explicitly). `RealQuaternion::IDENTITY`
+is the explicit identity rotation — the derived `Default` is the
+zero quat. See `src/math.rs` for the full surface.
+
+Field readers (`TagStruct::read_quat` / `read_point3d` / `read_vec3`
+/ `read_point2d` / `read_plane3d` / `read_rgb` / `read_real_bounds`)
+return the typed math values directly. They default gracefully when
+a field is genuinely missing from the struct (`IDENTITY` for quats,
+`ZERO` for points/vectors, `Default` for the rest) but **panic** on
+type mismatch — calling `read_point3d` on a `real_vector_3d` schema
+field is a code-vs-schema bug, and silent zero-defaults would let
+that hide.
 
 Everything the user-facing code should need is one of these.
 Lower-level modules (`data`, `path`, `stream`, `io`, `layout::TagLayout`) are available but no user code in this workspace (CLI, examples) reaches into them.

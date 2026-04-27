@@ -219,8 +219,8 @@ struct ParsedJms {
     markers: usize,
     vertices: usize,
     triangles: usize,
-    positions: Vec<[f32; 3]>,
-    bbox: Option<([f32; 3], [f32; 3])>,
+    positions: Vec<blam_tags::math::RealPoint3d>,
+    bbox: Option<(blam_tags::math::RealPoint3d, blam_tags::math::RealPoint3d)>,
     // Collision-shape sections (populated for phmo / combined exports).
     capsules: Vec<JmsCapsuleSummary>,
     convex_shapes: Vec<JmsConvexSummary>,
@@ -233,7 +233,7 @@ struct ParsedJms {
 #[derive(Debug, Clone, Default)]
 struct JmsCapsuleSummary {
     name: String,
-    translation: [f32; 3],
+    translation: blam_tags::math::RealPoint3d,
     height: f32,
     radius: f32,
 }
@@ -246,8 +246,8 @@ struct JmsConvexSummary {
 #[derive(Debug, Clone, Default)]
 struct JmsRagdollSummary {
     name: String,
-    attached_translation: [f32; 3],
-    referenced_translation: [f32; 3],
+    attached_translation: blam_tags::math::RealPoint3d,
+    referenced_translation: blam_tags::math::RealPoint3d,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -483,51 +483,64 @@ fn parse_spheres_section(lines: &[&str]) -> Result<Vec<JmsSphereSummary>, String
     Ok(out)
 }
 
-fn parse_float_triple(line: &str) -> Result<[f32; 3], String> {
+fn parse_float_triple(line: &str) -> Result<blam_tags::math::RealPoint3d, String> {
     let parts: Vec<&str> = line.split('\t').collect();
     if parts.len() < 3 { return Err(format!("bad triple: {line:?}")); }
     let parse = |s: &str| -> Result<f32, String> {
         s.parse::<f32>().map_err(|e| format!("parse float {s:?}: {e}"))
     };
-    Ok([parse(parts[0])?, parse(parts[1])?, parse(parts[2])?])
+    Ok(blam_tags::math::RealPoint3d {
+        x: parse(parts[0])?,
+        y: parse(parts[1])?,
+        z: parse(parts[2])?,
+    })
 }
 
 // ---- bbox math ----
 
-fn bbox_of(ps: &[[f32; 3]]) -> Option<([f32; 3], [f32; 3])> {
+fn bbox_of(ps: &[blam_tags::math::RealPoint3d]) -> Option<(blam_tags::math::RealPoint3d, blam_tags::math::RealPoint3d)> {
     let mut iter = ps.iter();
     let first = iter.next()?;
     let mut min = *first;
     let mut max = *first;
     for p in iter {
-        for i in 0..3 {
-            if p[i] < min[i] { min[i] = p[i]; }
-            if p[i] > max[i] { max[i] = p[i]; }
-        }
+        if p.x < min.x { min.x = p.x; }
+        if p.y < min.y { min.y = p.y; }
+        if p.z < min.z { min.z = p.z; }
+        if p.x > max.x { max.x = p.x; }
+        if p.y > max.y { max.y = p.y; }
+        if p.z > max.z { max.z = p.z; }
     }
     Some((min, max))
 }
 
-fn rebuilt_bbox(jms: &JmsFile) -> Option<([f32; 3], [f32; 3])> {
-    let positions: Vec<[f32; 3]> = jms.vertices.iter().map(|v| v.position).collect();
+fn rebuilt_bbox(jms: &JmsFile) -> Option<(blam_tags::math::RealPoint3d, blam_tags::math::RealPoint3d)> {
+    let positions: Vec<blam_tags::math::RealPoint3d> = jms.vertices.iter().map(|v| v.position).collect();
     bbox_of(&positions)
 }
 
-fn bbox_close(a: ([f32; 3], [f32; 3]), b: Option<([f32; 3], [f32; 3])>, slack: f32) -> bool {
+fn bbox_close(
+    a: (blam_tags::math::RealPoint3d, blam_tags::math::RealPoint3d),
+    b: Option<(blam_tags::math::RealPoint3d, blam_tags::math::RealPoint3d)>,
+    slack: f32,
+) -> bool {
     let Some(b) = b else { return false; };
-    for i in 0..3 {
-        if (a.0[i] - b.0[i]).abs() > slack { return false; }
-        if (a.1[i] - b.1[i]).abs() > slack { return false; }
-    }
+    let cmp = |a: f32, b: f32| (a - b).abs() <= slack;
+    if !cmp(a.0.x, b.0.x) { return false; }
+    if !cmp(a.0.y, b.0.y) { return false; }
+    if !cmp(a.0.z, b.0.z) { return false; }
+    if !cmp(a.1.x, b.1.x) { return false; }
+    if !cmp(a.1.y, b.1.y) { return false; }
+    if !cmp(a.1.z, b.1.z) { return false; }
     true
 }
 
-fn round_pos(p: [f32; 3], decimals: i32) -> (i32, i32, i32) {
+fn round_pos(p: blam_tags::math::RealPoint3d, decimals: i32) -> (i32, i32, i32) {
     let scale = 10f32.powi(decimals);
     (
-        (p[0] * scale).round() as i32,
-        (p[1] * scale).round() as i32,
-        (p[2] * scale).round() as i32,
+        (p.x * scale).round() as i32,
+        (p.y * scale).round() as i32,
+        (p.z * scale).round() as i32,
     )
 }
 
@@ -774,7 +787,6 @@ fn compare_phmo_shapes(s: &mut PhmoShapeStats, jms: &JmsFile, parsed: &ParsedJms
     }
 }
 
-fn vec3_dist(a: [f32; 3], b: [f32; 3]) -> f32 {
-    let dx = a[0] - b[0]; let dy = a[1] - b[1]; let dz = a[2] - b[2];
-    (dx*dx + dy*dy + dz*dz).sqrt()
+fn vec3_dist(a: blam_tags::math::RealPoint3d, b: blam_tags::math::RealPoint3d) -> f32 {
+    a.distance_to(b)
 }

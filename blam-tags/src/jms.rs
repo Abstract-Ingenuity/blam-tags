@@ -43,11 +43,10 @@ use crate::api::TagStruct;
 use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::geometry::{
-    quat_from_basis_columns, quat_mul, quat_negate, quat_rotate,
-    read_compression_bounds, scale_point, strip_to_list,
-    vec3_add, vec3_cross, vec3_len, vec3_scale, vec3_sub, walk_surface_ring,
+    read_compression_bounds, strip_to_list, walk_surface_ring,
     CompressionBounds, EdgeRow, SCALE,
 };
+use crate::math::{RealPoint3d, RealQuaternion, RealVector3d};
 
 /// JMS export errors. Most failures during a corpus sweep land in
 /// `MissingField` (schema-shape variation) or `Io` (write-out).
@@ -81,8 +80,8 @@ impl From<io::Error> for JmsError {
 pub struct JmsNode {
     pub name: String,
     pub parent: i16,
-    pub rotation: [f32; 4],
-    pub translation: [f32; 3],
+    pub rotation: RealQuaternion,
+    pub translation: RealPoint3d,
 }
 
 /// JMS material entry. `name` is the shader basename (with attribute
@@ -100,8 +99,8 @@ pub struct JmsMaterial {
 pub struct JmsMarker {
     pub name: String,
     pub node_index: i16,
-    pub rotation: [f32; 4],
-    pub translation: [f32; 3],
+    pub rotation: RealQuaternion,
+    pub translation: RealPoint3d,
     pub radius: f32,
 }
 
@@ -109,10 +108,10 @@ pub struct JmsMarker {
 /// each triangle owns a fresh 3-tuple of vertex entries.
 #[derive(Debug, Clone)]
 pub struct JmsVertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
+    pub position: RealPoint3d,
+    pub normal: RealVector3d,
     pub node_sets: Vec<(i16, f32)>,
-    pub uvs: Vec<[f32; 2]>,
+    pub uvs: Vec<crate::math::RealPoint2d>,
 }
 
 /// JMS triangle: material slot + 3 vertex indices into [`JmsFile::vertices`].
@@ -129,8 +128,8 @@ pub struct JmsSphere {
     pub name: String,
     pub parent: i32,
     pub material: i32,
-    pub rotation: [f32; 4],
-    pub translation: [f32; 3],
+    pub rotation: RealQuaternion,
+    pub translation: RealPoint3d,
     pub radius: f32,
 }
 
@@ -141,8 +140,8 @@ pub struct JmsBox {
     pub name: String,
     pub parent: i32,
     pub material: i32,
-    pub rotation: [f32; 4],
-    pub translation: [f32; 3],
+    pub rotation: RealQuaternion,
+    pub translation: RealPoint3d,
     pub width: f32,
     pub length: f32,
     pub height: f32,
@@ -154,8 +153,8 @@ pub struct JmsCapsule {
     pub name: String,
     pub parent: i32,
     pub material: i32,
-    pub rotation: [f32; 4],
-    pub translation: [f32; 3],
+    pub rotation: RealQuaternion,
+    pub translation: RealPoint3d,
     pub height: f32,
     pub radius: f32,
 }
@@ -166,9 +165,9 @@ pub struct JmsConvex {
     pub name: String,
     pub parent: i32,
     pub material: i32,
-    pub rotation: [f32; 4],
-    pub translation: [f32; 3],
-    pub vertices: Vec<[f32; 3]>,
+    pub rotation: RealQuaternion,
+    pub translation: RealPoint3d,
+    pub vertices: Vec<RealPoint3d>,
 }
 
 /// JMS ragdoll constraint between two bodies.
@@ -177,10 +176,10 @@ pub struct JmsRagdoll {
     pub name: String,
     pub attached: i32,
     pub referenced: i32,
-    pub attached_rotation: [f32; 4],
-    pub attached_translation: [f32; 3],
-    pub referenced_rotation: [f32; 4],
-    pub referenced_translation: [f32; 3],
+    pub attached_rotation: RealQuaternion,
+    pub attached_translation: RealPoint3d,
+    pub referenced_rotation: RealQuaternion,
+    pub referenced_translation: RealPoint3d,
     pub min_twist: f32, pub max_twist: f32,
     pub min_cone: f32, pub max_cone: f32,
     pub min_plane: f32, pub max_plane: f32,
@@ -194,10 +193,10 @@ pub struct JmsHinge {
     pub name: String,
     pub body_a: i32,
     pub body_b: i32,
-    pub a_rotation: [f32; 4],
-    pub a_translation: [f32; 3],
-    pub b_rotation: [f32; 4],
-    pub b_translation: [f32; 3],
+    pub a_rotation: RealQuaternion,
+    pub a_translation: RealPoint3d,
+    pub b_rotation: RealQuaternion,
+    pub b_translation: RealPoint3d,
     pub is_limited: i32,
     pub friction_limit: f32,
     pub min_angle: f32,
@@ -280,7 +279,7 @@ impl JmsFile {
         // Build name → world-transform map from the skeleton (if
         // provided). The skeleton is expected to be in world space
         // (e.g. the result of `from_render_model`).
-        let bone_xform: Option<std::collections::HashMap<String, ([f32; 4], [f32; 3])>> =
+        let bone_xform: Option<std::collections::HashMap<String, (RealQuaternion, RealPoint3d)>> =
             skeleton.map(|nodes| {
                 nodes.iter().map(|n| (n.name.clone(), (n.rotation, n.translation))).collect()
             });
@@ -345,11 +344,11 @@ impl JmsFile {
                         }
                     }).collect();
 
-                    let vert_points: Vec<[f32; 3]> = (0..bsp_verts.len()).map(|k| {
-                        let local = scale_point(bsp_verts.element(k).unwrap().read_point3d("point"));
+                    let vert_points: Vec<RealPoint3d> = (0..bsp_verts.len()).map(|k| {
+                        let local = bsp_verts.element(k).unwrap().read_point3d("point") * SCALE;
                         if let Some((rot, trans)) = bone_world {
                             // World = bone_translation + bone_rotation.rotate(local)
-                            vec3_add(trans, quat_rotate(rot, local))
+                            trans + rot * local.as_vector()
                         } else {
                             local
                         }
@@ -394,12 +393,12 @@ impl JmsFile {
                             let c = polygon[k + 1];
                             let base = vertices.len() as u32;
                             for &vi in &[a, b, c] {
-                                let pos = vert_points.get(vi as usize).copied().unwrap_or([0.0; 3]);
+                                let pos = vert_points.get(vi as usize).copied().unwrap_or(RealPoint3d::ZERO);
                                 vertices.push(JmsVertex {
                                     position: pos,
-                                    normal: [0.0, 0.0, 1.0],
+                                    normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
                                     node_sets: vec![(node_idx, 1.0)],
-                                    uvs: vec![[0.0, 0.0]],
+                                    uvs: vec![crate::math::RealPoint2d::ZERO],
                                 });
                             }
                             triangles.push(JmsTriangle {
@@ -493,8 +492,8 @@ impl JmsFile {
             writeln!(w, ";NODE {i}")?;
             writeln!(w, "{}", n.name)?;
             writeln!(w, "{}", n.parent)?;
-            write_floats(w, &n.rotation)?;
-            write_floats(w, &n.translation)?;
+            write_floats(w, &n.rotation.to_array())?;
+            write_floats(w, &n.translation.to_array())?;
             writeln!(w)?;
         }
 
@@ -522,8 +521,8 @@ impl JmsFile {
             writeln!(w, ";MARKER {i}")?;
             writeln!(w, "{}", m.name)?;
             writeln!(w, "{}", m.node_index)?;
-            write_floats(w, &m.rotation)?;
-            write_floats(w, &m.translation)?;
+            write_floats(w, &m.rotation.to_array())?;
+            write_floats(w, &m.translation.to_array())?;
             write_floats(w, &[m.radius])?;
             writeln!(w)?;
         }
@@ -558,8 +557,8 @@ impl JmsFile {
         writeln!(w)?;
         for (i, v) in self.vertices.iter().enumerate() {
             writeln!(w, ";VERTEX {i}")?;
-            write_floats(w, &v.position)?;
-            write_floats(w, &v.normal)?;
+            write_floats(w, &v.position.to_array())?;
+            write_floats(w, &v.normal.to_array())?;
             writeln!(w, "{}", v.node_sets.len())?;
             for (idx, wt) in &v.node_sets {
                 writeln!(w, "{}", idx)?;
@@ -567,7 +566,7 @@ impl JmsFile {
             }
             writeln!(w, "{}", v.uvs.len())?;
             for uv in &v.uvs {
-                write_floats(w, uv)?;
+                write_floats(w, &uv.to_array())?;
             }
             write_floats(w, &[0.0, 0.0, 0.0])?; // vertex color always zero per TagTool
             writeln!(w)?;
@@ -602,8 +601,8 @@ impl JmsFile {
             writeln!(w, "{}", s.name)?;
             writeln!(w, "{}", s.parent)?;
             writeln!(w, "{}", s.material)?;
-            write_floats(w, &s.rotation)?;
-            write_floats(w, &s.translation)?;
+            write_floats(w, &s.rotation.to_array())?;
+            write_floats(w, &s.translation.to_array())?;
             write_floats(w, &[s.radius])?;
             writeln!(w)?;
         }
@@ -619,8 +618,8 @@ impl JmsFile {
             writeln!(w, "{}", b.name)?;
             writeln!(w, "{}", b.parent)?;
             writeln!(w, "{}", b.material)?;
-            write_floats(w, &b.rotation)?;
-            write_floats(w, &b.translation)?;
+            write_floats(w, &b.rotation.to_array())?;
+            write_floats(w, &b.translation.to_array())?;
             write_floats(w, &[b.width])?;
             write_floats(w, &[b.length])?;
             write_floats(w, &[b.height])?;
@@ -638,8 +637,8 @@ impl JmsFile {
             writeln!(w, "{}", c.name)?;
             writeln!(w, "{}", c.parent)?;
             writeln!(w, "{}", c.material)?;
-            write_floats(w, &c.rotation)?;
-            write_floats(w, &c.translation)?;
+            write_floats(w, &c.rotation.to_array())?;
+            write_floats(w, &c.translation.to_array())?;
             write_floats(w, &[c.height])?;
             write_floats(w, &[c.radius])?;
             writeln!(w)?;
@@ -660,11 +659,11 @@ impl JmsFile {
             writeln!(w, "{}", c.name)?;
             writeln!(w, "{}", c.parent)?;
             writeln!(w, "{}", c.material)?;
-            write_floats(w, &c.rotation)?;
-            write_floats(w, &c.translation)?;
+            write_floats(w, &c.rotation.to_array())?;
+            write_floats(w, &c.translation.to_array())?;
             writeln!(w, "{}", c.vertices.len())?;
             for v in &c.vertices {
-                write_floats(w, v)?;
+                write_floats(w, &v.to_array())?;
             }
             writeln!(w)?;
         }
@@ -680,10 +679,10 @@ impl JmsFile {
             writeln!(w, "{}", r.name)?;
             writeln!(w, "{}", r.attached)?;
             writeln!(w, "{}", r.referenced)?;
-            write_floats(w, &r.attached_rotation)?;
-            write_floats(w, &r.attached_translation)?;
-            write_floats(w, &r.referenced_rotation)?;
-            write_floats(w, &r.referenced_translation)?;
+            write_floats(w, &r.attached_rotation.to_array())?;
+            write_floats(w, &r.attached_translation.to_array())?;
+            write_floats(w, &r.referenced_rotation.to_array())?;
+            write_floats(w, &r.referenced_translation.to_array())?;
             write_floats(w, &[r.min_twist])?;
             write_floats(w, &[r.max_twist])?;
             write_floats(w, &[r.min_cone])?;
@@ -705,10 +704,10 @@ impl JmsFile {
             writeln!(w, "{}", h.name)?;
             writeln!(w, "{}", h.body_a)?;
             writeln!(w, "{}", h.body_b)?;
-            write_floats(w, &h.a_rotation)?;
-            write_floats(w, &h.a_translation)?;
-            write_floats(w, &h.b_rotation)?;
-            write_floats(w, &h.b_translation)?;
+            write_floats(w, &h.a_rotation.to_array())?;
+            write_floats(w, &h.a_translation.to_array())?;
+            write_floats(w, &h.b_rotation.to_array())?;
+            write_floats(w, &h.b_translation.to_array())?;
             writeln!(w, "{}", h.is_limited)?;
             write_floats(w, &[h.friction_limit])?;
             write_floats(w, &[h.min_angle])?;
@@ -728,7 +727,9 @@ impl JmsFile {
     }
 }
 
-// ---- node / material / marker / geometry walkers ----
+//================================================================================
+// Node / material / marker / geometry walkers
+//================================================================================
 
 fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<JmsNode>, JmsError> {
     let block = root.field_path("nodes").and_then(|f| f.as_block())
@@ -740,7 +741,7 @@ fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<JmsNode>, JmsError> {
             name: n.read_string_id("name").unwrap_or_default(),
             parent: n.read_block_index("parent node"),
             rotation: n.read_quat("default rotation"),
-            translation: scale_point(n.read_point3d("default translation")),
+            translation: n.read_point3d("default translation") * SCALE,
         });
     }
     Ok(out)
@@ -766,11 +767,8 @@ fn chain_local_to_world(local: &[JmsNode]) -> Vec<JmsNode> {
             JmsNode {
                 name: n.name.clone(),
                 parent: n.parent,
-                rotation: quat_mul(parent.rotation, n.rotation),
-                translation: vec3_add(
-                    parent.translation,
-                    quat_rotate(parent.rotation, n.translation),
-                ),
+                rotation: parent.rotation * n.rotation,
+                translation: parent.translation + parent.rotation * n.translation.as_vector(),
             }
         };
         out.push(world);
@@ -778,9 +776,13 @@ fn chain_local_to_world(local: &[JmsNode]) -> Vec<JmsNode> {
     out
 }
 
-// ---- collision_model walkers ----
+//================================================================================
+// collision_model walkers
+//================================================================================
 
-// ---- physics_model walkers ----
+//================================================================================
+// physics_model walkers
+//================================================================================
 
 /// Read the physics_model nodes block (parallel structure to
 /// render_model nodes — same `name`/`parent`/`sibling`/`child` shape).
@@ -797,8 +799,8 @@ fn read_phmo_nodes(root: &TagStruct<'_>) -> Result<Vec<JmsNode>, JmsError> {
         out.push(JmsNode {
             name: n.read_string_id("name").unwrap_or_default(),
             parent: n.read_block_index("parent"),
-            rotation: [0.0, 0.0, 0.0, 1.0],
-            translation: [0.0, 0.0, 0.0],
+            rotation: RealQuaternion::IDENTITY,
+            translation: RealPoint3d::ZERO,
         });
     }
     Ok(out)
@@ -865,8 +867,8 @@ fn read_phmo_spheres(root: &TagStruct<'_>, parents: &std::collections::HashMap<(
             name: base.read_string_id("name").unwrap_or_default(),
             parent: parent_for(parents, SHAPE_TYPE_SPHERE, i),
             material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
-            rotation: [0.0, 0.0, 0.0, 1.0],
-            translation: [0.0, 0.0, 0.0],
+            rotation: RealQuaternion::IDENTITY,
+            translation: RealPoint3d::ZERO,
             radius: s.read_real("radius").unwrap_or(0.0) * SCALE,
         });
     }
@@ -897,10 +899,10 @@ fn read_phmo_boxes(root: &TagStruct<'_>, parents: &std::collections::HashMap<(i6
             parent: parent_for(parents, SHAPE_TYPE_BOX, i),
             material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
             rotation: rotation_from_basis(&cts),
-            translation: scale_point(cts.read_vec3("translation")),
-            width:  (half[0] + convex_radius) * 2.0 * SCALE,
-            length: (half[1] + convex_radius) * 2.0 * SCALE,
-            height: (half[2] + convex_radius) * 2.0 * SCALE,
+            translation: cts.read_vec3("translation").as_point() * SCALE,
+            width:  (half.i + convex_radius) * 2.0 * SCALE,
+            length: (half.j + convex_radius) * 2.0 * SCALE,
+            height: (half.k + convex_radius) * 2.0 * SCALE,
         });
     }
     out
@@ -920,21 +922,23 @@ fn read_phmo_pills(root: &TagStruct<'_>, parents: &std::collections::HashMap<(i6
         let bottom = p.read_vec3("bottom");
         let top = p.read_vec3("top");
         // TagTool pill anchor: translation = bottom + normalized(bottom - top) * radius
-        let dir = vec3_sub(bottom, top);
-        let dlen = vec3_len(dir);
-        let unit = if dlen > 1e-9 { vec3_scale(dir, 1.0 / dlen) } else { [0.0, 0.0, 0.0] };
-        let anchor = vec3_add(bottom, vec3_scale(unit, radius));
-        let height = vec3_len(vec3_sub(top, bottom)) * SCALE;
-        // Orientation from the `top - bottom` axis (custom quat;
-        // TagTool's QuaternionFromVector with reference up = (0, 0, -1))
-        let axis = vec3_sub(top, bottom);
-        let rot = quat_from_axis_to_ref(axis);
+        let dir = bottom - top;
+        let unit = dir.normalized();
+        let anchor = bottom + unit * radius;
+        let height = (top - bottom).length() * SCALE;
+        // Orientation from the `top - bottom` axis (TagTool's
+        // `QuaternionFromVector` with reference up = (0, 0, -1)).
+        let axis = top - bottom;
+        let rot = RealQuaternion::shortest_arc(
+            RealVector3d { i: 0.0, j: 0.0, k: -1.0 },
+            axis,
+        );
         out.push(JmsCapsule {
             name: base.read_string_id("name").unwrap_or_default(),
             parent: parent_for(parents, SHAPE_TYPE_PILL, i),
             material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
             rotation: rot,
-            translation: scale_point(anchor),
+            translation: anchor.as_point() * SCALE,
             height,
             radius: radius * SCALE,
         });
@@ -953,7 +957,7 @@ fn read_phmo_polyhedra(root: &TagStruct<'_>, parents: &std::collections::HashMap
         // `four vectors size` is at the polyhedron top level, not
         // inside `polyhedron shape` (which only carries base + radius).
         let fv_size = p.read_int_any("four vectors size").unwrap_or(0) as usize;
-        let mut verts: Vec<[f32; 3]> = Vec::new();
+        let mut verts: Vec<RealPoint3d> = Vec::new();
         if let Some(fvb) = &four_vectors {
             for k in 0..fv_size {
                 let Some(fv) = fvb.element(fv_offset + k) else { continue };
@@ -965,17 +969,17 @@ fn read_phmo_polyhedra(root: &TagStruct<'_>, parents: &std::collections::HashMap
                 let zw = fv.read_real("havok w four vectors z").unwrap_or(0.0);
                 // 4 vertices packed: (x.i, y.i, z.i), (x.j, y.j, z.j),
                 // (x.k, y.k, z.k), (x_w, y_w, z_w)
-                verts.push(scale_point([xv[0], yv[0], zv[0]]));
-                verts.push(scale_point([xv[1], yv[1], zv[1]]));
-                verts.push(scale_point([xv[2], yv[2], zv[2]]));
-                verts.push(scale_point([xw, yw, zw]));
+                verts.push(RealPoint3d { x: xv.i, y: yv.i, z: zv.i } * SCALE);
+                verts.push(RealPoint3d { x: xv.j, y: yv.j, z: zv.j } * SCALE);
+                verts.push(RealPoint3d { x: xv.k, y: yv.k, z: zv.k } * SCALE);
+                verts.push(RealPoint3d { x: xw, y: yw, z: zw } * SCALE);
             }
         }
         // Dedupe duplicates (the 4-vector packing left padding when
         // the actual vertex count isn't a multiple of 4).
         let mut seen = std::collections::HashSet::new();
         verts.retain(|v| {
-            let key = (v[0].to_bits(), v[1].to_bits(), v[2].to_bits());
+            let key = (v.x.to_bits(), v.y.to_bits(), v.z.to_bits());
             seen.insert(key)
         });
         // Polyhedron transform is identity — vertices are absolute.
@@ -983,8 +987,8 @@ fn read_phmo_polyhedra(root: &TagStruct<'_>, parents: &std::collections::HashMap
             name: base.read_string_id("name").unwrap_or_default(),
             parent: parent_for(parents, SHAPE_TYPE_POLYHEDRON, i),
             material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
-            rotation: [0.0, 0.0, 0.0, 1.0],
-            translation: [0.0, 0.0, 0.0],
+            rotation: RealQuaternion::IDENTITY,
+            translation: RealPoint3d::ZERO,
             vertices: verts,
         });
         fv_offset += fv_size;
@@ -1008,9 +1012,9 @@ fn read_phmo_ragdolls(root: &TagStruct<'_>) -> Vec<JmsRagdoll> {
             // against the masterchief embedded source: e.g. b_head's
             // tag matrix gives q=(0.6995, 0.1043, 0.1043, 0.6995),
             // source has (-0.6995, -0.1043, -0.1043, -0.6995).
-            attached_rotation: quat_negate(a_rot),
+            attached_rotation: -a_rot,
             attached_translation: a_trans,
-            referenced_rotation: quat_negate(b_rot),
+            referenced_rotation: -b_rot,
             referenced_translation: b_trans,
             min_twist: r.read_real("min twist").unwrap_or(0.0),
             max_twist: r.read_real("max twist").unwrap_or(0.0),
@@ -1059,59 +1063,29 @@ fn read_phmo_hinges(root: &TagStruct<'_>, limited: bool) -> Vec<JmsHinge> {
 /// `"b"`. Matches Foundry's column-major construction
 /// (connected_geometry.py:689-694): forward in column 0, left in
 /// column 1, up in column 2.
-fn constraint_frame(bodies: &TagStruct<'_>, side: &str) -> ([f32; 4], [f32; 3]) {
+fn constraint_frame(bodies: &TagStruct<'_>, side: &str) -> (RealQuaternion, RealPoint3d) {
+    // Schema: forward/left/up are `real_vector_3d`, position is `real_point_3d`.
     let f = bodies.read_vec3(&format!("{side} forward"));
     let l = bodies.read_vec3(&format!("{side} left"));
     let u = bodies.read_vec3(&format!("{side} up"));
-    let p = bodies.read_vec3(&format!("{side} position"));
-    let rot = quat_from_basis_columns(f, l, u);
-    (rot, scale_point(p))
+    let p = bodies.read_point3d(&format!("{side} position"));
+    let rot = RealQuaternion::from_basis_columns(f, l, u);
+    (rot, p * SCALE)
 }
 
 /// Build a quaternion from a `convex transform shape` struct's
 /// rotation_i/j/k row vectors (Havok stores rotation as 3 vec3 rows).
-fn rotation_from_basis(cts: &TagStruct<'_>) -> [f32; 4] {
+fn rotation_from_basis(cts: &TagStruct<'_>) -> RealQuaternion {
     let row_i = cts.read_vec3("rotation i");
     let row_j = cts.read_vec3("rotation j");
     let row_k = cts.read_vec3("rotation k");
     // Rows form the rotation matrix; columns are forward/left/up.
-    quat_from_basis_columns(
-        [row_i[0], row_j[0], row_k[0]],
-        [row_i[1], row_j[1], row_k[1]],
-        [row_i[2], row_j[2], row_k[2]],
+    RealQuaternion::from_basis_columns(
+        RealVector3d { i: row_i.i, j: row_j.i, k: row_k.i },
+        RealVector3d { i: row_i.j, j: row_j.j, k: row_k.j },
+        RealVector3d { i: row_i.k, j: row_j.k, k: row_k.k },
     )
 }
-
-/// Pill orientation: TagTool's `QuaternionFromVector` aligns a
-/// reference up vector `(0, 0, -1)` to the supplied axis. Returns
-/// the shortest-arc rotation between them; degenerate cases (axis
-/// parallel or anti-parallel to the reference) get an explicit
-/// 180° rotation around an arbitrary perpendicular axis.
-fn quat_from_axis_to_ref(axis: [f32; 3]) -> [f32; 4] {
-    let len = vec3_len(axis);
-    if len < 1e-9 { return [0.0, 0.0, 0.0, 1.0]; }
-    let to = vec3_scale(axis, 1.0 / len);
-    let from: [f32; 3] = [0.0, 0.0, -1.0];
-    let dot = from[0]*to[0] + from[1]*to[1] + from[2]*to[2];
-    if dot > 0.999999 {
-        return [0.0, 0.0, 0.0, 1.0];
-    }
-    if dot < -0.999999 {
-        // 180° around any perpendicular axis.
-        let perp = if from[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
-        let axis = vec3_cross(from, perp);
-        let n = vec3_scale(axis, 1.0 / vec3_len(axis));
-        return [n[0], n[1], n[2], 0.0];
-    }
-    let cross = vec3_cross(from, to);
-    let s = ((1.0 + dot) * 2.0).sqrt();
-    let inv_s = 1.0 / s;
-    [cross[0] * inv_s, cross[1] * inv_s, cross[2] * inv_s, s * 0.5]
-}
-
-// ---- vector + quaternion helpers ----
-
-// (vector + quaternion math + generic field readers moved to crate::geometry)
 
 fn read_markers(root: &TagStruct<'_>) -> Result<Vec<JmsMarker>, JmsError> {
     let block = root.field_path("marker groups").and_then(|f| f.as_block())
@@ -1129,7 +1103,7 @@ fn read_markers(root: &TagStruct<'_>) -> Result<Vec<JmsMarker>, JmsError> {
                 name: group_name.clone(),
                 node_index: m.read_int_any("node index").unwrap_or(-1) as i16,
                 rotation: m.read_quat("rotation"),
-                translation: scale_point(m.read_point3d("translation")),
+                translation: m.read_point3d("translation") * SCALE,
                 radius: -1.0,
             });
         }
@@ -1305,15 +1279,17 @@ fn build_geometry(
     Ok((vertices, triangles))
 }
 
-// ---- raw_vertex_block reader (CompressionBounds + readers in crate::geometry) ----
+//================================================================================
+// raw_vertex_block reader
+//================================================================================
 
 fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> JmsVertex {
     let raw_pos = v.read_point3d("position");
-    let position = scale_point(bounds.decompress_position(raw_pos));
-    let normal = v.read_point3d("normal");
-    let raw_uv = match v.field("texcoord").and_then(|f| f.value()) {
-        Some(TagFieldData::RealPoint2d(p)) => [p.x, p.y], _ => [0.0, 0.0],
-    };
+    let position = bounds.decompress_position(raw_pos) * SCALE;
+    // The "normal" schema field is `real_point_3d` despite being a
+    // direction — JMS exporters treat it as a vector once read.
+    let normal = v.read_point3d("normal").as_vector();
+    let raw_uv = v.read_point2d("texcoord");
     let texcoord = bounds.decompress_texcoord(raw_uv);
     let mut node_sets = Vec::with_capacity(4);
     if let (Some(idx_arr), Some(wt_arr)) = (
@@ -1334,14 +1310,13 @@ fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> JmsVertex {
     }
     JmsVertex {
         position, normal, node_sets,
-        uvs: vec![[texcoord[0], 1.0 - texcoord[1]]],
+        uvs: vec![crate::math::RealPoint2d { x: texcoord.x, y: 1.0 - texcoord.y }],
     }
 }
 
-// ---- jms-specific helpers ----
-
-/// Local field reader: maps every `*BlockIndex` variant to a clamped
-// ---- writer helpers ----
+//================================================================================
+// Writer helpers
+//================================================================================
 
 fn write_floats<W: Write>(w: &mut W, values: &[f32]) -> io::Result<()> {
     for (i, v) in values.iter().enumerate() {
