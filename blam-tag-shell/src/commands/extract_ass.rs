@@ -15,12 +15,13 @@
 
 use std::fs::{self, File};
 use std::io::BufWriter;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use blam_tags::{AssFile, TagFieldData, TagFile};
+use blam_tags::{AssFile, TagFile};
 
 use crate::context::CliContext;
+use crate::paths::{derive_tags_root, resolve_tag_path, tag_ref_path, tag_stem};
 
 pub fn run(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()> {
     let loaded = ctx.loaded("extract-ass")?;
@@ -36,7 +37,7 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()>
 
     let tags_root = derive_tags_root(&loaded.path)
         .context("failed to derive tags root from input path — input must live under a `tags/` directory")?;
-    let scenario_stem = tag_stem(&loaded.path);
+    let scenario_stem = tag_stem(&loaded.path, "scenario");
     let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
     let bsps_block = loaded.tag.root().field_path("structure bsps").and_then(|f| f.as_block())
@@ -50,14 +51,14 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()>
 
     for bi in 0..bsps_block.len() {
         let entry = bsps_block.element(bi).unwrap();
-        let bsp_ref_path = ref_path(&entry, "structure bsp");
-        let lighting_ref_path = ref_path(&entry, "structure lighting_info");
+        let bsp_ref_path = tag_ref_path(&entry, "structure bsp");
+        let lighting_ref_path = tag_ref_path(&entry, "structure lighting_info");
 
         let Some(bsp_rel) = bsp_ref_path else {
             warnings.push(format!("structure_bsps[{bi}]: no structure_bsp ref — skipped"));
             continue;
         };
-        let bsp_abs = resolve(&tags_root, &bsp_rel, "scenario_structure_bsp");
+        let bsp_abs = resolve_tag_path(&tags_root, &bsp_rel, "scenario_structure_bsp");
         let bsp_tag = match TagFile::read(&bsp_abs) {
             Ok(t) => t,
             Err(e) => {
@@ -71,7 +72,7 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()>
 
         // Layer in lighting from the paired stli tag.
         if let Some(lighting_rel) = lighting_ref_path {
-            let lighting_abs = resolve(&tags_root, &lighting_rel, "scenario_structure_lighting_info");
+            let lighting_abs = resolve_tag_path(&tags_root, &lighting_rel, "scenario_structure_lighting_info");
             match TagFile::read(&lighting_abs) {
                 Ok(stli) => {
                     if let Err(e) = ass.add_lights_from_stli(&stli) {
@@ -121,33 +122,3 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()>
     Ok(())
 }
 
-fn ref_path(entry: &blam_tags::TagStruct<'_>, field: &str) -> Option<String> {
-    let f = entry.field(field)?;
-    let TagFieldData::TagReference(r) = f.value()? else { return None };
-    let (_g, p) = r.group_tag_and_name?;
-    if p.is_empty() { None } else { Some(p) }
-}
-
-fn resolve(tags_root: &Path, rel: &str, ext: &str) -> PathBuf {
-    let rel_path: PathBuf = rel.split('\\').collect();
-    let mut p = tags_root.join(&rel_path);
-    p.set_extension(ext);
-    p
-}
-
-fn derive_tags_root(path: &Path) -> Option<PathBuf> {
-    let abs = path.canonicalize().ok()?;
-    let mut acc = PathBuf::new();
-    let mut found = None;
-    for component in abs.components() {
-        acc.push(component);
-        if matches!(component, std::path::Component::Normal(s) if s == "tags") {
-            found = Some(acc.clone());
-        }
-    }
-    found
-}
-
-fn tag_stem(path: &Path) -> String {
-    path.file_stem().and_then(|s| s.to_str()).unwrap_or("scenario").to_owned()
-}

@@ -28,9 +28,10 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use blam_tags::{JmsFile, TagFieldData, TagFile};
+use blam_tags::{JmsFile, TagFile};
 
 use crate::context::CliContext;
+use crate::paths::{derive_tags_root, resolve_tag_path, tag_ref_path, tag_stem};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Kind { Render, Collision, Physics }
@@ -87,7 +88,7 @@ pub fn run(ctx: &mut CliContext, kinds: &[String], output: Option<&str>, flat: b
 
     let tags_root = derive_tags_root(&loaded.path)
         .context("failed to derive tags root from input path — input must live under a `tags/` directory")?;
-    let stem = tag_stem(&loaded.path);
+    let stem = tag_stem(&loaded.path, "model");
     let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
     // Resolve all three child refs up-front; we always need to load
@@ -175,31 +176,8 @@ pub fn run(ctx: &mut CliContext, kinds: &[String], output: Option<&str>, flat: b
 /// Resolve a child tag reference to an absolute path. Returns
 /// `None` if the field is missing or the reference is null.
 fn resolve_child_ref(tag: &TagFile, kind: Kind, tags_root: &Path) -> Option<PathBuf> {
-    let field = tag.root().field(kind.model_field())?;
-    let TagFieldData::TagReference(r) = field.value()? else { return None };
-    let (_group, rel) = r.group_tag_and_name?;
-    if rel.is_empty() { return None; }
-    let rel_path: PathBuf = rel.split('\\').collect();
-    let mut p = tags_root.join(&rel_path);
-    p.set_extension(kind.extension());
-    Some(p)
-}
-
-/// Find the `tags/` ancestor of `path` and return everything up to
-/// and including it. Tag-reference resolution requires this so we
-/// can join Halo's relative paths (`objects\...`) onto an absolute
-/// root.
-fn derive_tags_root(path: &Path) -> Option<PathBuf> {
-    let abs = path.canonicalize().ok()?;
-    let mut acc = PathBuf::new();
-    let mut found = None;
-    for component in abs.components() {
-        acc.push(component);
-        if matches!(component, std::path::Component::Normal(s) if s == "tags") {
-            found = Some(acc.clone());
-        }
-    }
-    found
+    let rel = tag_ref_path(&tag.root(), kind.model_field())?;
+    Some(resolve_tag_path(tags_root, &rel, kind.extension()))
 }
 
 fn output_path_for(out_root: &Path, stem: &str, kind: Kind, flat: bool) -> PathBuf {
@@ -208,10 +186,6 @@ fn output_path_for(out_root: &Path, stem: &str, kind: Kind, flat: bool) -> PathB
     } else {
         out_root.join(stem).join(kind.as_str()).join(format!("{stem}.JMS"))
     }
-}
-
-fn tag_stem(path: &Path) -> String {
-    path.file_stem().and_then(|s| s.to_str()).unwrap_or("model").to_owned()
 }
 
 fn jms_summary(jms: &JmsFile) -> String {

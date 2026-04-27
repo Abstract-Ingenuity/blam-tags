@@ -44,8 +44,7 @@ use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::geometry::{
     quat_from_basis_columns, quat_mul, quat_negate, quat_rotate,
-    read_compression_bounds, read_int_any, read_point3d, read_quat, read_real,
-    read_string_id, read_tag_ref_path, read_vec3, scale_point, strip_to_list,
+    read_compression_bounds, scale_point, strip_to_list,
     vec3_add, vec3_cross, vec3_len, vec3_scale, vec3_sub, walk_surface_ring,
     CompressionBounds, EdgeRow, SCALE,
 };
@@ -296,19 +295,19 @@ impl JmsFile {
 
         for ri in 0..regions_block.len() {
             let region = regions_block.element(ri).unwrap();
-            let region_name = read_string_id(&region, "name").unwrap_or_default();
+            let region_name = region.read_string_id("name").unwrap_or_default();
             let perms = match region.field("permutations").and_then(|f| f.as_block()) {
                 Some(b) => b, None => continue,
             };
             for pi in 0..perms.len() {
                 let perm = perms.element(pi).unwrap();
-                let perm_name = read_string_id(&perm, "name").unwrap_or_default();
+                let perm_name = perm.read_string_id("name").unwrap_or_default();
                 let bsps = match perm.field("bsps").and_then(|f| f.as_block()) {
                     Some(b) => b, None => continue,
                 };
                 for bi in 0..bsps.len() {
                     let bsp_elem = bsps.element(bi).unwrap();
-                    let node_idx = read_int_any(&bsp_elem, "node index").map(|v| v as i16).unwrap_or(-1);
+                    let node_idx = bsp_elem.read_int_any("node index").map(|v| v as i16).unwrap_or(-1);
                     let bsp = match bsp_elem.field("bsp").and_then(|f| f.as_struct()) { Some(s) => s, None => continue };
                     let surfaces = match bsp.field("surfaces").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
                     let edges = match bsp.field("edges").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
@@ -337,17 +336,17 @@ impl JmsFile {
                     let edge_cache: Vec<EdgeRow> = (0..edges.len()).map(|k| {
                         let e = edges.element(k).unwrap();
                         EdgeRow {
-                            start_vertex: read_int_any(&e, "start vertex").unwrap_or(-1) as i32,
-                            end_vertex: read_int_any(&e, "end vertex").unwrap_or(-1) as i32,
-                            forward_edge: read_int_any(&e, "forward edge").unwrap_or(-1) as i32,
-                            reverse_edge: read_int_any(&e, "reverse edge").unwrap_or(-1) as i32,
-                            left_surface: read_int_any(&e, "left surface").unwrap_or(-1) as i32,
-                            right_surface: read_int_any(&e, "right surface").unwrap_or(-1) as i32,
+                            start_vertex: e.read_int_any("start vertex").unwrap_or(-1) as i32,
+                            end_vertex: e.read_int_any("end vertex").unwrap_or(-1) as i32,
+                            forward_edge: e.read_int_any("forward edge").unwrap_or(-1) as i32,
+                            reverse_edge: e.read_int_any("reverse edge").unwrap_or(-1) as i32,
+                            left_surface: e.read_int_any("left surface").unwrap_or(-1) as i32,
+                            right_surface: e.read_int_any("right surface").unwrap_or(-1) as i32,
                         }
                     }).collect();
 
                     let vert_points: Vec<[f32; 3]> = (0..bsp_verts.len()).map(|k| {
-                        let local = scale_point(read_point3d(&bsp_verts.element(k).unwrap(), "point"));
+                        let local = scale_point(bsp_verts.element(k).unwrap().read_point3d("point"));
                         if let Some((rot, trans)) = bone_world {
                             // World = bone_translation + bone_rotation.rotate(local)
                             vec3_add(trans, quat_rotate(rot, local))
@@ -358,9 +357,9 @@ impl JmsFile {
 
                     for si in 0..surfaces.len() {
                         let surface = surfaces.element(si).unwrap();
-                        let first_edge = read_int_any(&surface, "first edge").unwrap_or(-1) as i32;
+                        let first_edge = surface.read_int_any("first edge").unwrap_or(-1) as i32;
                         if first_edge < 0 { continue; }
-                        let surface_material = read_int_any(&surface, "material").unwrap_or(-1) as i32;
+                        let surface_material = surface.read_int_any("material").unwrap_or(-1) as i32;
 
                         // Edge-ring walk.
                         let polygon = walk_surface_ring(si as i32, first_edge, &edge_cache);
@@ -369,7 +368,7 @@ impl JmsFile {
                         // Look up shader name for this surface's material.
                         let shader_name = if surface_material >= 0 && (surface_material as usize) < materials_block.len() {
                             let m = materials_block.element(surface_material as usize).unwrap();
-                            read_string_id(&m, "name").unwrap_or_default()
+                            m.read_string_id("name").unwrap_or_default()
                         } else {
                             "default".to_owned()
                         };
@@ -738,10 +737,10 @@ fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<JmsNode>, JmsError> {
     for i in 0..block.len() {
         let n = block.element(i).unwrap();
         out.push(JmsNode {
-            name: read_string_id(&n, "name").unwrap_or_default(),
-            parent: read_block_index(&n, "parent node"),
-            rotation: read_quat(&n, "default rotation"),
-            translation: scale_point(read_point3d(&n, "default translation")),
+            name: n.read_string_id("name").unwrap_or_default(),
+            parent: n.read_block_index("parent node"),
+            rotation: n.read_quat("default rotation"),
+            translation: scale_point(n.read_point3d("default translation")),
         });
     }
     Ok(out)
@@ -796,8 +795,8 @@ fn read_phmo_nodes(root: &TagStruct<'_>) -> Result<Vec<JmsNode>, JmsError> {
     for i in 0..block.len() {
         let n = block.element(i).unwrap();
         out.push(JmsNode {
-            name: read_string_id(&n, "name").unwrap_or_default(),
-            parent: read_block_index(&n, "parent"),
+            name: n.read_string_id("name").unwrap_or_default(),
+            parent: n.read_block_index("parent"),
             rotation: [0.0, 0.0, 0.0, 1.0],
             translation: [0.0, 0.0, 0.0],
         });
@@ -811,7 +810,7 @@ fn read_phmo_materials(root: &TagStruct<'_>) -> Result<Vec<JmsMaterial>, JmsErro
     let mut out = Vec::with_capacity(block.len());
     for i in 0..block.len() {
         let m = block.element(i).unwrap();
-        let name = read_string_id(&m, "name").unwrap_or_default();
+        let name = m.read_string_id("name").unwrap_or_default();
         // physics_model materials carry a separate `global material
         // name` but the JMS material_name slot is the same name,
         // matching TagTool's 1:1 copy.
@@ -835,10 +834,10 @@ fn build_phmo_parent_lookup(root: &TagStruct<'_>) -> std::collections::HashMap<(
     let Some(rbs) = root.field_path("rigid bodies").and_then(|f| f.as_block()) else { return out; };
     for i in 0..rbs.len() {
         let rb = rbs.element(i).unwrap();
-        let node_idx = read_int_any(&rb, "node").map(|v| v as i32).unwrap_or(-1);
+        let node_idx = rb.read_int_any("node").map(|v| v as i32).unwrap_or(-1);
         let Some(sr) = rb.field("shape reference").and_then(|f| f.as_struct()) else { continue; };
-        let Some(shape_type) = read_int_any(&sr, "shape type") else { continue; };
-        let Some(shape_idx) = read_int_any(&sr, "shape") else { continue; };
+        let Some(shape_type) = sr.read_int_any("shape type") else { continue; };
+        let Some(shape_idx) = sr.read_int_any("shape") else { continue; };
         out.insert((shape_type, shape_idx), node_idx);
     }
     out
@@ -863,12 +862,12 @@ fn read_phmo_spheres(root: &TagStruct<'_>, parents: &std::collections::HashMap<(
         // outputs identity. Radius lives at `sphere/radius` (sibling
         // to `base`).
         out.push(JmsSphere {
-            name: read_string_id(&base, "name").unwrap_or_default(),
+            name: base.read_string_id("name").unwrap_or_default(),
             parent: parent_for(parents, SHAPE_TYPE_SPHERE, i),
-            material: read_int_any(&base, "material").map(|v| v as i32).unwrap_or(0),
+            material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
             rotation: [0.0, 0.0, 0.0, 1.0],
             translation: [0.0, 0.0, 0.0],
-            radius: read_real(&s, "radius").unwrap_or(0.0) * SCALE,
+            radius: s.read_real("radius").unwrap_or(0.0) * SCALE,
         });
     }
     out
@@ -889,16 +888,16 @@ fn read_phmo_boxes(root: &TagStruct<'_>, parents: &std::collections::HashMap<(i6
         // grows by one radius (typically 0.0164 wu = 1.64cm = the
         // standard Halo convex radius). JMS dimension formula:
         //   side = (half_extent + radius) × 2 × 100
-        let half = read_vec3(&b, "half extents");
+        let half = b.read_vec3("half extents");
         let convex_radius = b.field("box shape").and_then(|f| f.as_struct())
-            .and_then(|bs| read_real(&bs, "radius"))
+            .and_then(|bs| bs.read_real("radius"))
             .unwrap_or(0.0);
         out.push(JmsBox {
-            name: read_string_id(&base, "name").unwrap_or_default(),
+            name: base.read_string_id("name").unwrap_or_default(),
             parent: parent_for(parents, SHAPE_TYPE_BOX, i),
-            material: read_int_any(&base, "material").map(|v| v as i32).unwrap_or(0),
+            material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
             rotation: rotation_from_basis(&cts),
-            translation: scale_point(read_vec3(&cts, "translation")),
+            translation: scale_point(cts.read_vec3("translation")),
             width:  (half[0] + convex_radius) * 2.0 * SCALE,
             length: (half[1] + convex_radius) * 2.0 * SCALE,
             height: (half[2] + convex_radius) * 2.0 * SCALE,
@@ -916,10 +915,10 @@ fn read_phmo_pills(root: &TagStruct<'_>, parents: &std::collections::HashMap<(i6
         // Pill radius lives at `capsule shape/radius` (sibling to
         // `capsule shape/base`, which is a generic Havok shape base).
         let radius = p.field("capsule shape").and_then(|f| f.as_struct())
-            .and_then(|cs| read_real(&cs, "radius"))
+            .and_then(|cs| cs.read_real("radius"))
             .unwrap_or(0.0);
-        let bottom = read_vec3(&p, "bottom");
-        let top = read_vec3(&p, "top");
+        let bottom = p.read_vec3("bottom");
+        let top = p.read_vec3("top");
         // TagTool pill anchor: translation = bottom + normalized(bottom - top) * radius
         let dir = vec3_sub(bottom, top);
         let dlen = vec3_len(dir);
@@ -931,9 +930,9 @@ fn read_phmo_pills(root: &TagStruct<'_>, parents: &std::collections::HashMap<(i6
         let axis = vec3_sub(top, bottom);
         let rot = quat_from_axis_to_ref(axis);
         out.push(JmsCapsule {
-            name: read_string_id(&base, "name").unwrap_or_default(),
+            name: base.read_string_id("name").unwrap_or_default(),
             parent: parent_for(parents, SHAPE_TYPE_PILL, i),
-            material: read_int_any(&base, "material").map(|v| v as i32).unwrap_or(0),
+            material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
             rotation: rot,
             translation: scale_point(anchor),
             height,
@@ -953,17 +952,17 @@ fn read_phmo_polyhedra(root: &TagStruct<'_>, parents: &std::collections::HashMap
         let base = match p.field("base").and_then(|f| f.as_struct()) { Some(s) => s, None => continue };
         // `four vectors size` is at the polyhedron top level, not
         // inside `polyhedron shape` (which only carries base + radius).
-        let fv_size = read_int_any(&p, "four vectors size").unwrap_or(0) as usize;
+        let fv_size = p.read_int_any("four vectors size").unwrap_or(0) as usize;
         let mut verts: Vec<[f32; 3]> = Vec::new();
         if let Some(fvb) = &four_vectors {
             for k in 0..fv_size {
                 let Some(fv) = fvb.element(fv_offset + k) else { continue };
-                let xv = read_vec3(&fv, "four vectors x");
-                let yv = read_vec3(&fv, "four vectors y");
-                let zv = read_vec3(&fv, "four vectors z");
-                let xw = read_real(&fv, "havok w four vectors x").unwrap_or(0.0);
-                let yw = read_real(&fv, "havok w four vectors y").unwrap_or(0.0);
-                let zw = read_real(&fv, "havok w four vectors z").unwrap_or(0.0);
+                let xv = fv.read_vec3("four vectors x");
+                let yv = fv.read_vec3("four vectors y");
+                let zv = fv.read_vec3("four vectors z");
+                let xw = fv.read_real("havok w four vectors x").unwrap_or(0.0);
+                let yw = fv.read_real("havok w four vectors y").unwrap_or(0.0);
+                let zw = fv.read_real("havok w four vectors z").unwrap_or(0.0);
                 // 4 vertices packed: (x.i, y.i, z.i), (x.j, y.j, z.j),
                 // (x.k, y.k, z.k), (x_w, y_w, z_w)
                 verts.push(scale_point([xv[0], yv[0], zv[0]]));
@@ -981,9 +980,9 @@ fn read_phmo_polyhedra(root: &TagStruct<'_>, parents: &std::collections::HashMap
         });
         // Polyhedron transform is identity — vertices are absolute.
         out.push(JmsConvex {
-            name: read_string_id(&base, "name").unwrap_or_default(),
+            name: base.read_string_id("name").unwrap_or_default(),
             parent: parent_for(parents, SHAPE_TYPE_POLYHEDRON, i),
-            material: read_int_any(&base, "material").map(|v| v as i32).unwrap_or(0),
+            material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
             rotation: [0.0, 0.0, 0.0, 1.0],
             translation: [0.0, 0.0, 0.0],
             vertices: verts,
@@ -1002,9 +1001,9 @@ fn read_phmo_ragdolls(root: &TagStruct<'_>) -> Vec<JmsRagdoll> {
         let (a_rot, a_trans) = constraint_frame(&bodies, "a");
         let (b_rot, b_trans) = constraint_frame(&bodies, "b");
         out.push(JmsRagdoll {
-            name: read_string_id(&bodies, "name").unwrap_or_default(),
-            attached: read_int_any(&bodies, "node a").map(|v| v as i32).unwrap_or(-1),
-            referenced: read_int_any(&bodies, "node b").map(|v| v as i32).unwrap_or(-1),
+            name: bodies.read_string_id("name").unwrap_or_default(),
+            attached: bodies.read_int_any("node a").map(|v| v as i32).unwrap_or(-1),
+            referenced: bodies.read_int_any("node b").map(|v| v as i32).unwrap_or(-1),
             // TagTool negates the ragdoll-derived quat — verified
             // against the masterchief embedded source: e.g. b_head's
             // tag matrix gives q=(0.6995, 0.1043, 0.1043, 0.6995),
@@ -1013,15 +1012,15 @@ fn read_phmo_ragdolls(root: &TagStruct<'_>) -> Vec<JmsRagdoll> {
             attached_translation: a_trans,
             referenced_rotation: quat_negate(b_rot),
             referenced_translation: b_trans,
-            min_twist: read_real(&r, "min twist").unwrap_or(0.0),
-            max_twist: read_real(&r, "max twist").unwrap_or(0.0),
-            min_cone: read_real(&r, "min cone").unwrap_or(0.0),
-            max_cone: read_real(&r, "max cone").unwrap_or(0.0),
-            min_plane: read_real(&r, "min plane").unwrap_or(0.0),
-            max_plane: read_real(&r, "max plane").unwrap_or(0.0),
+            min_twist: r.read_real("min twist").unwrap_or(0.0),
+            max_twist: r.read_real("max twist").unwrap_or(0.0),
+            min_cone: r.read_real("min cone").unwrap_or(0.0),
+            max_cone: r.read_real("max cone").unwrap_or(0.0),
+            min_plane: r.read_real("min plane").unwrap_or(0.0),
+            max_plane: r.read_real("max plane").unwrap_or(0.0),
             // The schema field carries a typo in MCC — `max friciton torque`.
-            friction_limit: read_real(&r, "max friciton torque")
-                .or_else(|| read_real(&r, "max friction torque"))
+            friction_limit: r.read_real("max friciton torque")
+                .or_else(|| r.read_real("max friction torque"))
                 .unwrap_or(0.0),
         });
     }
@@ -1038,18 +1037,18 @@ fn read_phmo_hinges(root: &TagStruct<'_>, limited: bool) -> Vec<JmsHinge> {
         let (a_rot, a_trans) = constraint_frame(&bodies, "a");
         let (b_rot, b_trans) = constraint_frame(&bodies, "b");
         out.push(JmsHinge {
-            name: read_string_id(&bodies, "name").unwrap_or_default(),
-            body_a: read_int_any(&bodies, "node a").map(|v| v as i32).unwrap_or(-1),
-            body_b: read_int_any(&bodies, "node b").map(|v| v as i32).unwrap_or(-1),
+            name: bodies.read_string_id("name").unwrap_or_default(),
+            body_a: bodies.read_int_any("node a").map(|v| v as i32).unwrap_or(-1),
+            body_b: bodies.read_int_any("node b").map(|v| v as i32).unwrap_or(-1),
             // Hinges (per TagTool) are NOT negated — only ragdolls.
             a_rotation: a_rot,
             a_translation: a_trans,
             b_rotation: b_rot,
             b_translation: b_trans,
             is_limited: if limited { 1 } else { 0 },
-            friction_limit: read_real(&h, "limit friction").unwrap_or(0.0),
-            min_angle: read_real(&h, "limit min angle").unwrap_or(0.0),
-            max_angle: read_real(&h, "limit max angle").unwrap_or(0.0),
+            friction_limit: h.read_real("limit friction").unwrap_or(0.0),
+            min_angle: h.read_real("limit min angle").unwrap_or(0.0),
+            max_angle: h.read_real("limit max angle").unwrap_or(0.0),
         });
     }
     out
@@ -1061,10 +1060,10 @@ fn read_phmo_hinges(root: &TagStruct<'_>, limited: bool) -> Vec<JmsHinge> {
 /// (connected_geometry.py:689-694): forward in column 0, left in
 /// column 1, up in column 2.
 fn constraint_frame(bodies: &TagStruct<'_>, side: &str) -> ([f32; 4], [f32; 3]) {
-    let f = read_vec3(bodies, &format!("{side} forward"));
-    let l = read_vec3(bodies, &format!("{side} left"));
-    let u = read_vec3(bodies, &format!("{side} up"));
-    let p = read_vec3(bodies, &format!("{side} position"));
+    let f = bodies.read_vec3(&format!("{side} forward"));
+    let l = bodies.read_vec3(&format!("{side} left"));
+    let u = bodies.read_vec3(&format!("{side} up"));
+    let p = bodies.read_vec3(&format!("{side} position"));
     let rot = quat_from_basis_columns(f, l, u);
     (rot, scale_point(p))
 }
@@ -1072,9 +1071,9 @@ fn constraint_frame(bodies: &TagStruct<'_>, side: &str) -> ([f32; 4], [f32; 3]) 
 /// Build a quaternion from a `convex transform shape` struct's
 /// rotation_i/j/k row vectors (Havok stores rotation as 3 vec3 rows).
 fn rotation_from_basis(cts: &TagStruct<'_>) -> [f32; 4] {
-    let row_i = read_vec3(cts, "rotation i");
-    let row_j = read_vec3(cts, "rotation j");
-    let row_k = read_vec3(cts, "rotation k");
+    let row_i = cts.read_vec3("rotation i");
+    let row_j = cts.read_vec3("rotation j");
+    let row_k = cts.read_vec3("rotation k");
     // Rows form the rotation matrix; columns are forward/left/up.
     quat_from_basis_columns(
         [row_i[0], row_j[0], row_k[0]],
@@ -1120,7 +1119,7 @@ fn read_markers(root: &TagStruct<'_>) -> Result<Vec<JmsMarker>, JmsError> {
     let mut out = Vec::new();
     for i in 0..block.len() {
         let g = block.element(i).unwrap();
-        let group_name = read_string_id(&g, "name").unwrap_or_default();
+        let group_name = g.read_string_id("name").unwrap_or_default();
         let inner = match g.field("markers").and_then(|f| f.as_block()) {
             Some(b) => b, None => continue,
         };
@@ -1128,9 +1127,9 @@ fn read_markers(root: &TagStruct<'_>) -> Result<Vec<JmsMarker>, JmsError> {
             let m = inner.element(j).unwrap();
             out.push(JmsMarker {
                 name: group_name.clone(),
-                node_index: read_int_any(&m, "node index").unwrap_or(-1) as i16,
-                rotation: read_quat(&m, "rotation"),
-                translation: scale_point(read_point3d(&m, "translation")),
+                node_index: m.read_int_any("node index").unwrap_or(-1) as i16,
+                rotation: m.read_quat("rotation"),
+                translation: scale_point(m.read_point3d("translation")),
                 radius: -1.0,
             });
         }
@@ -1158,15 +1157,15 @@ fn build_materials(root: &TagStruct<'_>)
 
     for ri in 0..regions_block.len() {
         let region = regions_block.element(ri).unwrap();
-        let region_name = read_string_id(&region, "name").unwrap_or_default();
+        let region_name = region.read_string_id("name").unwrap_or_default();
         let perms = match region.field("permutations").and_then(|f| f.as_block()) {
             Some(b) => b, None => continue,
         };
         for pi in 0..perms.len() {
             let perm = perms.element(pi).unwrap();
-            let perm_name = read_string_id(&perm, "name").unwrap_or_default();
-            let mesh_idx = read_int_any(&perm, "mesh index").unwrap_or(-1);
-            let mesh_count = read_int_any(&perm, "mesh count").unwrap_or(0);
+            let perm_name = perm.read_string_id("name").unwrap_or_default();
+            let mesh_idx = perm.read_int_any("mesh index").unwrap_or(-1);
+            let mesh_count = perm.read_int_any("mesh count").unwrap_or(0);
             if mesh_idx < 0 || mesh_count <= 0 { continue; }
             for mi_off in 0..mesh_count as usize {
                 let mi = mesh_idx as usize + mi_off;
@@ -1180,10 +1179,10 @@ fn build_materials(root: &TagStruct<'_>)
                 };
                 for part_i in 0..parts.len() {
                     let part = parts.element(part_i).unwrap();
-                    let shader_idx = read_int_any(&part, "render method index").unwrap_or(0);
+                    let shader_idx = part.read_int_any("render method index").unwrap_or(0);
                     let shader_name = if shader_idx >= 0 && (shader_idx as usize) < mats_block.len() {
                         let m = mats_block.element(shader_idx as usize).unwrap();
-                        let path = read_tag_ref_path(&m, "render method").unwrap_or_default();
+                        let path = m.read_tag_ref_path("render method").unwrap_or_default();
                         Path::new(&path.replace('\\', "/"))
                             .file_stem().and_then(|s| s.to_str()).unwrap_or("default").to_owned()
                     } else {
@@ -1237,7 +1236,7 @@ fn build_geometry(
             TagFieldData::CharEnum { value, .. } => value as i32, _ => -1,
         }).unwrap_or(-1);
         let rigid_fallback_node = if matches!(vt, 1 | 5) {
-            read_int_any(&mesh, "rigid node index").map(|v| v as i16).filter(|&v| v >= 0)
+            mesh.read_int_any("rigid node index").map(|v| v as i16).filter(|&v| v >= 0)
         } else { None };
 
         let raw_v = pmt.field("raw vertices").and_then(|f| f.as_block())
@@ -1246,7 +1245,7 @@ fn build_geometry(
             .ok_or(JmsError::MissingField("per mesh temporary[i]/raw indices"))?;
         let indices: Vec<u16> = (0..raw_i.len())
             .filter_map(|k| raw_i.element(k))
-            .map(|e| read_int_any(&e, "word").unwrap_or(0) as u16)
+            .map(|e| e.read_int_any("word").unwrap_or(0) as u16)
             .collect();
 
         // Default to "triangle strip" — what every MCC render mesh
@@ -1269,8 +1268,8 @@ fn build_geometry(
             // geometry" sentinel would be -1 (u16 0xFFFF), which is
             // rejected by the bounds check below since 0xFFFF would
             // exceed any plausible strip length.
-            let start_i = read_int_any(&part, "index start").unwrap_or(0);
-            let count_i = read_int_any(&part, "index count").unwrap_or(0);
+            let start_i = part.read_int_any("index start").unwrap_or(0);
+            let count_i = part.read_int_any("index count").unwrap_or(0);
             if count_i <= 0 { continue; }
             let start = (start_i as i16 as u16) as usize;
             let count = count_i as usize;
@@ -1309,9 +1308,9 @@ fn build_geometry(
 // ---- raw_vertex_block reader (CompressionBounds + readers in crate::geometry) ----
 
 fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> JmsVertex {
-    let raw_pos = read_point3d(v, "position");
+    let raw_pos = v.read_point3d("position");
     let position = scale_point(bounds.decompress_position(raw_pos));
-    let normal = read_point3d(v, "normal");
+    let normal = v.read_point3d("normal");
     let raw_uv = match v.field("texcoord").and_then(|f| f.value()) {
         Some(TagFieldData::RealPoint2d(p)) => [p.x, p.y], _ => [0.0, 0.0],
     };
@@ -1342,17 +1341,6 @@ fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> JmsVertex {
 // ---- jms-specific helpers ----
 
 /// Local field reader: maps every `*BlockIndex` variant to a clamped
-/// i16 (with -1 for null/unset). Used for JMS's `parent` index where
-/// the JMS format only supports 16-bit signed.
-fn read_block_index(s: &TagStruct<'_>, name: &str) -> i16 {
-    match s.field(name).and_then(|f| f.value()) {
-        Some(TagFieldData::CharBlockIndex(v)) => v as i16,
-        Some(TagFieldData::ShortBlockIndex(v)) => v,
-        Some(TagFieldData::LongBlockIndex(v)) => v as i16,
-        _ => -1,
-    }
-}
-
 // ---- writer helpers ----
 
 fn write_floats<W: Write>(w: &mut W, values: &[f32]) -> io::Result<()> {

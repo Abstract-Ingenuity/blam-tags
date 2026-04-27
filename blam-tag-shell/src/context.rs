@@ -13,7 +13,12 @@ use blam_tags::TagFile;
 
 use crate::tag_index::TagIndex;
 
+/// Per-invocation session state — the loaded tag (if any), the
+/// REPL navigation prefix, and the loaded `_meta.json` tag index.
+/// Threaded through every command's `run`.
 pub struct CliContext {
+    /// The tag the next command will operate on. `None` when no tag
+    /// is loaded (one-shot mode pre-load, or REPL `close` state).
     pub loaded: Option<LoadedTag>,
     /// REPL navigation prefix — each segment is a path fragment the
     /// user entered via `edit-block`. Empty in one-shot mode and at
@@ -30,9 +35,14 @@ pub struct CliContext {
     pub tag_index: TagIndex,
 }
 
+/// A parsed tag plus the path it came from, with a dirty flag for
+/// REPL save-prompt logic.
 pub struct LoadedTag {
+    /// Path the tag was read from. Used as the default save target.
     pub path: PathBuf,
+    /// Parsed tag tree.
     pub tag: TagFile,
+    /// `true` once a command has mutated the tag without persisting.
     pub dirty: bool,
 }
 
@@ -112,7 +122,14 @@ impl LoadedTag {
     }
 }
 
+/// Result of [`LoadedTag::commit`] — the path written to and a flag
+/// indicating whether it differs from the source path. Lets mutating
+/// commands print a "saved to …" line only when the user redirected
+/// output via `--output`.
 pub struct Commit {
+    /// Path the tag was written to.
     pub target: PathBuf,
+    /// `true` if `target` differs from the source path (i.e. the
+    /// user passed `--output`).
     pub redirected: bool,
 }

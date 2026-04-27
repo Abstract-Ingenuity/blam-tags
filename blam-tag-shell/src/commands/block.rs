@@ -19,15 +19,27 @@ use clap::ValueEnum;
 
 use crate::context::CliContext;
 
+/// One operation supported by the `block` subcommand. Clap parses
+/// the kebab-case form (`count`, `add`, `insert`, …) into this enum;
+/// the variant determines how many `[INDEX]` positionals are
+/// required.
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum BlockAction {
+    /// Print element count.
     Count,
+    /// Append a default-initialized element.
     Add,
+    /// Insert a default element at `[INDEX]`.
     Insert,
+    /// Copy element `[INDEX]` to position `[INDEX] + 1`.
     Duplicate,
+    /// Remove element at `[INDEX]`.
     Delete,
+    /// Drop every element.
     Clear,
+    /// Exchange elements at `[INDEX]` and `[INDEX2]`.
     Swap,
+    /// Relocate element from `[INDEX]` to `[INDEX2]`.
     Move,
 }
 

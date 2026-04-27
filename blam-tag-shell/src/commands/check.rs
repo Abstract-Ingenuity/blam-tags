@@ -30,11 +30,18 @@ use serde_json::json;
 use crate::context::CliContext;
 use crate::walk::{walk, FieldVisitor};
 
+/// One category of finding [`run`] can surface. The `--only` flag
+/// narrows the report to a subset; default is all four.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum CheckKind {
+    /// Enum value didn't resolve to a named variant.
     Enum,
+    /// Flag bits set without a declared name.
     Flag,
+    /// Non-finite (`NaN` / `±inf`) real value.
     Real,
+    /// Tag reference that doesn't resolve to a file under the
+    /// supplied tags root.
     Reference,
 }
 

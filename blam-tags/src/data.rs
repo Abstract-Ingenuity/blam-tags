@@ -32,6 +32,9 @@ pub(crate) struct TagStructData {
     pub(crate) sub_chunks: Vec<TagSubChunkEntry>,
 }
 
+/// One entry in a `tgst` chunk's sub-chunk list. Pairs an owning
+/// layout field index with the entry's typed payload so the writer
+/// can re-emit each child chunk in its original position.
 #[derive(Debug, Clone)]
 pub(crate) struct TagSubChunkEntry {
     /// Index into [`TagLayout::fields`] for the owning field, or
@@ -39,9 +42,14 @@ pub(crate) struct TagSubChunkEntry {
     /// correspond to any layout field. See
     /// [`TagSubChunkContent::EmptyPlaceholder`].
     pub(crate) field_index: Option<u32>,
+    /// Typed payload for this entry (struct / block / array / leaf
+    /// chunk / resource / placeholder).
     pub(crate) content: TagSubChunkContent,
 }
 
+/// Per-shape payload for a `tgst` sub-chunk entry. The variant
+/// reflects the on-disk chunk signature; bytes for primitive leaves
+/// are preserved verbatim so writes are byte-exact.
 #[derive(Debug, Clone)]
 pub(crate) enum TagSubChunkContent {
     /// Nested struct field. Its raw bytes live in the enclosing
@@ -86,6 +94,10 @@ pub(crate) enum TagSubChunkContent {
     EmptyPlaceholder,
 }
 
+/// Pageable-resource on-disk shape. The signature on the chunk
+/// distinguishes the variants — only the two observed in Halo 3 /
+/// Reach tags are modeled, with `Xsync` covering opaque future
+/// payloads.
 #[derive(Debug, Clone)]
 pub(crate) enum TagResourceChunk {
     /// `tg\0c` — empty null resource.

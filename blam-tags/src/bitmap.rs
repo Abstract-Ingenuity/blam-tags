@@ -30,7 +30,6 @@
 use std::io::Write;
 
 use crate::api::{TagBlock, TagStruct};
-use crate::fields::TagFieldData;
 use crate::file::TagFile;
 
 /// A bitmap pixel format that wraps in DDS without transforming the
@@ -240,56 +239,26 @@ pub struct BitmapImage<'a> {
 }
 
 impl<'a> BitmapImage<'a> {
-    fn read_u16(&self, name: &str) -> Option<i16> {
-        match self.elem.field(name)?.value()? {
-            TagFieldData::ShortInteger(v) => Some(v),
-            _ => None,
-        }
-    }
-    fn read_i8(&self, name: &str) -> Option<i8> {
-        match self.elem.field(name)?.value()? {
-            TagFieldData::CharInteger(v) => Some(v),
-            _ => None,
-        }
-    }
-    fn read_i32(&self, name: &str) -> Option<i32> {
-        match self.elem.field(name)?.value()? {
-            TagFieldData::LongInteger(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Read an enum field's resolved name regardless of width — h3
-    /// uses `short_enum` for `type` while reach uses `char_enum`, and
-    /// the schema-driven enum name resolution applies the same way to
-    /// both.
-    fn read_enum_name(&self, name: &str) -> Option<String> {
-        match self.elem.field(name)?.value()? {
-            TagFieldData::CharEnum { name, .. } => name,
-            TagFieldData::ShortEnum { name, .. } => name,
-            TagFieldData::LongEnum { name, .. } => name,
-            _ => None,
-        }
-    }
-
     /// Base-mip width in pixels.
-    pub fn width(&self) -> u32 { self.read_u16("width").unwrap_or(0).max(0) as u32 }
+    pub fn width(&self) -> u32 { self.elem.read_int_any("width").unwrap_or(0).max(0) as u32 }
 
     /// Base-mip height in pixels.
-    pub fn height(&self) -> u32 { self.read_u16("height").unwrap_or(0).max(0) as u32 }
+    pub fn height(&self) -> u32 { self.elem.read_int_any("height").unwrap_or(0).max(0) as u32 }
 
     /// 3D-texture depth (or array layer count for arrays). Always `>= 1`.
-    pub fn depth(&self) -> u32 { self.read_i8("depth").unwrap_or(1).max(1) as u32 }
+    pub fn depth(&self) -> u32 { self.elem.read_int_any("depth").unwrap_or(1).max(1) as u32 }
 
     /// Total mipmap levels including the base level. The schema's
     /// `mipmap count` excludes the base, so this is `that + 1`.
     pub fn mipmap_levels(&self) -> u32 {
-        self.read_i8("mipmap count").unwrap_or(0).max(0) as u32 + 1
+        self.elem.read_int_any("mipmap count").unwrap_or(0).max(0) as u32 + 1
     }
 
     /// The schema's per-image format name (e.g. `"dxt5"`, `"dxn"`).
+    /// h3 uses `short_enum` while reach uses `char_enum`; both map the
+    /// same way through the wider enum-name reader.
     pub fn format_name(&self) -> Option<String> {
-        self.read_enum_name("format")
+        self.elem.read_enum_name("format")
     }
 
     /// The format mapped to a known [`BitmapFormat`], if supported.
@@ -301,7 +270,7 @@ impl<'a> BitmapImage<'a> {
 
     /// The schema's per-image type name (e.g. `"2D texture"`, `"cube map"`).
     pub fn type_name(&self) -> Option<String> {
-        self.read_enum_name("type")
+        self.elem.read_enum_name("type")
     }
 
     /// `true` for cube map textures (six 2D surfaces under one image).
@@ -338,7 +307,7 @@ impl<'a> BitmapImage<'a> {
     /// sometimes stale on MCC tags (e.g. inflated by 2× from an
     /// original split-resource layout).
     pub fn pixel_bytes(&self) -> Result<&'a [u8], BitmapError> {
-        let offset = self.read_i32("pixels offset").unwrap_or(0).max(0) as usize;
+        let offset = self.elem.read_int_any("pixels offset").unwrap_or(0).max(0) as usize;
         let format = self.format()?;
         let layers = self.layer_count() as u64;
         let expected = format.surface_bytes(self.width(), self.height(), self.mipmap_levels())

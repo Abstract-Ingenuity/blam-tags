@@ -1,3 +1,22 @@
+//! `blam-tag-shell` CLI entry point.
+//!
+//! Two execution modes share one [`Commands`] dispatch:
+//! - **One-shot** — `blam-tag-shell --game <G> <SUBCOMMAND> …` runs a
+//!   single command against a tag and exits. Tag-bound subcommands
+//!   take a `<FILE>` positional, load it via [`CliContext::load`],
+//!   run, and persist if the command mutates.
+//! - **REPL** — `blam-tag-shell repl [FILE]` opens a persistent
+//!   session against a loaded tag. See [`crate::repl`] for the loop;
+//!   it dispatches the same [`Commands`] enum after preprocessing
+//!   the input line.
+//!
+//! Subcommand handlers live under [`crate::commands`]; each command
+//! file's `//!` documents its semantics in detail. Shared shell
+//! infrastructure lives in [`crate::context`] (session state),
+//! [`crate::format`] (value rendering), [`crate::parse`] (string →
+//! `TagFieldData`), [`crate::walk`] (tree traversal), and
+//! [`crate::paths`] (filesystem path helpers).
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
@@ -7,6 +26,7 @@ mod commands;
 mod context;
 mod format;
 mod parse;
+mod paths;
 mod repl;
 mod suggest;
 mod tag_index;
@@ -329,18 +349,24 @@ enum Commands {
         flat: bool,
     },
 
-    /// Extract a `.scenario_structure_bsp` (sbsp) tag's cluster
-    /// geometry as an ASS file (Bungie Amalgam, version 7 for H3) —
-    /// the static-scene counterpart to JMS.
+    /// Extract a `.scenario` (scnr) tag's structure BSPs as ASS
+    /// files (Bungie Amalgam, version 7 for H3) — one ASS per
+    /// `scenario.structure_bsps[]` entry, each pairing the
+    /// referenced `scenario_structure_bsp` with its
+    /// `scenario_structure_lighting_info`. ASS is the static-scene
+    /// counterpart to JMS.
     ExtractAss {
-        /// Path to a `.scenario_structure_bsp` tag file.
+        /// Path to a `.scenario` tag file. sbsp-direct extraction
+        /// is available via the library function
+        /// `AssFile::from_scenario_structure_bsp`.
         file: String,
         /// Output root directory (default: current directory). The
-        /// command writes `<DIR>/<stem>/structure/<stem>.ASS` to
-        /// match the H3EK source-tree convention.
+        /// command writes one `<DIR>/<scenario_stem>/structure/<bsp_stem>.ASS`
+        /// per BSP to match the H3EK source-tree convention.
         #[arg(long)]
         output: Option<String>,
-        /// Flatten: emit `<DIR>/<stem>.ass` instead of nested.
+        /// Flatten: emit `<DIR>/<scenario_stem>.<bsp_stem>.ass` per
+        /// BSP in a single dir instead of the nested layout.
         #[arg(long)]
         flat: bool,
     },

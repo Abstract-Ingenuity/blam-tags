@@ -38,9 +38,16 @@ pub(crate) const SCALE: f32 = 100.0;
 
 // ---- compression bounds ----
 
+/// Per-axis dequantization bounds for a `compression info[i]` entry.
+/// Position and texcoord components are stored as 0..1 normalized
+/// values; multiplying by `(max - min)` and adding `min` recovers
+/// the original world / uv coordinate.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CompressionBounds {
+    /// `true` if positions in this group were quantized — when `false`,
+    /// [`Self::decompress_position`] is a passthrough.
     pub(crate) pos_compressed: bool,
+    /// `true` if texcoords were quantized.
     pub(crate) uv_compressed: bool,
     pub(crate) px_min: f32, pub(crate) px_max: f32,
     pub(crate) py_min: f32, pub(crate) py_max: f32,
@@ -50,6 +57,9 @@ pub(crate) struct CompressionBounds {
 }
 
 impl CompressionBounds {
+    /// Identity bounds — `decompress_*` returns its input unchanged.
+    /// Used for cluster meshes (already in world units) and as a
+    /// fallback when the `compression info` index is out of range.
     pub(crate) fn identity() -> Self {
         Self {
             pos_compressed: false, uv_compressed: false,
@@ -58,6 +68,8 @@ impl CompressionBounds {
         }
     }
 
+    /// Map a 0..1 quantized position back into world units.
+    /// Passthrough when [`Self::pos_compressed`] is `false`.
     pub(crate) fn decompress_position(&self, p: [f32; 3]) -> [f32; 3] {
         if !self.pos_compressed { return p; }
         [
@@ -67,6 +79,8 @@ impl CompressionBounds {
         ]
     }
 
+    /// Map a 0..1 quantized texcoord back into uv units.
+    /// Passthrough when [`Self::uv_compressed`] is `false`.
     pub(crate) fn decompress_texcoord(&self, uv: [f32; 2]) -> [f32; 2] {
         if !self.uv_compressed { return uv; }
         [
@@ -97,8 +111,8 @@ pub(crate) fn read_compression_bounds_at(root: &TagStruct<'_>, index: usize) -> 
         pos_compressed = (value & 0x0001) != 0;
         uv_compressed = (value & 0x0002) != 0;
     }
-    let pb0 = read_point3d(&ci, "position bounds 0");
-    let pb1 = read_point3d(&ci, "position bounds 1");
+    let pb0 = ci.read_point3d("position bounds 0");
+    let pb1 = ci.read_point3d("position bounds 1");
     let tb0 = match ci.field("texcoord bounds 0").and_then(|f| f.value()) {
         Some(TagFieldData::RealPoint2d(p)) => [p.x, p.y], _ => [0.0, 1.0],
     };
@@ -137,6 +151,7 @@ pub(crate) fn strip_to_list(strip: &[u16]) -> Vec<(u16, u16, u16)> {
 
 // ---- quaternion math (i, j, k, w order) ----
 
+/// Hamilton product `a * b`. Component order is `(i, j, k, w)`.
 pub(crate) fn quat_mul(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
     let (ax, ay, az, aw) = (a[0], a[1], a[2], a[3]);
     let (bx, by, bz, bw) = (b[0], b[1], b[2], b[3]);
@@ -163,6 +178,9 @@ pub(crate) fn quat_rotate(q: [f32; 4], v: [f32; 3]) -> [f32; 3] {
     ]
 }
 
+/// Negate every component. Represents the same rotation as `q`
+/// (quaternions are double-cover); used by the JMS phmo path where
+/// stored ragdoll quats need to flip sign vs source.
 pub(crate) fn quat_negate(q: [f32; 4]) -> [f32; 4] { [-q[0], -q[1], -q[2], -q[3]] }
 
 /// Construct a quaternion `(i, j, k, w)` from three column basis
@@ -190,24 +208,36 @@ pub(crate) fn quat_from_basis_columns(c0: [f32; 3], c1: [f32; 3], c2: [f32; 3]) 
 
 // ---- 3-vector math ----
 
+/// Component-wise sum.
 pub(crate) fn vec3_add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 }
 
+/// Component-wise difference.
 pub(crate) fn vec3_sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 }
 
+/// Multiply every component by `k`.
 pub(crate) fn vec3_scale(a: [f32; 3], k: f32) -> [f32; 3] {
     [a[0] * k, a[1] * k, a[2] * k]
 }
 
+/// Euclidean length.
 pub(crate) fn vec3_len(a: [f32; 3]) -> f32 {
     (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt()
 }
 
+/// 3D cross product `a × b`.
 pub(crate) fn vec3_cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
     [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+
+/// Length-normalize, returning `[0, 0, 0]` for zero/near-zero
+/// vectors rather than NaNs.
+pub(crate) fn vec3_normalize(v: [f32; 3]) -> [f32; 3] {
+    let m = vec3_len(v);
+    if m < 1e-12 { [0.0, 0.0, 0.0] } else { [v[0] / m, v[1] / m, v[2] / m] }
 }
 
 /// Apply [`SCALE`] to every component — world-units → JMS/ASS cm.
@@ -215,80 +245,11 @@ pub(crate) fn scale_point(p: [f32; 3]) -> [f32; 3] {
     [p[0] * SCALE, p[1] * SCALE, p[2] * SCALE]
 }
 
-// ---- generic field readers ----
-
-/// Read any integer-shaped field. Handles all 13 integer-like
-/// `TagFieldData` variants (regular ints, block indices, custom
-/// block indices, enums). Most walker code only cares about the
-/// integer value, not which exact variant carries it.
-pub(crate) fn read_int_any(s: &TagStruct<'_>, name: &str) -> Option<i64> {
-    match s.field(name)?.value()? {
-        TagFieldData::CharInteger(v) => Some(v as i64),
-        TagFieldData::ShortInteger(v) => Some(v as i64),
-        TagFieldData::LongInteger(v) => Some(v as i64),
-        TagFieldData::Int64Integer(v) => Some(v),
-        TagFieldData::CharBlockIndex(v) => Some(v as i64),
-        TagFieldData::ShortBlockIndex(v) => Some(v as i64),
-        TagFieldData::LongBlockIndex(v) => Some(v as i64),
-        TagFieldData::CustomCharBlockIndex(v) => Some(v as i64),
-        TagFieldData::CustomShortBlockIndex(v) => Some(v as i64),
-        TagFieldData::CustomLongBlockIndex(v) => Some(v as i64),
-        TagFieldData::CharEnum { value, .. } => Some(value as i64),
-        TagFieldData::ShortEnum { value, .. } => Some(value as i64),
-        TagFieldData::LongEnum { value, .. } => Some(value as i64),
-        TagFieldData::ByteFlags { value, .. } => Some(value as i64),
-        TagFieldData::WordFlags { value, .. } => Some(value as i64),
-        TagFieldData::LongFlags { value, .. } => Some(value as i64),
-        _ => None,
-    }
-}
-
-pub(crate) fn read_string_id(s: &TagStruct<'_>, name: &str) -> Option<String> {
-    match s.field(name)?.value()? {
-        TagFieldData::StringId(sid) | TagFieldData::OldStringId(sid) =>
-            Some(sid.string).filter(|s| !s.is_empty()),
-        _ => None,
-    }
-}
-
-pub(crate) fn read_quat(s: &TagStruct<'_>, name: &str) -> [f32; 4] {
-    match s.field(name).and_then(|f| f.value()) {
-        Some(TagFieldData::RealQuaternion(q)) => [q.i, q.j, q.k, q.w],
-        _ => [0.0, 0.0, 0.0, 1.0],
-    }
-}
-
-pub(crate) fn read_point3d(s: &TagStruct<'_>, name: &str) -> [f32; 3] {
-    match s.field(name).and_then(|f| f.value()) {
-        Some(TagFieldData::RealPoint3d(p)) => [p.x, p.y, p.z],
-        Some(TagFieldData::RealVector3d(v)) => [v.i, v.j, v.k],
-        _ => [0.0; 3],
-    }
-}
-
-pub(crate) fn read_vec3(s: &TagStruct<'_>, name: &str) -> [f32; 3] {
-    match s.field(name).and_then(|f| f.value()) {
-        Some(TagFieldData::RealVector3d(v)) => [v.i, v.j, v.k],
-        Some(TagFieldData::RealPoint3d(p)) => [p.x, p.y, p.z],
-        _ => [0.0; 3],
-    }
-}
-
-pub(crate) fn read_real(s: &TagStruct<'_>, name: &str) -> Option<f32> {
-    match s.field(name)?.value()? {
-        TagFieldData::Real(r) => Some(r),
-        TagFieldData::RealFraction(r) => Some(r),
-        TagFieldData::Angle(r) => Some(r),
-        _ => None,
-    }
-}
-
-pub(crate) fn read_tag_ref_path(s: &TagStruct<'_>, name: &str) -> Option<String> {
-    match s.field(name)?.value()? {
-        TagFieldData::TagReference(r) => r.group_tag_and_name.map(|(_, p)| p),
-        _ => None,
-    }
-}
+// (typed field readers — `read_int_any` / `read_real` / `read_quat`
+// / `read_point3d` / `read_vec3` / `read_string_id` / `read_enum_name`
+// / `read_tag_ref_path` / `read_rgb` / `read_real_bounds` /
+// `read_block_index` — all live as inherent methods on
+// `crate::api::TagStruct`.)
 
 // ---- BSP edge-ring walker ----
 

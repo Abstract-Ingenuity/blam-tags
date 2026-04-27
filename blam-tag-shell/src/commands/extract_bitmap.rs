@@ -18,6 +18,7 @@ use anyhow::{Context, Result};
 use blam_tags::Bitmap;
 
 use crate::context::CliContext;
+use crate::paths::tag_stem;
 
 pub fn run(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let loaded = ctx.loaded("extract-bitmap")?;
@@ -30,7 +31,7 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
         return Ok(());
     }
 
-    let stem = tag_stem(&loaded.path);
+    let stem = tag_stem(&loaded.path, "bitmap");
     let output_path = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
     if is_dds_filename(&output_path) {
@@ -122,9 +123,3 @@ fn write_one(path: &Path, image: blam_tags::BitmapImage<'_>) -> Result<String> {
     Ok(summary)
 }
 
-fn tag_stem(path: &Path) -> String {
-    path.file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("bitmap")
-        .to_owned()
-}

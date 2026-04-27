@@ -59,7 +59,7 @@ The example commands below elide `--game` for readability — add it to every in
 | [`export`](#export--dump-tag-state-as-replay-commands) | Dump a tag's state as replayable `set` commands |
 | [`extract-bitmap`](#extract-bitmap--bitmap-to-dds) | Extract a `.bitmap` tag's images as DDS files (one per image) |
 | [`extract-jms`](#extract-jms--model-to-source-tree-jms-files) | Extract a `.model` tag's render / collision / physics children as JMS files in the H3EK source-tree layout |
-| [`extract-ass`](#extract-ass--scenario_structure_bsp-to-ass) | Extract a `.scenario` tag's structure BSPs as ASS files (one per BSP, with paired lighting baked in) |
+| [`extract-ass`](#extract-ass--scenario-to-ass) | Extract a `.scenario` tag's structure BSPs as ASS files (one per BSP, with paired lighting baked in) |
 | [`extract-data`](#extract-data--dump-a-tag_data-field) | Write the bytes of a single `tag_data` field to a file |
 | [`list-animations`](#list-animations--enumerate-jmad-animations) | List the animations in a `model_animation_graph` tag |
 | [`extract-animation`](#extract-animation--decode-and-export-an-animation) | Decode a single jmad animation; write JMA-family text or JSON |
@@ -680,35 +680,35 @@ Notes:
 
 ---
 
-### `extract-ass` — scenario_structure_bsp to ASS
+### `extract-ass` — scenario to ASS
 
 | Argument | Description |
 |-|-|
-| `<FILE>` | Path to a `.scenario_structure_bsp` (sbsp) tag file. Other tag groups are rejected. |
+| `<FILE>` | Path to a `.scenario` (scnr) tag file. Other tag groups are rejected — extraction routes through the scenario so each BSP can be paired with its `scenario_structure_lighting_info`. |
 
 | Long | Description |
 |-|-|
 | `--output <DIR>` | Output root directory (default: current directory). |
-| `--flat` | Emit `<DIR>/<stem>.ass` in a single dir instead of the nested `<DIR>/<stem>/structure/<stem>.ASS` source-tree layout. |
+| `--flat` | Emit `<DIR>/<scenario_stem>.<bsp_stem>.ass` per BSP in a single dir instead of the nested `<DIR>/<scenario_stem>/structure/<bsp_stem>.ASS` source-tree layout. |
 
-Reconstructs an ASS file (Bungie Amalgam, version 7 — H3's static-scene authoring format, the level-geometry counterpart to JMS) from the BSP's inline cluster geometry.
+Walks `scenario.structure_bsps[]` and reconstructs one ASS file (Bungie Amalgam, version 7 — H3's static-scene authoring format, the level-geometry counterpart to JMS) per entry, pairing each `scenario_structure_bsp` with its `scenario_structure_lighting_info`.
 
 Default layout (re-importable as artist source):
 ```
-<DIR>/<stem>/structure/<stem>.ASS
+<DIR>/<scenario_stem>/structure/<bsp_stem>.ASS
 ```
 
-Sections emitted:
+Sections emitted (per BSP):
 - **HEADER** — version 7 + tool/user/machine placeholders
-- **MATERIALS** — one per `materials[]` entry on the sbsp, with `BM_FLAGS` / `BM_LMRES` (real lightmap-resolution from the material `properties[type=0]`) plus `BM_LIGHTING_BASIC` / `_ATTEN` / `_FRUS` strings layered in for emissive materials from the paired `.scenario_structure_lighting_info`
-- **OBJECTS** — cluster MESHes (one per `clusters[]`), per-IGD-def MESHes (one per `instanced geometries definitions[]`, each in its own per-definition compression bounds), `+portal_N` MESHes (one per cluster portal, fan-triangulated), `+weather_N` MESHes (convex hull of the polyhedron plane set), `@CollideOnly` MESH (merged structure collision BSP), SPHERE primitives for sbsp markers (matching the `frame construct` convention), GENERIC_LIGHT (SPOT/DIRECT/OMNI/AMBIENT) entries from the `.stli` definitions, and xref-only OBJECTs for `environment_objects[]` palette entries
-- **INSTANCES** — Scene Root parent (object_index = -1), one identity-transform instance per cluster, one instance per `instanced geometry instances[]` placement (3-vec3 rotation matrix → quaternion, position × 100, uniform scale), one instance per portal / weather polyhedron / marker / collision BSP / environment_object placement, and one instance per stli `generic_light_instances[]` entry (forward+up → quat, position × 100)
+- **MATERIALS** — one per `materials[]` entry on the sbsp, with `BM_FLAGS` / `BM_LMRES` (real lightmap-resolution from the material `properties[type=0]`) plus `BM_LIGHTING_BASIC` / `_ATTEN` / `_FRUS` strings layered in for emissive materials from the paired `.stli`. Auto-appended `+portal` / `+weather` / `@collision_only` marker materials so Tool.exe re-extracts the recompile-only categories back into their proper tag blocks.
+- **OBJECTS** — cluster MESHes (one per `clusters[]`), per-IGD-def MESHes (one per `instanced geometries definitions[]`, content-deduped, each in its own per-definition compression bounds), `+portal_N` MESHes (one per cluster portal, fan-triangulated), `+weather_N` MESHes (convex hull recovered from the polyhedron plane set), `@CollideOnly` MESH (merged structure collision BSP via the same edge-ring walker as `extract-jms`), SPHERE primitives for sbsp markers (matching the H3 source-tree `frame construct` convention), GENERIC_LIGHT (SPOT/DIRECT/OMNI/AMBIENT) entries from the `.stli` definitions, and xref-only OBJECTs for `environment_objects[]` palette entries.
+- **INSTANCES** — Scene Root parent (object_index = -1), one identity-transform instance per cluster, one instance per `instanced geometry instances[]` placement (3-vec3 rotation matrix → quaternion, position × 100 cm, uniform scale), one instance per portal / weather polyhedron / marker / collision BSP / environment_object placement, and one instance per stli `generic_light_instances[]` entry (forward+up → quat, position × 100 cm).
 
 Validated across 147 / 147 BSPs across 49 H3 scenarios — every BSP produces a clean ASS file. Source ASS files have a different mesh granularity (artist-named meshes vs our cluster aggregates); that's compile-time information the tag doesn't carry.
 
 ```sh
-$ blam-tag-shell extract-ass construct.scenario_structure_bsp --output extracted/
-extracted/construct/structure/construct.ASS: 94 mats, 147 objects, 557 instances, 87992 verts, 56316 tris
+$ blam-tag-shell extract-ass levels/multi/construct/construct.scenario --output extracted/
+extracted/construct/structure/construct.ASS: [bsp0] 97 mats, 203 objects (14 lights), 687 instances, 111617 verts, 67625 tris
 ```
 
 ---

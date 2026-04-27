@@ -270,7 +270,7 @@ impl<'a> Animation<'a> {
                 Some(a) => a,
                 None => continue,
             };
-            let name = read_string_id(&anim, "name");
+            let name = anim.read_string_id("name");
 
             // Reach moved most per-animation codec metadata into a
             // nested `shared animation data[0]` block. H3-era tags keep
@@ -286,14 +286,14 @@ impl<'a> Animation<'a> {
 
             // Older layouts (e.g. mongoose, version ~4601) call this
             // field `type`; newer ones name it `animation type`.
-            let animation_type = read_enum_name(&metadata, "animation type")
-                .or_else(|| read_enum_name(&metadata, "type"));
-            let frame_info_type = read_enum_name(&metadata, "frame info type");
-            let frame_count = read_i16(&metadata, "frame count").unwrap_or(0);
-            let node_count = read_i8(&metadata, "node count").unwrap_or(0);
-            let node_list_checksum = read_i32(&metadata, "node list checksum").unwrap_or(0);
-            let resource_group = read_i16(&metadata, "resource_group").unwrap_or(-1);
-            let resource_group_member = read_i16(&metadata, "resource_group_member").unwrap_or(-1);
+            let animation_type = metadata.read_enum_name("animation type")
+                .or_else(|| metadata.read_enum_name("type"));
+            let frame_info_type = metadata.read_enum_name("frame info type");
+            let frame_count = metadata.read_int_any("frame count").unwrap_or(0) as i16;
+            let node_count = metadata.read_int_any("node count").unwrap_or(0) as i8;
+            let node_list_checksum = metadata.read_int_any("node list checksum").unwrap_or(0) as i32;
+            let resource_group = metadata.read_int_any("resource_group").unwrap_or(-1) as i16;
+            let resource_group_member = metadata.read_int_any("resource_group_member").unwrap_or(-1) as i16;
 
             let (mut checksum, mut codec_frame_count, mut movement_type, mut data_sizes, mut codec_byte, mut blob) =
                 resolve_member(&group_member_table, resource_group, resource_group_member);
@@ -312,7 +312,7 @@ impl<'a> Animation<'a> {
                     movement_type = frame_info_type.clone();
                 }
                 if checksum.is_none() {
-                    checksum = read_i32(&metadata, "production checksum");
+                    checksum = metadata.read_int_any("production checksum").map(|v| v as i32);
                 }
                 if codec_frame_count.is_none() {
                     codec_frame_count = Some(frame_count);
@@ -402,9 +402,9 @@ fn resolve_member<'a>(
         return (None, None, None, None, None, &[]);
     };
 
-    let checksum = read_i32(member, "animation_checksum");
-    let codec_frame_count = read_i16(member, "frame count");
-    let movement_type = read_enum_name(member, "movement_data_type");
+    let checksum = member.read_int_any("animation_checksum").map(|v| v as i32);
+    let codec_frame_count = member.read_int_any("frame count").map(|v| v as i16);
+    let movement_type = member.read_enum_name("movement_data_type");
     let data_sizes = read_packed_data_sizes(member);
     let blob = member.field("animation_data").and_then(|f| f.as_data()).unwrap_or(&[]);
     let codec_byte = blob.first().copied();
@@ -425,63 +425,11 @@ fn read_packed_data_sizes(member: &TagStruct<'_>) -> Option<PackedDataSizes> {
     let mut fields = Vec::new();
     for f in s.fields() {
         let name = f.name().to_string();
-        if let Some(v) = read_int_any(&s, &name) {
+        if let Some(v) = s.read_int_any(&name) {
             fields.push((name, v));
         }
     }
     Some(PackedDataSizes { fields })
-}
-
-/// Read any integer field as i64 — accepts char/short/long widths
-/// since `data sizes` field widths differ between engines (H3 uses
-/// mixed i8/i16/i32; Reach widens everything to i32).
-fn read_int_any(s: &TagStruct<'_>, name: &str) -> Option<i64> {
-    match s.field(name)?.value()? {
-        TagFieldData::CharInteger(v) => Some(v as i64),
-        TagFieldData::ShortInteger(v) => Some(v as i64),
-        TagFieldData::LongInteger(v) => Some(v as i64),
-        TagFieldData::Int64Integer(v) => Some(v),
-        _ => None,
-    }
-}
-
-fn read_string_id(s: &TagStruct<'_>, name: &str) -> Option<String> {
-    match s.field(name)?.value()? {
-        TagFieldData::StringId(sid) | TagFieldData::OldStringId(sid) => {
-            Some(sid.string).filter(|s| !s.is_empty())
-        }
-        _ => None,
-    }
-}
-
-fn read_enum_name(s: &TagStruct<'_>, name: &str) -> Option<String> {
-    match s.field(name)?.value()? {
-        TagFieldData::CharEnum { name, .. } => name,
-        TagFieldData::ShortEnum { name, .. } => name,
-        TagFieldData::LongEnum { name, .. } => name,
-        _ => None,
-    }
-}
-
-fn read_i8(s: &TagStruct<'_>, name: &str) -> Option<i8> {
-    match s.field(name)?.value()? {
-        TagFieldData::CharInteger(v) => Some(v),
-        _ => None,
-    }
-}
-
-fn read_i16(s: &TagStruct<'_>, name: &str) -> Option<i16> {
-    match s.field(name)?.value()? {
-        TagFieldData::ShortInteger(v) => Some(v),
-        _ => None,
-    }
-}
-
-fn read_i32(s: &TagStruct<'_>, name: &str) -> Option<i32> {
-    match s.field(name)?.value()? {
-        TagFieldData::LongInteger(v) => Some(v),
-        _ => None,
-    }
 }
 
 // ---------------------------------------------------------------------
@@ -1991,10 +1939,10 @@ impl Skeleton {
                 let mut nodes = Vec::with_capacity(block.len());
                 for i in 0..block.len() {
                     let Some(elem) = block.element(i) else { continue };
-                    let name = read_string_id(&elem, "name").unwrap_or_default();
-                    let first_child = read_block_index(&elem, "first child node index");
-                    let next_sibling = read_block_index(&elem, "next sibling node index");
-                    let parent = read_block_index(&elem, "parent node index");
+                    let name = elem.read_string_id("name").unwrap_or_default();
+                    let first_child = elem.read_block_index("first child node index");
+                    let next_sibling = elem.read_block_index("next sibling node index");
+                    let parent = elem.read_block_index("parent node index");
                     nodes.push(SkeletonNode { name, first_child, next_sibling, parent });
                 }
                 return Self { nodes };
@@ -2008,15 +1956,6 @@ impl Skeleton {
 
     /// `true` when the tag has no skeleton nodes (e.g. inheriting jmads).
     pub fn is_empty(&self) -> bool { self.nodes.is_empty() }
-}
-
-fn read_block_index(s: &TagStruct<'_>, name: &str) -> i16 {
-    match s.field(name).and_then(|f| f.value()) {
-        Some(TagFieldData::CharBlockIndex(v)) => v as i16,
-        Some(TagFieldData::ShortBlockIndex(v)) => v,
-        Some(TagFieldData::LongBlockIndex(v)) => v as i16,
-        _ => -1,
-    }
 }
 
 /// One bone's transform at one frame — the unit JMA writes per

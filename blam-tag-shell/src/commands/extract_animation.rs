@@ -25,9 +25,14 @@ use blam_tags::{Animation, AnimationGroup, JmaKind, Skeleton};
 
 use crate::context::CliContext;
 
+/// Output format selector for [`run`]. `Jma` writes a JMA-family
+/// text file (kind picked from the animation's metadata); `Json`
+/// dumps the decoded transforms for diagnostics.
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum Format {
+    /// Bungie JMA-family text (`.JMM` / `.JMA` / `.JMT` / …).
     Jma,
+    /// JSON dump of decoded static + animated tracks.
     Json,
 }
 

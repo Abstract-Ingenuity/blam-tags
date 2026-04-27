@@ -17,6 +17,9 @@ use anyhow::{Context, Result};
 use blam_tags::parse_group_tag;
 use serde_json::Value;
 
+/// Bidirectional `group_tag` ↔ group-name map. Built once at command
+/// start from `definitions/<game>/_meta.json` and stashed on the
+/// [`crate::context::CliContext`].
 #[derive(Debug, Default)]
 pub struct TagIndex {
     name_for_group_tag: BTreeMap<u32, String>,

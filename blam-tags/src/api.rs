@@ -257,6 +257,136 @@ impl<'a> TagStruct<'a> {
         })
     }
 
+    // ---- typed field readers ----
+    //
+    // Convenience accessors for the common "look up a field by name,
+    // pattern-match its value to a typed shape" pattern. Walkers in
+    // jms / ass / animation / bitmap reach for these constantly.
+
+    /// Read any integer-shaped field as `i64`. Accepts the 16
+    /// integer-like `TagFieldData` variants (regular ints, block
+    /// indices, custom block indices, enums, flags). Returns `None`
+    /// if the field is missing or not integer-shaped.
+    pub fn read_int_any(&self, name: &str) -> Option<i64> {
+        match self.field(name)?.value()? {
+            TagFieldData::CharInteger(v) => Some(v as i64),
+            TagFieldData::ShortInteger(v) => Some(v as i64),
+            TagFieldData::LongInteger(v) => Some(v as i64),
+            TagFieldData::Int64Integer(v) => Some(v),
+            TagFieldData::CharBlockIndex(v) => Some(v as i64),
+            TagFieldData::ShortBlockIndex(v) => Some(v as i64),
+            TagFieldData::LongBlockIndex(v) => Some(v as i64),
+            TagFieldData::CustomCharBlockIndex(v) => Some(v as i64),
+            TagFieldData::CustomShortBlockIndex(v) => Some(v as i64),
+            TagFieldData::CustomLongBlockIndex(v) => Some(v as i64),
+            TagFieldData::CharEnum { value, .. } => Some(value as i64),
+            TagFieldData::ShortEnum { value, .. } => Some(value as i64),
+            TagFieldData::LongEnum { value, .. } => Some(value as i64),
+            TagFieldData::ByteFlags { value, .. } => Some(value as i64),
+            TagFieldData::WordFlags { value, .. } => Some(value as i64),
+            TagFieldData::LongFlags { value, .. } => Some(value as i64),
+            _ => None,
+        }
+    }
+
+    /// Read a real-shaped field as `f32`. Accepts `Real`,
+    /// `RealFraction`, and `Angle`.
+    pub fn read_real(&self, name: &str) -> Option<f32> {
+        match self.field(name)?.value()? {
+            TagFieldData::Real(r) => Some(r),
+            TagFieldData::RealFraction(r) => Some(r),
+            TagFieldData::Angle(r) => Some(r),
+            _ => None,
+        }
+    }
+
+    /// Read a `string_id` (or legacy `old_string_id`) field's resolved
+    /// string. Returns `None` for missing fields, non-string-id values,
+    /// or empty strings.
+    pub fn read_string_id(&self, name: &str) -> Option<String> {
+        match self.field(name)?.value()? {
+            TagFieldData::StringId(sid) | TagFieldData::OldStringId(sid) =>
+                Some(sid.string).filter(|s| !s.is_empty()),
+            _ => None,
+        }
+    }
+
+    /// Read an enum field's resolved variant name regardless of width
+    /// (`char_enum` / `short_enum` / `long_enum` all map the same way).
+    pub fn read_enum_name(&self, name: &str) -> Option<String> {
+        match self.field(name)?.value()? {
+            TagFieldData::CharEnum { name, .. } => name,
+            TagFieldData::ShortEnum { name, .. } => name,
+            TagFieldData::LongEnum { name, .. } => name,
+            _ => None,
+        }
+    }
+
+    /// Read a `tag_reference` field's relative path. Returns `None`
+    /// for missing fields, non-reference values, or null/empty refs.
+    pub fn read_tag_ref_path(&self, name: &str) -> Option<String> {
+        match self.field(name)?.value()? {
+            TagFieldData::TagReference(r) => r.group_tag_and_name.map(|(_, p)| p),
+            _ => None,
+        }
+    }
+
+    /// Read a `real_quaternion` field as `[i, j, k, w]`. Returns the
+    /// identity quaternion `[0, 0, 0, 1]` for missing or non-quat
+    /// fields — convenient default for walkers that always want a
+    /// usable rotation.
+    pub fn read_quat(&self, name: &str) -> [f32; 4] {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealQuaternion(q)) => [q.i, q.j, q.k, q.w],
+            _ => [0.0, 0.0, 0.0, 1.0],
+        }
+    }
+
+    /// Read a `real_point_3d` (or `real_vector_3d`) field as `[x, y, z]`.
+    /// Returns `[0, 0, 0]` for missing or wrong-typed fields.
+    pub fn read_point3d(&self, name: &str) -> [f32; 3] {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealPoint3d(p)) => [p.x, p.y, p.z],
+            Some(TagFieldData::RealVector3d(v)) => [v.i, v.j, v.k],
+            _ => [0.0; 3],
+        }
+    }
+
+    /// Read a `real_vector_3d` (or `real_point_3d`) field as
+    /// `[i, j, k]`. Returns `[0, 0, 0]` for missing or wrong-typed
+    /// fields.
+    pub fn read_vec3(&self, name: &str) -> [f32; 3] {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealVector3d(v)) => [v.i, v.j, v.k],
+            Some(TagFieldData::RealPoint3d(p)) => [p.x, p.y, p.z],
+            _ => [0.0; 3],
+        }
+    }
+
+    /// Read a `real_rgb_color` field as `[r, g, b]`. Returns
+    /// `[0, 0, 0]` for missing or wrong-typed fields.
+    pub fn read_rgb(&self, name: &str) -> [f32; 3] {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealRgbColor(c)) => [c.red, c.green, c.blue],
+            _ => [0.0; 3],
+        }
+    }
+
+    /// Read a `real_bounds` field as `(lower, upper)`. Returns
+    /// `(0, 0)` for missing or wrong-typed fields.
+    pub fn read_real_bounds(&self, name: &str) -> (f32, f32) {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealBounds(b)) => (b.lower, b.upper),
+            _ => (0.0, 0.0),
+        }
+    }
+
+    /// Read a block-index field as `i16` with `-1` (none) default.
+    /// Convenience for walkers that treat all block-index widths as
+    /// 16-bit "index or sentinel."
+    pub fn read_block_index(&self, name: &str) -> i16 {
+        self.read_int_any(name).map(|v| v as i16).unwrap_or(-1)
+    }
 }
 
 /// A resolved field within a [`TagStruct`]. Carries the field's

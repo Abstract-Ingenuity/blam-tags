@@ -45,15 +45,30 @@ use crate::layout::{
     TagLayout, TagLayoutHeader, TagResourceLayout, TagStringList, TagStructLayout,
 };
 
+/// Schema-import failures from [`TagLayout::from_json`]. Distinct
+/// from [`crate::error::TagReadError`], which covers binary-read
+/// failures.
 #[derive(Debug)]
 pub enum TagSchemaError {
+    /// Filesystem error reading a schema JSON.
     Io(std::io::Error),
+    /// Malformed JSON.
     Json(serde_json::Error),
+    /// A reference to a sibling struct/array/resource definition by
+    /// name didn't resolve.
     UnknownReference { kind: &'static str, name: String },
+    /// A field's `definition` slot didn't match its type's expected
+    /// shape (e.g. a struct field pointing at a missing struct name).
     BadFieldDefinition { field: String, ty: String },
+    /// The schema named a field type the library doesn't model.
     UnknownFieldType(String),
+    /// Guid string wasn't a valid 32-char hex sequence.
     BadGuid(String),
+    /// Group tag string wasn't 1–4 ASCII chars.
     BadGroupTag(String),
+    /// The walker computed a struct size that disagreed with the
+    /// schema's declared size — caught early since downstream readers
+    /// rely on the size for offset math.
     StructSizeMismatch { name: String, schema: u32, computed: usize },
 }
 

@@ -41,8 +41,7 @@ use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::geometry::{
     quat_from_basis_columns, read_compression_bounds_at,
-    read_int_any, read_point3d, read_quat, read_real, read_string_id, read_tag_ref_path,
-    vec3_cross, CompressionBounds, SCALE,
+    vec3_cross, vec3_normalize, CompressionBounds, SCALE,
 };
 
 // SCALE constant lives in crate::geometry (re-exported above).
@@ -72,8 +71,12 @@ impl From<io::Error> for AssError {
 /// ASS material entry. The `lightmap_variant` is the artist-assigned
 /// lightmap-resolution group label (e.g. `"lm5"`); we leave it empty
 /// since the tag doesn't carry it. `bm_strings` are the per-material
-/// metadata lines (BM_FLAGS / BM_LMRES / BM_LIGHTING_*) — we emit
-/// placeholder zeros for now.
+/// metadata lines: every material gets a `BM_FLAGS` placeholder + a
+/// real `BM_LMRES` line carrying the lightmap resolution from the
+/// sbsp material's `properties[type=0]`. Emissive materials gain
+/// `BM_LIGHTING_BASIC` / `_ATTEN` / `_FRUS` lines layered on by
+/// [`AssFile::add_lights_from_stli`] from the paired stli's
+/// `material info[i]` block.
 #[derive(Debug, Clone)]
 pub struct AssMaterial {
     pub name: String,
@@ -148,6 +151,8 @@ pub struct AssLight {
     pub aspect: f32,
 }
 
+/// `GENERIC_LIGHT` sub-class — written verbatim as the OBJECT's
+/// class line in the ASS file (`SPOT_LGT` / `DIRECT_LGT` / etc).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AssLightKind {
     SpotLgt,
@@ -252,20 +257,54 @@ pub struct AssFile {
 
 impl AssFile {
     /// Walk a parsed `scenario_structure_bsp` tag and reconstruct an
-    /// ASS scene. Emits:
-    /// - one MESH OBJECT per cluster (anchored at world origin via
-    ///   one identity-transform INSTANCE each)
-    /// - one MESH OBJECT per `instanced geometries definitions[]`
-    ///   entry (definition-local space — no transform baked in)
-    /// - one INSTANCE per `instanced geometry instances[]` placement,
-    ///   pointing at its definition's object with the per-instance
-    ///   transform (3-vec3 forward/left/up rotation matrix → quat,
-    ///   scaled position, uniform scale)
+    /// ASS scene. Returns a complete `AssFile` ready for [`Self::write`]
+    /// — call [`Self::add_lights_from_stli`] afterwards to layer in
+    /// real lighting from the paired stli tag.
     ///
-    /// Reuses the JMS module's bounds-decompression / strip-to-list
-    /// helpers — sbsp `render geometry` is structurally identical to
-    /// render_model's. Each instanced definition has its own
-    /// `compression index` (vs cluster geometry's shared `[0]`).
+    /// OBJECTs emitted:
+    /// - one MESH per cluster (vertices already in world units, no
+    ///   compression bounds applied)
+    /// - one MESH per `instanced geometries definitions[]` entry
+    ///   (definition-local space, decompressed against the def's own
+    ///   `compression index`; content-deduped so byte-identical defs
+    ///   collapse to one shared OBJECT)
+    /// - one MESH per cluster portal (`+portal_N` name, fan-triangulated
+    ///   from `cluster portals[i].vertices`)
+    /// - one MESH per weather polyhedron (`+weather_N` name, convex hull
+    ///   recovered via triple-plane intersection of the polyhedron's
+    ///   bounding planes)
+    /// - one MESH for the structure collision BSP (`@CollideOnly`
+    ///   instance over an `@collision_only` material — surfaces walked
+    ///   via the shared edge-ring algorithm in [`crate::geometry`])
+    /// - one SPHERE per sbsp marker (matching the H3 source-tree
+    ///   `frame construct` convention; marker name is carried on the
+    ///   per-instance INSTANCE record, not the OBJECT)
+    /// - one xref-only OBJECT per `environment_object_palette[]` entry
+    ///
+    /// INSTANCEs emitted:
+    /// - INSTANCE 0 is always "Scene Root" (`object_index = -1`); every
+    ///   subsequent record uses it as the parent
+    /// - one identity-transform INSTANCE per cluster MESH
+    /// - one INSTANCE per `instanced geometry instances[]` placement
+    ///   with the per-placement transform (3-vec3 forward/left/up
+    ///   rotation matrix → quaternion, position × 100 cm, uniform scale)
+    /// - one INSTANCE per portal / weather polyhedron / collision BSP
+    /// - one INSTANCE per sbsp marker (rotation+position from the tag,
+    ///   parented to Scene Root)
+    /// - one INSTANCE per `environment_objects[]` placement (xref to the
+    ///   palette OBJECT, transform from the placement)
+    ///
+    /// Materials gain `+portal` / `+weather` / `@collision_only` marker
+    /// entries on demand so Tool.exe re-extracts each recompile-only
+    /// category back into its proper tag block.
+    ///
+    /// sbsp `render geometry` is structurally identical to render_model's,
+    /// so the per-mesh data path reuses the shared [`crate::geometry`]
+    /// helpers (`CompressionBounds`, generic field readers, BSP edge-ring
+    /// walker). The triangle-strip → list converter [`crate::geometry`]
+    /// also exposes is *not* used here — H3 sbsp meshes are always
+    /// triangle lists despite some carrying a misleading `index buffer
+    /// type = triangle strip` enum value.
     pub fn from_scenario_structure_bsp(tag: &TagFile) -> Result<Self, AssError> {
         let root = tag.root();
         let materials = read_materials(&root)?;
@@ -276,8 +315,6 @@ impl AssFile {
             .ok_or(AssError::MissingField("render geometry/meshes"))?;
         let pmt = root.field_path("render geometry/per mesh temporary").and_then(|f| f.as_block())
             .ok_or(AssError::MissingField("render geometry/per mesh temporary"))?;
-        let compression_count = root.field_path("render geometry/compression info")
-            .and_then(|f| f.as_block()).map(|b| b.len()).unwrap_or(0);
 
         let mut objects: Vec<AssObject> = Vec::new();
         let mut instances: Vec<AssInstance> = Vec::new();
@@ -304,15 +341,16 @@ impl AssFile {
 
         // Clusters → MESH OBJECTs at origin.
         // Per the H3 sbsp partitioning rule (verified empirically by
-        // the H3 Blender Toolset's `_mesh_decoder.py`):
-        // `mesh_index >= compression_info.count` is a CLUSTER mesh,
-        // whose vertices are already in world units — no compression
-        // bounds applied (use identity). The bounds-compressed path
-        // is for instanced geometry (handled below).
+        // the H3 Blender Toolset's `_mesh_decoder.py`): a mesh whose
+        // index is >= `render geometry/compression info` count is a
+        // CLUSTER mesh, vertices already in world units — no
+        // compression bounds applied (identity). The bounds-compressed
+        // path is for instanced geometries (handled below, where each
+        // def carries its own `compression index`).
         let cluster_bounds = CompressionBounds::identity();
         for ci in 0..clusters.len() {
             let cluster = clusters.element(ci).unwrap();
-            let mesh_idx = read_int_any(&cluster, "mesh index").unwrap_or(-1);
+            let mesh_idx = cluster.read_int_any("mesh index").unwrap_or(-1);
             if mesh_idx < 0 || (mesh_idx as usize) >= meshes.len() { continue; }
             let mesh = meshes.element(mesh_idx as usize).unwrap();
             if (mesh_idx as usize) >= pmt.len() { continue; }
@@ -330,8 +368,6 @@ impl AssFile {
                 ..Default::default()
             });
         }
-        let _ = compression_count; // partitioning hint, used implicitly below
-
         // From here on, materials may grow as we encounter
         // recompile-only categories (portals, weather, collision)
         // that need their own `+portal` / `+weather` / `@collision`
@@ -355,7 +391,7 @@ impl AssFile {
                 let mut verts: Vec<AssVertex> = Vec::with_capacity(verts_block.len());
                 for vi in 0..verts_block.len() {
                     let pe = verts_block.element(vi).unwrap();
-                    let p = read_point3d(&pe, "point");
+                    let p = pe.read_point3d("point");
                     verts.push(AssVertex {
                         position: [p[0] * SCALE, p[1] * SCALE, p[2] * SCALE],
                         normal: [0.0, 0.0, 1.0],
@@ -409,8 +445,8 @@ impl AssFile {
             let mut content_to_object_index: std::collections::HashMap<Vec<u8>, i32> = std::collections::HashMap::new();
             for di in 0..defs.len() {
                 let def = defs.element(di).unwrap();
-                let mesh_idx = read_int_any(&def, "mesh index").unwrap_or(-1);
-                let comp_idx = read_int_any(&def, "compression index").unwrap_or(0).max(0) as usize;
+                let mesh_idx = def.read_int_any("mesh index").unwrap_or(-1);
+                let comp_idx = def.read_int_any("compression index").unwrap_or(0).max(0) as usize;
                 if mesh_idx < 0 || (mesh_idx as usize) >= meshes.len() { continue; }
                 if (mesh_idx as usize) >= pmt.len() { continue; }
                 let bounds = read_compression_bounds_at(&root, comp_idx);
@@ -442,16 +478,16 @@ impl AssFile {
             // 3-vec3-rotation + position + scale transform.
             for ii in 0..inst_block.len() {
                 let inst = inst_block.element(ii).unwrap();
-                let def_idx = read_int_any(&inst, "instance definition").unwrap_or(-1);
+                let def_idx = inst.read_int_any("instance definition").unwrap_or(-1);
                 if def_idx < 0 || (def_idx as usize) >= def_object_index.len() { continue; }
                 let Some(object_index) = def_object_index[def_idx as usize] else { continue; };
-                let scale = read_real(&inst, "scale").unwrap_or(1.0);
-                let f = read_point3d(&inst, "forward");
-                let l = read_point3d(&inst, "left");
-                let u = read_point3d(&inst, "up");
-                let p = read_point3d(&inst, "position");
+                let scale = inst.read_real("scale").unwrap_or(1.0);
+                let f = inst.read_point3d("forward");
+                let l = inst.read_point3d("left");
+                let u = inst.read_point3d("up");
+                let p = inst.read_point3d("position");
                 let rot = quat_from_basis_columns(f, l, u);
-                let name = read_string_id(&inst, "name").unwrap_or_else(|| format!("instance_{ii}"));
+                let name = inst.read_string_id("name").unwrap_or_else(|| format!("instance_{ii}"));
                 instances.push(AssInstance {
                     object_index,
                     name,
@@ -519,9 +555,9 @@ impl AssFile {
         if let Some(markers_block) = root.field_path("markers").and_then(|f| f.as_block()) {
             for mi in 0..markers_block.len() {
                 let m = markers_block.element(mi).unwrap();
-                let name = read_string_id(&m, "name").unwrap_or_else(|| format!("marker_{mi}"));
-                let pos = read_point3d(&m, "position");
-                let rot = read_quat(&m, "rotation");
+                let name = m.read_string_id("name").unwrap_or_else(|| format!("marker_{mi}"));
+                let pos = m.read_point3d("position");
+                let rot = m.read_quat("rotation");
                 let object_index = objects.len() as i32;
                 objects.push(AssObject {
                     xref_filepath: String::new(),
@@ -559,7 +595,7 @@ impl AssFile {
             let mut palette_object_index: Vec<Option<i32>> = vec![None; ep.len()];
             for pi in 0..ep.len() {
                 let pal = ep.element(pi).unwrap();
-                let xref = read_tag_ref_path(&pal, "object").unwrap_or_default();
+                let xref = pal.read_tag_ref_path("object").unwrap_or_default();
                 if xref.is_empty() { continue; }
                 let xref_name = Path::new(&xref.replace('\\', "/"))
                     .file_stem().and_then(|s| s.to_str()).unwrap_or("env_object").to_owned();
@@ -572,13 +608,13 @@ impl AssFile {
             }
             for ei in 0..eo.len() {
                 let placement = eo.element(ei).unwrap();
-                let pi = read_int_any(&placement, "palette index").unwrap_or(-1);
+                let pi = placement.read_int_any("palette index").unwrap_or(-1);
                 if pi < 0 || (pi as usize) >= palette_object_index.len() { continue; }
                 let Some(object_index) = palette_object_index[pi as usize] else { continue; };
-                let pos = read_point3d(&placement, "position");
-                let rot = read_quat(&placement, "rotation");
-                let scale = read_real(&placement, "scale").unwrap_or(1.0);
-                let name = read_string_id(&placement, "name").unwrap_or_else(|| format!("env_object_{ei}"));
+                let pos = placement.read_point3d("position");
+                let rot = placement.read_quat("rotation");
+                let scale = placement.read_real("scale").unwrap_or(1.0);
+                let name = placement.read_string_id("name").unwrap_or_else(|| format!("env_object_{ei}"));
                 instances.push(AssInstance {
                     object_index,
                     name,
@@ -619,21 +655,21 @@ impl AssFile {
                 let edge_cache: Vec<crate::geometry::EdgeRow> = (0..edges.len()).map(|k| {
                     let e = edges.element(k).unwrap();
                     crate::geometry::EdgeRow {
-                        start_vertex: read_int_any(&e, "start vertex").unwrap_or(-1) as i32,
-                        end_vertex: read_int_any(&e, "end vertex").unwrap_or(-1) as i32,
-                        forward_edge: read_int_any(&e, "forward edge").unwrap_or(-1) as i32,
-                        reverse_edge: read_int_any(&e, "reverse edge").unwrap_or(-1) as i32,
-                        left_surface: read_int_any(&e, "left surface").unwrap_or(-1) as i32,
-                        right_surface: read_int_any(&e, "right surface").unwrap_or(-1) as i32,
+                        start_vertex: e.read_int_any("start vertex").unwrap_or(-1) as i32,
+                        end_vertex: e.read_int_any("end vertex").unwrap_or(-1) as i32,
+                        forward_edge: e.read_int_any("forward edge").unwrap_or(-1) as i32,
+                        reverse_edge: e.read_int_any("reverse edge").unwrap_or(-1) as i32,
+                        left_surface: e.read_int_any("left surface").unwrap_or(-1) as i32,
+                        right_surface: e.read_int_any("right surface").unwrap_or(-1) as i32,
                     }
                 }).collect();
                 let bsp_points: Vec<[f32; 3]> = (0..bsp_verts.len()).map(|k| {
-                    let p = read_point3d(&bsp_verts.element(k).unwrap(), "point");
+                    let p = bsp_verts.element(k).unwrap().read_point3d("point");
                     [p[0] * SCALE, p[1] * SCALE, p[2] * SCALE]
                 }).collect();
                 for si in 0..surfaces.len() {
                     let surface = surfaces.element(si).unwrap();
-                    let first_edge = read_int_any(&surface, "first edge").unwrap_or(-1) as i32;
+                    let first_edge = surface.read_int_any("first edge").unwrap_or(-1) as i32;
                     if first_edge < 0 { continue; }
                     let polygon = crate::geometry::walk_surface_ring(si as i32, first_edge, &edge_cache);
                     if polygon.len() < 3 { continue; }
@@ -821,22 +857,22 @@ impl AssFile {
             for i in 0..mi_block.len() {
                 if i >= self.materials.len() { break; }
                 let mi = mi_block.element(i).unwrap();
-                let power = read_real(&mi, "emissive power").unwrap_or(0.0);
+                let power = mi.read_real("emissive power").unwrap_or(0.0);
                 if power <= 0.0 { continue; }
-                let color = read_rgb(&mi, "emissive color");
-                let quality = read_real(&mi, "emissive quality").unwrap_or(0.0);
-                let focus = read_real(&mi, "emissive focus").unwrap_or(0.0);
-                let mat_flags = read_int_any(&mi, "flags").unwrap_or(0);
+                let color = mi.read_rgb("emissive color");
+                let quality = mi.read_real("emissive quality").unwrap_or(0.0);
+                let focus = mi.read_real("emissive focus").unwrap_or(0.0);
+                let mat_flags = mi.read_int_any("flags").unwrap_or(0);
                 let attenuation_enabled = (mat_flags & 0x0001) != 0;
-                let atten_falloff = read_real(&mi, "attenuation falloff").unwrap_or(0.0);
-                let atten_cutoff = read_real(&mi, "attenuation cutoff").unwrap_or(0.0);
-                let frustum_blend = read_real(&mi, "frustum blend").unwrap_or(0.0);
+                let atten_falloff = mi.read_real("attenuation falloff").unwrap_or(0.0);
+                let atten_cutoff = mi.read_real("attenuation cutoff").unwrap_or(0.0);
+                let frustum_blend = mi.read_real("frustum blend").unwrap_or(0.0);
                 // Frustum angles stored as `angle` (radians) but
                 // ASS writes degrees — mirror the cone-angle
                 // convention used for stli lights.
-                let frustum_falloff = read_real(&mi, "frustum falloff angle").unwrap_or(0.0).to_degrees();
-                let frustum_cutoff = read_real(&mi, "frustum cutoffoff angle")
-                    .or_else(|| read_real(&mi, "frustum cutoff angle"))
+                let frustum_falloff = mi.read_real("frustum falloff angle").unwrap_or(0.0).to_degrees();
+                let frustum_cutoff = mi.read_real("frustum cutoffoff angle")
+                    .or_else(|| mi.read_real("frustum cutoff angle"))
                     .unwrap_or(0.0).to_degrees();
                 self.materials[i].bm_strings.push(format!(
                     "BM_LIGHTING_BASIC {:.10} {:.10} {:.10} {:.10} {:.10} 0 {:.10}",
@@ -865,25 +901,25 @@ impl AssFile {
         let mut def_object_index: Vec<Option<i32>> = vec![None; defs.len()];
         for di in 0..defs.len() {
             let d = defs.element(di).unwrap();
-            let kind = match read_int_any(&d, "type").unwrap_or(0) {
+            let kind = match d.read_int_any("type").unwrap_or(0) {
                 0 => AssLightKind::OmniLgt,
                 1 => AssLightKind::SpotLgt,
                 2 => AssLightKind::DirectLgt,
                 3 => AssLightKind::AmbientLgt,
                 _ => AssLightKind::OmniLgt,
             };
-            let color = read_rgb(&d, "color");
-            let intensity = read_real(&d, "intensity").unwrap_or(0.0);
+            let color = d.read_rgb("color");
+            let intensity = d.read_real("intensity").unwrap_or(0.0);
             // Tag stores cone angles in radians; ASS writes degrees.
-            let hotspot_size = read_real(&d, "hotspot size").unwrap_or(0.0).to_degrees();
-            let hotspot_falloff = read_real(&d, "hotspot falloff size").unwrap_or(0.0).to_degrees();
-            let flags = read_int_any(&d, "flags").unwrap_or(0);
+            let hotspot_size = d.read_real("hotspot size").unwrap_or(0.0).to_degrees();
+            let hotspot_falloff = d.read_real("hotspot falloff size").unwrap_or(0.0).to_degrees();
+            let flags = d.read_int_any("flags").unwrap_or(0);
             let use_near = (flags & 0x0001) != 0;
             let use_far = (flags & 0x0002) != 0;
-            let (near_lo, near_hi) = read_real_bounds(&d, "near attenuation bounds");
-            let (far_lo, far_hi) = read_real_bounds(&d, "far attenuation bounds");
-            let shape = read_int_any(&d, "shape").unwrap_or(1) as i32;
-            let aspect = read_real(&d, "aspect").unwrap_or(1.0);
+            let (near_lo, near_hi) = d.read_real_bounds("near attenuation bounds");
+            let (far_lo, far_hi) = d.read_real_bounds("far attenuation bounds");
+            let shape = d.read_int_any("shape").unwrap_or(1) as i32;
+            let aspect = d.read_real("aspect").unwrap_or(1.0);
 
             let light = AssLight {
                 kind, color, intensity,
@@ -910,12 +946,12 @@ impl AssFile {
         // unit vectors, so cross is also unit (assuming orthonormal).
         for ii in 0..insts.len() {
             let inst = insts.element(ii).unwrap();
-            let def_idx = read_int_any(&inst, "definition index").unwrap_or(-1);
+            let def_idx = inst.read_int_any("definition index").unwrap_or(-1);
             if def_idx < 0 || (def_idx as usize) >= def_object_index.len() { continue; }
             let Some(object_index) = def_object_index[def_idx as usize] else { continue; };
-            let origin = read_point3d(&inst, "origin");
-            let forward = read_point3d(&inst, "forward");
-            let up = read_point3d(&inst, "up");
+            let origin = inst.read_point3d("origin");
+            let forward = inst.read_point3d("forward");
+            let up = inst.read_point3d("up");
             let left = vec3_cross(up, forward);
             let rot = quat_from_basis_columns(forward, left, up);
             self.instances.push(AssInstance {
@@ -945,7 +981,7 @@ fn read_materials(root: &TagStruct<'_>) -> Result<Vec<AssMaterial>, AssError> {
     let mut out = Vec::with_capacity(block.len());
     for i in 0..block.len() {
         let m = block.element(i).unwrap();
-        let path = read_tag_ref_path(&m, "render method").unwrap_or_default();
+        let path = m.read_tag_ref_path("render method").unwrap_or_default();
         let shader_name = Path::new(&path.replace('\\', "/"))
             .file_stem().and_then(|s| s.to_str()).unwrap_or("default").to_owned();
         // Walk per-material properties[] — type enum 0 carries the
@@ -956,9 +992,9 @@ fn read_materials(root: &TagStruct<'_>) -> Result<Vec<AssMaterial>, AssError> {
         if let Some(props) = m.field("properties").and_then(|f| f.as_block()) {
             for p in 0..props.len() {
                 let prop = props.element(p).unwrap();
-                let prop_type = read_int_any(&prop, "type").unwrap_or(-1);
+                let prop_type = prop.read_int_any("type").unwrap_or(-1);
                 if prop_type == 0 {
-                    if let Some(v) = read_real(&prop, "real-value") {
+                    if let Some(v) = prop.read_real("real-value") {
                         lightmap_res = v;
                     }
                 }
@@ -1005,16 +1041,16 @@ fn build_cluster_object(
 
     let indices: Vec<u16> = (0..raw_i.len())
         .filter_map(|k| raw_i.element(k))
-        .map(|e| read_int_any(&e, "word").unwrap_or(0) as u16)
+        .map(|e| e.read_int_any("word").unwrap_or(0) as u16)
         .collect();
 
-    // H3 sbsp meshes are ALWAYS triangle lists — the schema enum
-    // labels the type as "triangle strip" (value 5) on some meshes,
-    // but probing of Guardian confirms list interpretation scores
-    // 1.000 face-normal correlation while strip scores ~0.50
-    // (random). Hardcode list mode for sbsp; render_model still
-    // uses strips and lives in the JMS path unaffected.
-    let _ = mesh.field("index buffer type"); // intentionally unused
+    // H3 sbsp meshes are ALWAYS triangle lists — the schema's
+    // `index buffer type` enum labels some meshes as "triangle strip"
+    // (value 5), but probing of Guardian confirms list interpretation
+    // scores 1.000 face-normal correlation while strip scores ~0.50
+    // (random). We ignore the field and hardcode list mode for sbsp;
+    // render_model still uses strips and lives in the JMS path
+    // unaffected.
 
     // Walk subparts inside each part for index ranges. Each part
     // owns a contiguous (subpart_start, subpart_count) slice of the
@@ -1026,13 +1062,13 @@ fn build_cluster_object(
     let mut tri_pool: Vec<(i32, u16, u16, u16)> = Vec::new();
     for pi in 0..parts.len() {
         let part = parts.element(pi).unwrap();
-        let material_index = read_int_any(&part, "render method index").unwrap_or(0) as i32;
-        let sub_start = read_int_any(&part, "subpart start").unwrap_or(0);
-        let sub_count = read_int_any(&part, "subpart count").unwrap_or(0);
+        let material_index = part.read_int_any("render method index").unwrap_or(0) as i32;
+        let sub_start = part.read_int_any("subpart start").unwrap_or(0);
+        let sub_count = part.read_int_any("subpart count").unwrap_or(0);
         // Read the part's own (start, count) too as a fallback when
         // subparts isn't present or is empty for this part.
-        let part_start_i = read_int_any(&part, "index start").unwrap_or(0);
-        let part_count_i = read_int_any(&part, "index count").unwrap_or(0);
+        let part_start_i = part.read_int_any("index start").unwrap_or(0);
+        let part_count_i = part.read_int_any("index count").unwrap_or(0);
 
         let mut emit_range = |start_i: i64, count_i: i64| {
             if count_i <= 0 { return; }
@@ -1052,8 +1088,8 @@ fn build_cluster_object(
                     let si = sub_start as usize + sub_off;
                     if si >= sps.len() { break; }
                     let sp = sps.element(si).unwrap();
-                    let s = read_int_any(&sp, "index start").unwrap_or(0);
-                    let c = read_int_any(&sp, "index count").unwrap_or(0);
+                    let s = sp.read_int_any("index start").unwrap_or(0);
+                    let c = sp.read_int_any("index count").unwrap_or(0);
                     emit_range(s, c);
                 }
                 continue;
@@ -1108,10 +1144,10 @@ fn remap_vertex(
 }
 
 fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> AssVertex {
-    let raw_pos = read_point3d(v, "position");
+    let raw_pos = v.read_point3d("position");
     let pos = bounds.decompress_position(raw_pos);
     let position = [pos[0] * SCALE, pos[1] * SCALE, pos[2] * SCALE];
-    let normal = read_point3d(v, "normal");
+    let normal = v.read_point3d("normal");
     let raw_uv = match v.field("texcoord").and_then(|f| f.value()) {
         Some(TagFieldData::RealPoint2d(p)) => [p.x, p.y],
         _ => [0.0, 0.0],
@@ -1216,8 +1252,8 @@ fn polyhedron_from_planes(planes: &[[f32; 4]], material_index: i32) -> (Vec<AssV
         centroid[0] *= inv; centroid[1] *= inv; centroid[2] *= inv;
         // Pick any reference axis perpendicular to normal.
         let perp_seed = if normal[0].abs() < 0.9 { [1.0, 0.0, 0.0] } else { [0.0, 1.0, 0.0] };
-        let u_axis = normalize(cross(normal, perp_seed));
-        let v_axis = normalize(cross(normal, u_axis));
+        let u_axis = vec3_normalize(vec3_cross(normal, perp_seed));
+        let v_axis = vec3_normalize(vec3_cross(normal, u_axis));
         // Sort by angle.
         let mut with_angle: Vec<(f32, u32)> = on_plane.iter().map(|&vi| {
             let p = unique[vi as usize];
@@ -1264,15 +1300,6 @@ fn plane_triple_intersection(p1: [f32; 4], p2: [f32; 4], p3: [f32; 4]) -> Option
     Some([x, y, z])
 }
 
-fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0]]
-}
-
-fn normalize(v: [f32; 3]) -> [f32; 3] {
-    let m = (v[0]*v[0] + v[1]*v[1] + v[2]*v[2]).sqrt();
-    if m < 1e-12 { [0.0, 0.0, 0.0] } else { [v[0]/m, v[1]/m, v[2]/m] }
-}
-
 /// Find or append a "special" material (used by recompile-marker
 /// meshes — `+portal`, `+weather`, `@collision_only`, etc). Returns
 /// the material's final index. The marker name itself goes into the
@@ -1315,20 +1342,6 @@ fn object_content_key(obj: &AssObject) -> Vec<u8> {
             key
         }
         _ => Vec::new(),
-    }
-}
-
-fn read_rgb(s: &TagStruct<'_>, name: &str) -> [f32; 3] {
-    match s.field(name).and_then(|f| f.value()) {
-        Some(TagFieldData::RealRgbColor(c)) => [c.red, c.green, c.blue],
-        _ => [0.0; 3],
-    }
-}
-
-fn read_real_bounds(s: &TagStruct<'_>, name: &str) -> (f32, f32) {
-    match s.field(name).and_then(|f| f.value()) {
-        Some(TagFieldData::RealBounds(b)) => (b.lower, b.upper),
-        _ => (0.0, 0.0),
     }
 }
 

@@ -21,18 +21,35 @@ use serde_json::json;
 
 use crate::context::CliContext;
 
+/// Path-shape filters for [`run`]. Each `Option` left as `None`
+/// passes through unfiltered; setting any of them narrows the walk.
 pub struct ListFilters {
+    /// Group name (`"biped"`) or 4-byte group tag (`"bipd"`).
     pub group: Option<String>,
+    /// Match filenames starting with this prefix.
     pub starts_with: Option<String>,
+    /// Match paths containing this substring.
     pub contains: Option<String>,
+    /// Match filenames ending with this suffix (extension matching).
     pub ends_with: Option<String>,
+    /// Regex to match against full paths.
     pub regex: Option<String>,
+    /// Path to a file with newline-separated candidates (skips the
+    /// directory walk entirely).
     pub from_file: Option<String>,
 }
 
+/// Output mode for the `list` command. `Paths` is one path per line;
+/// `Summary` tallies by group; `Json` emits a structured form.
 pub enum OutputMode {
+    /// One path per line.
     Paths,
-    Summary { sort_by_count: bool },
+    /// Group tally instead of a path list.
+    Summary {
+        /// Sort summary rows by count desc instead of name.
+        sort_by_count: bool,
+    },
+    /// Machine-readable JSON.
     Json,
 }
 

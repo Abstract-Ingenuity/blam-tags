@@ -29,6 +29,8 @@ fn require_schema(game: &str, stem: &str, kind: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// Attach an empty `want` (dependency-list) stream to the loaded
+/// tag. No-op if one is already present.
 pub fn add_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let schema = require_schema(&ctx.game, "tag_dependency_list", "dependency-list")?;
     let loaded = ctx.loaded_mut("add-dependency-list")?;
@@ -44,6 +46,7 @@ pub fn add_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Result
     Ok(())
 }
 
+/// Drop the `want` stream from the loaded tag if present.
 pub fn remove_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let loaded = ctx.loaded_mut("remove-dependency-list")?;
     loaded.tag.remove_dependency_list();
@@ -56,6 +59,9 @@ pub fn remove_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Res
     Ok(())
 }
 
+/// Walk the tag's data, collect every non-null non-`impo`
+/// `tag_reference`, and write one entry per ref into `want`.
+/// Creates the stream first if missing.
 pub fn rebuild_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let schema = require_schema(&ctx.game, "tag_dependency_list", "dependency-list")?;
     let loaded = ctx.loaded_mut("rebuild-dependency-list")?;
@@ -77,6 +83,9 @@ pub fn rebuild_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Re
     Ok(())
 }
 
+/// Attach an empty `info` (import-info) stream. No-op if one is
+/// already present. Caller populates build / version / culprit /
+/// import-date / files / events fields via `set` afterward.
 pub fn add_import_info(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let schema = require_schema(&ctx.game, "tag_import_information", "import-info")?;
     let loaded = ctx.loaded_mut("add-import-info")?;
@@ -92,6 +101,7 @@ pub fn add_import_info(ctx: &mut CliContext, output: Option<&str>) -> Result<()>
     Ok(())
 }
 
+/// Drop the `info` stream from the loaded tag if present.
 pub fn remove_import_info(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let loaded = ctx.loaded_mut("remove-import-info")?;
     loaded.tag.remove_import_info();
@@ -104,6 +114,9 @@ pub fn remove_import_info(ctx: &mut CliContext, output: Option<&str>) -> Result<
     Ok(())
 }
 
+/// Attach an empty `assd` (asset-depot-storage / tag-editor icon)
+/// stream. Zero presence in the observed H3/Reach corpus, kept for
+/// completeness.
 pub fn add_asset_depot_storage(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let schema = require_schema(&ctx.game, "asset_depot_storage", "asset-depot-storage")?;
     let loaded = ctx.loaded_mut("add-asset-depot-storage")?;
@@ -119,6 +132,7 @@ pub fn add_asset_depot_storage(ctx: &mut CliContext, output: Option<&str>) -> Re
     Ok(())
 }
 
+/// Drop the `assd` stream from the loaded tag if present.
 pub fn remove_asset_depot_storage(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let loaded = ctx.loaded_mut("remove-asset-depot-storage")?;
     loaded.tag.remove_asset_depot_storage();

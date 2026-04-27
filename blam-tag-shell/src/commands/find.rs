@@ -15,11 +15,19 @@ use crate::context::CliContext;
 use crate::format::format_value;
 use crate::walk::{walk, FieldVisitor};
 
+/// Filters threaded into [`run`] from the `find` subcommand's clap
+/// args. Bundle so the function signature doesn't grow with every
+/// new flag.
 pub struct FindFilters {
+    /// Restrict the walk to tags of one group (e.g. `"weapon"`).
     pub group: Option<String>,
+    /// Only match against fields whose name matches this regex.
     pub field_name: Option<String>,
+    /// Treat the `query` string as a regex instead of a substring.
     pub regex: bool,
+    /// Emit JSON instead of human-readable output.
     pub json: bool,
+    /// Fail the command on any unreadable tag (vs warn-and-continue).
     pub strict: bool,
 }
 
