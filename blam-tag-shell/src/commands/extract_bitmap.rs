@@ -1,13 +1,22 @@
-//! `extract-bitmap` — write each image of a `.bitmap` tag as a DDS
-//! file. Pure-tag-file extraction: pulls bytes from the tag's
+//! `extract-bitmap` — write each image of a `.bitmap` tag as a TIFF
+//! or DDS file. Pure-tag-file extraction: pulls bytes from the tag's
 //! `processed pixel data` blob (no resource-cache indirection).
 //!
+//! Format selection:
+//!   - `--format tif` (default) — Tool-importable RGBA8 TIFF.
+//!     Decompresses to BGRA-then-swizzled-to-RGBA. Phase 2 is
+//!     2D-only; cube / array / 3D and BC-compressed formats error
+//!     until later phases.
+//!   - `--format dds` — legacy debug DDS dump. Preserves original
+//!     pixel bytes (no decode); not re-importable into Tool.
+//!
 //! `--output` is overloaded based on what's passed:
-//!   - ends in `.dds` → write to that exact file (single-image tags
-//!     only — multi-image tags can't all go to one filename).
+//!   - ends in `.tif` / `.tiff` / `.dds` → write to that exact
+//!     filename (single-image tags only). The extension picks the
+//!     format and overrides `--format`.
 //!   - any other path → directory target. 1-image tags emit
-//!     `<dir>/<tag_stem>.dds`; N-image tags emit
-//!     `<dir>/<tag_stem>/<i>.dds`.
+//!     `<dir>/<tag_stem>.<ext>`; N-image tags emit
+//!     `<dir>/<tag_stem>/<i>.<ext>`.
 //!   - omitted → directory target = current working directory.
 
 use std::fs::{self, File};
@@ -20,7 +29,41 @@ use blam_tags::Bitmap;
 use crate::context::CliContext;
 use crate::paths::tag_stem;
 
-pub fn run(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
+#[derive(Debug, Clone, Copy)]
+enum OutFormat { Tif, Dds }
+
+impl OutFormat {
+    fn ext(self) -> &'static str {
+        match self {
+            Self::Tif => "tif",
+            Self::Dds => "dds",
+        }
+    }
+}
+
+fn parse_format(s: &str) -> Result<OutFormat> {
+    match s.to_ascii_lowercase().as_str() {
+        "tif" | "tiff" => Ok(OutFormat::Tif),
+        "dds" => Ok(OutFormat::Dds),
+        other => anyhow::bail!("unknown --format `{other}`; expected `tif` or `dds`"),
+    }
+}
+
+/// If a path's extension picks a format (e.g. user wrote
+/// `--output foo.tif`), return it. Otherwise `None` (caller falls
+/// back to the `--format` arg).
+fn format_from_extension(path: &Path) -> Option<OutFormat> {
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    match ext.as_str() {
+        "tif" | "tiff" => Some(OutFormat::Tif),
+        "dds" => Some(OutFormat::Dds),
+        _ => None,
+    }
+}
+
+pub fn run(ctx: &mut CliContext, output: Option<&str>, format: &str) -> Result<()> {
+    let cli_format = parse_format(format)?;
+
     let loaded = ctx.loaded("extract-bitmap")?;
     let bitmap = Bitmap::new(&loaded.tag)
         .context("tag does not look like a .bitmap (no `bitmaps` block / `processed pixel data`)")?;
@@ -34,17 +77,22 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let stem = tag_stem(&loaded.path, "bitmap");
     let output_path = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
-    if is_dds_filename(&output_path) {
-        return run_to_file(&output_path, &bitmap, count);
+    // If the user named an explicit file with a recognized
+    // extension, that picks both the destination and the format.
+    if let Some(ext_format) = format_from_extension(&output_path) {
+        return run_to_file(&output_path, &bitmap, count, ext_format);
     }
-    run_to_dir(&output_path, &stem, &bitmap, count)
+
+    // Otherwise treat as a directory and use the --format flag.
+    run_to_dir(&output_path, &stem, &bitmap, count, cli_format)
 }
 
-fn run_to_file(target: &Path, bitmap: &Bitmap<'_>, count: usize) -> Result<()> {
+fn run_to_file(target: &Path, bitmap: &Bitmap<'_>, count: usize, format: OutFormat) -> Result<()> {
     if count > 1 {
         anyhow::bail!(
-            "tag has {count} images; --output as a `.dds` filename only works for \
-             single-image tags. Pass a directory path instead."
+            "tag has {count} images; --output as a `.{ext}` filename only works for \
+             single-image tags. Pass a directory path instead.",
+            ext = format.ext(),
         );
     }
     if let Some(parent) = target.parent() {
@@ -54,16 +102,16 @@ fn run_to_file(target: &Path, bitmap: &Bitmap<'_>, count: usize) -> Result<()> {
         }
     }
     let image = bitmap.image(0).expect("count >= 1");
-    let summary = write_one(target, image)?;
+    let summary = write_one(target, image, format)?;
     println!("{}: {summary}", target.display());
     Ok(())
 }
 
-fn run_to_dir(dir: &Path, stem: &str, bitmap: &Bitmap<'_>, count: usize) -> Result<()> {
+fn run_to_dir(dir: &Path, stem: &str, bitmap: &Bitmap<'_>, count: usize, format: OutFormat) -> Result<()> {
     fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
 
     // Per-image output dir for multi-image tags so siblings don't
-    // collide on the same `<stem>.dds` filename.
+    // collide on the same `<stem>.<ext>` filename.
     let out_dir = if count > 1 {
         let d = dir.join(stem);
         fs::create_dir_all(&d).with_context(|| format!("create {}", d.display()))?;
@@ -75,13 +123,13 @@ fn run_to_dir(dir: &Path, stem: &str, bitmap: &Bitmap<'_>, count: usize) -> Resu
     let mut errors = 0usize;
     for (i, image) in bitmap.iter().enumerate() {
         let filename = if count > 1 {
-            format!("{i}.dds")
+            format!("{i}.{}", format.ext())
         } else {
-            format!("{stem}.dds")
+            format!("{stem}.{}", format.ext())
         };
         let path = out_dir.join(&filename);
 
-        match write_one(&path, image) {
+        match write_one(&path, image, format) {
             Ok(summary) => println!("{}: {summary}", path.display()),
             Err(e) => {
                 eprintln!("{}: error: {e}", path.display());
@@ -96,14 +144,7 @@ fn run_to_dir(dir: &Path, stem: &str, bitmap: &Bitmap<'_>, count: usize) -> Resu
     Ok(())
 }
 
-fn is_dds_filename(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.eq_ignore_ascii_case("dds"))
-        .unwrap_or(false)
-}
-
-fn write_one(path: &Path, image: blam_tags::BitmapImage<'_>) -> Result<String> {
+fn write_one(path: &Path, image: blam_tags::BitmapImage<'_>, format: OutFormat) -> Result<String> {
     let format_name = image.format_name().unwrap_or_else(|| "?".to_string());
     let type_name = image.type_name().unwrap_or_else(|| "?".to_string());
     let summary = format!(
@@ -119,7 +160,9 @@ fn write_one(path: &Path, image: blam_tags::BitmapImage<'_>) -> Result<String> {
     let file = File::create(path)
         .with_context(|| format!("create {}", path.display()))?;
     let mut writer = BufWriter::new(file);
-    image.write_dds(&mut writer)?;
+    match format {
+        OutFormat::Tif => image.write_tiff(&mut writer)?,
+        OutFormat::Dds => image.write_dds(&mut writer)?,
+    }
     Ok(summary)
 }
-

@@ -228,13 +228,11 @@ struct ParsedJms {
     hinges: Vec<JmsHingeSummary>,
     boxes: Vec<JmsBoxSummary>,
     spheres: Vec<JmsSphereSummary>,
-    node_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
 struct JmsCapsuleSummary {
     name: String,
-    parent_name: String,
     translation: [f32; 3],
     height: f32,
     radius: f32,
@@ -243,8 +241,6 @@ struct JmsCapsuleSummary {
 #[derive(Debug, Clone, Default)]
 struct JmsConvexSummary {
     name: String,
-    parent_name: String,
-    vertex_count: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -262,16 +258,12 @@ struct JmsHingeSummary {
 #[derive(Debug, Clone, Default)]
 struct JmsBoxSummary {
     name: String,
-    parent_name: String,
-    translation: [f32; 3],
     width: f32, length: f32, height: f32,
 }
 
 #[derive(Debug, Clone, Default)]
 struct JmsSphereSummary {
     name: String,
-    parent_name: String,
-    radius: f32,
 }
 
 impl ParsedJms {
@@ -334,19 +326,15 @@ fn parse_jms_summary(bytes: &[u8]) -> Result<ParsedJms, String> {
     out.bbox = bbox_of(&positions);
     out.positions = positions;
 
-    // Pull node names so we can resolve parent_index → bone name
-    // for collision-shape comparisons (source and rebuilt may use
-    // different node orderings; name-keyed comparison is robust).
-    out.node_names = parse_node_names(&lines, out.nodes).unwrap_or_default();
-
     // Collision-shape sections. Each is optional; absent sections
-    // produce empty vecs.
-    out.capsules = parse_capsules_section(&lines, &out.node_names).unwrap_or_default();
-    out.convex_shapes = parse_convex_shapes_section(&lines, &out.node_names).unwrap_or_default();
+    // produce empty vecs. Pairing in `compare_phmo_shapes` is by
+    // shape name, so we don't need bone-name resolution here.
+    out.capsules = parse_capsules_section(&lines).unwrap_or_default();
+    out.convex_shapes = parse_convex_shapes_section(&lines).unwrap_or_default();
     out.ragdolls = parse_ragdolls_section(&lines).unwrap_or_default();
     out.hinges = parse_hinges_section(&lines).unwrap_or_default();
-    out.boxes = parse_boxes_section(&lines, &out.node_names).unwrap_or_default();
-    out.spheres = parse_spheres_section(&lines, &out.node_names).unwrap_or_default();
+    out.boxes = parse_boxes_section(&lines).unwrap_or_default();
+    out.spheres = parse_spheres_section(&lines).unwrap_or_default();
     Ok(out)
 }
 
@@ -374,32 +362,7 @@ fn skip_blanks(lines: &[&str], mut cur: usize) -> usize {
     cur
 }
 
-fn lookup_parent_name(idx: i32, names: &[String]) -> String {
-    if idx >= 0 && (idx as usize) < names.len() {
-        names[idx as usize].clone()
-    } else {
-        String::new()
-    }
-}
-
-fn parse_node_names(lines: &[&str], n: usize) -> Result<Vec<String>, String> {
-    let Some((start, _count)) = find_section_start(lines, "NODES") else { return Ok(Vec::new()); };
-    let mut cur = skip_to_first_record(lines, start, "NODE");
-    let mut names = Vec::with_capacity(n);
-    for _ in 0..n {
-        if cur >= lines.len() { break; }
-        cur += 1; // ;NODE i
-        if cur >= lines.len() { break; }
-        names.push(lines[cur].to_string()); cur += 1;
-        cur += 1; // parent
-        cur += 1; // rotation
-        cur += 1; // translation
-        cur = skip_blanks(lines, cur);
-    }
-    Ok(names)
-}
-
-fn parse_capsules_section(lines: &[&str], node_names: &[String]) -> Result<Vec<JmsCapsuleSummary>, String> {
+fn parse_capsules_section(lines: &[&str]) -> Result<Vec<JmsCapsuleSummary>, String> {
     let Some((start, count)) = find_section_start(lines, "CAPSULES") else { return Ok(Vec::new()); };
     let mut cur = skip_to_first_record(lines, start, "CAPSULE");
     let mut out = Vec::with_capacity(count);
@@ -407,23 +370,19 @@ fn parse_capsules_section(lines: &[&str], node_names: &[String]) -> Result<Vec<J
         if cur >= lines.len() { break; }
         cur += 1; // ;CAPSULE i
         let name = lines.get(cur).copied().unwrap_or("").to_string(); cur += 1;
-        let parent: i32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(-1); cur += 1;
-        let _material: i32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(-1); cur += 1;
+        cur += 1; // parent
+        cur += 1; // material
         cur += 1; // rotation
         let translation = parse_float_triple(lines.get(cur).copied().unwrap_or(""))?; cur += 1;
         let height: f32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(0.0); cur += 1;
         let radius: f32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(0.0); cur += 1;
         cur = skip_blanks(lines, cur);
-        out.push(JmsCapsuleSummary {
-            name,
-            parent_name: lookup_parent_name(parent, node_names),
-            translation, height, radius,
-        });
+        out.push(JmsCapsuleSummary { name, translation, height, radius });
     }
     Ok(out)
 }
 
-fn parse_convex_shapes_section(lines: &[&str], node_names: &[String]) -> Result<Vec<JmsConvexSummary>, String> {
+fn parse_convex_shapes_section(lines: &[&str]) -> Result<Vec<JmsConvexSummary>, String> {
     let Some((start, count)) = find_section_start(lines, "CONVEX SHAPES") else { return Ok(Vec::new()); };
     let mut cur = skip_to_first_record(lines, start, "CONVEX SHAPE");
     let mut out = Vec::with_capacity(count);
@@ -431,18 +390,14 @@ fn parse_convex_shapes_section(lines: &[&str], node_names: &[String]) -> Result<
         if cur >= lines.len() { break; }
         cur += 1; // ;CONVEX SHAPE i
         let name = lines.get(cur).copied().unwrap_or("").to_string(); cur += 1;
-        let parent: i32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(-1); cur += 1;
-        let _material: i32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(-1); cur += 1;
+        cur += 1; // parent
+        cur += 1; // material
         cur += 1; // rotation
         cur += 1; // translation
         let vertex_count: usize = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(0); cur += 1;
         cur += vertex_count; // vertex lines
         cur = skip_blanks(lines, cur);
-        out.push(JmsConvexSummary {
-            name,
-            parent_name: lookup_parent_name(parent, node_names),
-            vertex_count,
-        });
+        out.push(JmsConvexSummary { name });
     }
     Ok(out)
 }
@@ -488,7 +443,7 @@ fn parse_hinges_section(lines: &[&str]) -> Result<Vec<JmsHingeSummary>, String> 
     Ok(out)
 }
 
-fn parse_boxes_section(lines: &[&str], node_names: &[String]) -> Result<Vec<JmsBoxSummary>, String> {
+fn parse_boxes_section(lines: &[&str]) -> Result<Vec<JmsBoxSummary>, String> {
     let Some((start, count)) = find_section_start(lines, "BOXES") else { return Ok(Vec::new()); };
     let mut cur = skip_to_first_record(lines, start, "BOX");
     let mut out = Vec::with_capacity(count);
@@ -496,23 +451,20 @@ fn parse_boxes_section(lines: &[&str], node_names: &[String]) -> Result<Vec<JmsB
         if cur >= lines.len() { break; }
         cur += 1; // ;BOX i
         let name = lines.get(cur).copied().unwrap_or("").to_string(); cur += 1;
-        let parent: i32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(-1); cur += 1;
-        let _material: i32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(-1); cur += 1;
+        cur += 1; // parent
+        cur += 1; // material
         cur += 1; // rotation
-        let translation = parse_float_triple(lines.get(cur).copied().unwrap_or(""))?; cur += 1;
+        cur += 1; // translation
         let width: f32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(0.0); cur += 1;
         let length: f32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(0.0); cur += 1;
         let height: f32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(0.0); cur += 1;
         cur = skip_blanks(lines, cur);
-        out.push(JmsBoxSummary {
-            name, parent_name: lookup_parent_name(parent, node_names),
-            translation, width, length, height,
-        });
+        out.push(JmsBoxSummary { name, width, length, height });
     }
     Ok(out)
 }
 
-fn parse_spheres_section(lines: &[&str], node_names: &[String]) -> Result<Vec<JmsSphereSummary>, String> {
+fn parse_spheres_section(lines: &[&str]) -> Result<Vec<JmsSphereSummary>, String> {
     let Some((start, count)) = find_section_start(lines, "SPHERES") else { return Ok(Vec::new()); };
     let mut cur = skip_to_first_record(lines, start, "SPHERE");
     let mut out = Vec::with_capacity(count);
@@ -520,15 +472,13 @@ fn parse_spheres_section(lines: &[&str], node_names: &[String]) -> Result<Vec<Jm
         if cur >= lines.len() { break; }
         cur += 1; // ;SPHERE i
         let name = lines.get(cur).copied().unwrap_or("").to_string(); cur += 1;
-        let parent: i32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(-1); cur += 1;
-        let _material: i32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(-1); cur += 1;
+        cur += 1; // parent
+        cur += 1; // material
         cur += 1; // rotation
         cur += 1; // translation
-        let radius: f32 = lines.get(cur).and_then(|s| s.parse().ok()).unwrap_or(0.0); cur += 1;
+        cur += 1; // radius
         cur = skip_blanks(lines, cur);
-        out.push(JmsSphereSummary {
-            name, parent_name: lookup_parent_name(parent, node_names), radius,
-        });
+        out.push(JmsSphereSummary { name });
     }
     Ok(out)
 }

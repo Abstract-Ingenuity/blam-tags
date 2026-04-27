@@ -57,7 +57,7 @@ The example commands below elide `--game` for readability — add it to every in
 | [`layout-diff`](#layout-diff--compare-tag-schemas) | Diff the **schemas** of two tag files |
 | [`data-diff`](#data-diff--compare-two-tag-values) | Diff the **values** of two tag files |
 | [`export`](#export--dump-tag-state-as-replay-commands) | Dump a tag's state as replayable `set` commands |
-| [`extract-bitmap`](#extract-bitmap--bitmap-to-dds) | Extract a `.bitmap` tag's images as DDS files (one per image) |
+| [`extract-bitmap`](#extract-bitmap--bitmap-to-tiff--dds) | Extract a `.bitmap` tag's images as TIFF (default, Tool-importable) or DDS files (one per image) |
 | [`extract-jms`](#extract-jms--model-to-source-tree-jms-files) | Extract a `.model` tag's render / collision / physics children as JMS files in the H3EK source-tree layout |
 | [`extract-ass`](#extract-ass--scenario-to-ass) | Extract a `.scenario` tag's structure BSPs as ASS files (one per BSP, with paired lighting baked in) |
 | [`extract-data`](#extract-data--dump-a-tag_data-field) | Write the bytes of a single `tag_data` field to a file |
@@ -575,7 +575,7 @@ $ blam-tag-shell export masterchief.biped 'unit/unit camera' --output cam.cmds
 
 ---
 
-### `extract-bitmap` — Bitmap to DDS
+### `extract-bitmap` — Bitmap to TIFF / DDS
 
 | Argument | Description |
 |-|-|
@@ -583,39 +583,51 @@ $ blam-tag-shell export masterchief.biped 'unit/unit camera' --output cam.cmds
 
 | Long | Description |
 |-|-|
-| `--output <PATH>` | Where to write. Path ending in `.dds` → that exact file (single-image tags only). Otherwise treated as a directory. Default: current directory. |
+| `--format <FORMAT>` | `tif` (default — Tool-importable RGBA8 TIFF) or `dds` (debug — original pixel bytes wrapped in a DDS container). |
+| `--output <PATH>` | Where to write. Path ending in `.tif` / `.tiff` / `.dds` → that exact file, with the extension picking the format and overriding `--format` (single-image tags only). Otherwise treated as a directory. Default: current directory. |
 
-Reads pixel bytes straight from the tag's `processed pixel data` blob and emits one DDS per image. No resource cache files needed — halo3_mcc / haloreach_mcc bitmaps keep their pixels inline. Validated against 25,908 / 25,908 bitmap-tag images across both corpora.
+Reads pixel bytes straight from the tag's `processed pixel data` blob and emits one image per `bitmaps[]` entry. No resource cache files needed — halo3_mcc / haloreach_mcc bitmaps keep their pixels inline. Validated against 25,908 / 25,908 bitmap-tag images across both corpora — **0 failures on either output path.**
+
+**TIFF (default)** decompresses block-compressed formats (BC1–5 + Halo's `dxn_mono_alpha`) and writes RGBA8 with the SnowyMouse libtiff field profile (`EXTRASAMPLES=UNASSALPHA`, `Photometric=RGB`, `Orientation=TOPLEFT`, contig planar). Cube maps emit a 4×3 horizontal cross (`top=+Y`, middle `+X +Z -X -Z`, `bottom=-Y`, magic-blue fill on empty cells); 2D arrays emit a vertical strip. Mip 0 only — Tool regenerates the chain on import. HDR formats (`abgrfp16`, `abgrfp32`) currently clamp `[0, 1]` × 255 → 8-bit; float-TIFF emission is deferred pending Tool acceptance verification.
+
+**DDS (`--format dds`)** preserves original pixel bytes for inspection / debugging. Not re-importable through `tool bitmaps`.
 
 Output naming:
 
-- `--output <FILE>.dds` → writes to that exact filename. Errors on multi-image tags (one filename can't hold all of them).
-- `--output <DIR>` (anything not ending in `.dds`):
-  - 1-image tag → `<DIR>/<tag_stem>.dds`.
-  - N-image tag → `<DIR>/<tag_stem>/<i>.dds` (per-tag subdirectory).
+- `--output <FILE>.tif|.tiff|.dds` → writes to that exact filename and uses the file's extension to pick the format. Errors on multi-image tags (one filename can't hold all of them).
+- `--output <DIR>` (anything else):
+  - 1-image tag → `<DIR>/<tag_stem>.<ext>`.
+  - N-image tag → `<DIR>/<tag_stem>/<i>.<ext>` (per-tag subdirectory).
+- Omitted → directory target = current working directory.
 
 Format coverage:
 
-- **Legacy DDS** (fourcc / pixelformat masks): `dxt1`, `dxt3`, `dxt5`, `dxt5a`, `dxn`, `a8`, `y8`, `r8`, `ay8`, `a8y8`, `a4r4g4b4`, `x8r8g8b8`, `a8r8g8b8`, `v8u8`, `q8w8v8u8`, `abgrfp16`, `abgrfp32`, `a16b16g16r16`.
-- **DXT10 extension**: array textures of any of the above + `signedr16g16b16a16`.
-- **CPU-decoded to A8R8G8B8**: `dxn_mono_alpha` (BC5-shaped layout with luminance + alpha sub-blocks — port of TagTool's `DecompressDXNMonoAlpha`).
+- **TIFF**: every format below decoded → RGBA8.
+- **DDS legacy** (fourcc / pixelformat masks): `dxt1`, `dxt3`, `dxt5`, `dxt5a`, `dxn`, `a8`, `y8`, `r8`, `ay8`, `a8y8`, `a4r4g4b4`, `x8r8g8b8`, `a8r8g8b8`, `v8u8`, `q8w8v8u8`, `abgrfp16`, `abgrfp32`, `a16b16g16r16`.
+- **DDS DXT10 extension**: array textures of any of the above + `signedr16g16b16a16`.
+- **DDS CPU-decoded to A8R8G8B8**: `dxn_mono_alpha` (BC5-shaped layout with luminance + alpha sub-blocks — port of TagTool's `DecompressDXNMonoAlpha`).
 
 ```sh
+# Default — Tool-importable TIFF in cwd.
 $ blam-tag-shell extract-bitmap masterchief.bitmap
-masterchief.dds: 256×256 a8r8g8b8 (2D texture, 9 mips)
+masterchief.tif: 256×256 a8r8g8b8 (2D texture, 9 mips)
 
-# Specific filename (single-image tags only)
-$ blam-tag-shell extract-bitmap masterchief.bitmap --output ~/Downloads/chief.dds
-/Users/.../Downloads/chief.dds: 256×256 a8r8g8b8 (2D texture, 9 mips)
-
-# Directory output
+# Cube map → 4×3 horizontal cross TIFF.
 $ blam-tag-shell extract-bitmap envmap.bitmap --output extracted/
-extracted/envmap.dds: 256×256 dxt5 (cube map, 9 mips)
+extracted/envmap.tif: 256×256 dxt5 (cube map, 9 mips)
 
-# Multi-image tag → directory of DDS files
+# Specific filename — extension picks format.
+$ blam-tag-shell extract-bitmap masterchief.bitmap --output ~/Downloads/chief.tif
+/Users/.../Downloads/chief.tif: 256×256 a8r8g8b8 (2D texture, 9 mips)
+
+# Debug DDS dump.
+$ blam-tag-shell extract-bitmap masterchief.bitmap --format dds --output extracted/
+extracted/masterchief.dds: 256×256 a8r8g8b8 (2D texture, 9 mips)
+
+# Multi-image (sprite atlas) → directory of TIFFs, one per atlas page.
 $ blam-tag-shell extract-bitmap weapon_atlas.bitmap --output extracted/
-extracted/weapon_atlas/0.dds: 512×512 dxt1 (2D texture, 10 mips)
-extracted/weapon_atlas/1.dds: 256×256 dxt5 (2D texture, 9 mips)
+extracted/weapon_atlas/0.tif: 512×512 dxt1 (2D texture, 10 mips)
+extracted/weapon_atlas/1.tif: 256×256 dxt5 (2D texture, 9 mips)
 …
 ```
 

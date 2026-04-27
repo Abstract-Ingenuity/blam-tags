@@ -311,18 +311,24 @@ enum Commands {
         output: Option<String>,
     },
 
-    /// Extract a `.bitmap` tag's images as DDS files (one DDS per
+    /// Extract a `.bitmap` tag's images as TIFF or DDS (one file per
     /// image; multi-image tags get a directory)
     ExtractBitmap {
         /// Path to a `.bitmap` tag file
         file: String,
-        /// Output path. If it ends in `.dds`, writes that exact
-        /// filename (single-image tags only). Otherwise treated as
-        /// a directory: 1-image tags emit `<dir>/<tag_stem>.dds`,
-        /// N-image tags emit `<dir>/<tag_stem>/<i>.dds`.
+        /// Output path. If it ends in `.tif` / `.tiff` / `.dds`,
+        /// writes that exact filename (single-image tags only) and
+        /// the extension picks the format. Otherwise treated as a
+        /// directory: 1-image tags emit `<dir>/<tag_stem>.<ext>`,
+        /// N-image tags emit `<dir>/<tag_stem>/<i>.<ext>`.
         /// Default: current directory.
         #[arg(long)]
         output: Option<String>,
+        /// Output format. Defaults to `tif` (Tool-importable RGBA8
+        /// TIFF). `dds` keeps the original-format DDS dump that's
+        /// readable but not Tool-importable.
+        #[arg(long, default_value = "tif")]
+        format: String,
     },
 
     /// Extract a `.model` (hlmt) tag's referenced render / collision /
@@ -579,9 +585,9 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::export::run(ctx, subtree.as_deref(), output.as_deref())
         }
 
-        Commands::ExtractBitmap { file, output } => {
+        Commands::ExtractBitmap { file, output, format } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::extract_bitmap::run(ctx, output.as_deref())
+            commands::extract_bitmap::run(ctx, output.as_deref(), &format)
         }
 
         Commands::ExtractJms { file, kinds, output, flat } => {

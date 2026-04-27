@@ -11,7 +11,7 @@ the 119,432-tag H3 + Reach subset; full-corpus validation (including H4
 and H2A MP) contributed by the community.
 
 Four group-specific extractors sit on top of the generic tag tree:
-- [`bitmap`](#bitmap--dds-extraction): `.bitmap` → DDS files.
+- [`bitmap`](#bitmap--tiff--dds-extraction): `.bitmap` → TIFF (Tool-importable, default) or DDS (debug).
 - [`animation`](#animation-jmad--jma-family): `.model_animation_graph` → JMA-family text files.
 - [`jms`](#jms-render--collision--physics--jms): `.render_model` / `.collision_model` / `.physics_model` → JMS files.
 - [`ass`](#ass-scenario_structure_bsp--ass): `.scenario_structure_bsp` (+ `.scenario_structure_lighting_info`) → ASS files.
@@ -209,9 +209,9 @@ cargo run --release -p blam-tags --example schema_match -- \
     definitions/halo3_mcc /path/to/halo3_mcc/tags
 ```
 
-### Bitmap → DDS extraction
+### Bitmap → TIFF / DDS extraction
 
-`Bitmap::new(&tag)` wraps a parsed `.bitmap` tag and exposes per-image metadata + a sliced view of the inline pixel buffer. Each `BitmapImage` knows its format, dimensions, mipmap chain, and texture type, and can write itself out as a valid DDS file:
+`Bitmap::new(&tag)` wraps a parsed `.bitmap` tag and exposes per-image metadata + a sliced view of the inline pixel buffer. Each `BitmapImage` writes itself out as either a Tool-importable TIFF (default) or a debug DDS:
 
 ```rust
 use blam_tags::{Bitmap, TagFile};
@@ -222,32 +222,51 @@ let tag = TagFile::read("masterchief.bitmap")?;
 let bitmap = Bitmap::new(&tag)?;
 
 for (i, image) in bitmap.iter().enumerate() {
-    let mut out = BufWriter::new(File::create(format!("face_{i}.dds"))?);
-    image.write_dds(&mut out)?;
-    println!("{i}: {}x{} {} ({} mip{})",
-        image.width(), image.height(),
-        image.format_name().unwrap_or_default(),
-        image.mipmap_levels(),
-        if image.mipmap_levels() == 1 { "" } else { "s" });
+    // RGBA8 TIFF — re-importable through `tool bitmaps`. Cube maps
+    // emit a 4×3 horizontal cross; arrays emit a vertical strip.
+    let mut tif = BufWriter::new(File::create(format!("face_{i}.tif"))?);
+    image.write_tiff(&mut tif)?;
+
+    // Or the original-bytes DDS for inspection.
+    let mut dds = BufWriter::new(File::create(format!("face_{i}.dds"))?);
+    image.write_dds(&mut dds)?;
 }
 ```
 
-Format coverage (validated against 25,908 / 25,908 bitmap-tag images across halo3_mcc + haloreach_mcc):
+The submodules under `blam_tags::bitmap` separate the concerns:
+
+| Module | Role |
+|---|---|
+| `bitmap::format` | `BitmapFormat` enum (20 variants), `BitmapCurve`, predicates (`is_compressed`, `is_signed`, `is_hdr`), bits-per-pixel + mip-chain math. |
+| `bitmap::decode` | `decode_to_rgba8(format, w, h, &input) -> Vec<u8>` — single-mip RGBA8 decode for every supported format. BC1–5 via `bcdec_rs`; uncompressed via hand-rolled byte-order + signed-bias + half-float paths. |
+| `bitmap::layout` | `compose_cube_cross` (DX horizontal-cross with magic-blue fill on empty cells) + `compose_layer_strip` (vertical strip for arrays / 3D). |
+| `bitmap::tiff` | `write_rgba8_tiff` with the SnowyMouse libtiff profile (`EXTRASAMPLES=UNASSALPHA`, `Photometric=RGB`, `Orientation=TOPLEFT`, etc). |
+| `bitmap::dds` | Legacy DDS writer — kept for `--format dds` inspection. |
+
+Format coverage (validated against 25,908 / 25,908 bitmap-tag images across halo3_mcc + haloreach_mcc; **0 failures** on either output path):
 
 | Path | Formats |
 |---|---|
-| **Legacy DDS** (fourcc or pixelformat masks) | `dxt1` `dxt3` `dxt5` `dxt5a` `dxn` `a8` `y8` `r8` `ay8` `a8y8` `a4r4g4b4` `x8r8g8b8` `a8r8g8b8` `v8u8` `q8w8v8u8` `abgrfp16` `abgrfp32` `a16b16g16r16` |
-| **DXT10 extension** (`arraySize`, DXGI format) | array textures of any of the above + `signedr16g16b16a16` |
-| **CPU decode → A8R8G8B8** | `dxn_mono_alpha` (BC5-shaped, mono+alpha semantics — port of TagTool's `DecompressDXNMonoAlpha`) |
+| **TIFF (default)** decoded RGBA8 | `dxt1` `dxt3` `dxt5` `dxt5a` `dxn` `dxn_mono_alpha` `a8` `y8` `r8` `ay8` `a8y8` `a4r4g4b4` `x8r8g8b8` `a8r8g8b8` `v8u8` `q8w8v8u8` `abgrfp16` `abgrfp32` `a16b16g16r16` `signedr16g16b16a16` (HDR formats clamp `[0, 1]`) |
+| **DDS legacy** (fourcc / pixelformat masks) | every uncompressed + DXT format above |
+| **DDS DXT10 extension** (`arraySize`, DXGI format) | array textures of any of the above + `signedr16g16b16a16` |
+| **DDS CPU-decoded → A8R8G8B8** | `dxn_mono_alpha` (BC5-shaped, mono+alpha semantics — port of TagTool's `DecompressDXNMonoAlpha`) |
 
-Pure-tag-file: pixels come from the top-level `processed pixel data` blob, no resource cache lookup. `BitmapError::PixelSliceOutOfBounds` / `FormatNotSupported` / `UnsupportedTextureType` surface the failure modes.
+Pure-tag-file: pixels come from the top-level `processed pixel data` blob, no resource cache lookup. Errors surface as `BitmapError::PixelSliceOutOfBounds` / `FormatNotSupported` / `UnsupportedTextureType` / `Tiff` / `TiffLayoutDeferred`.
 
-The corpus-wide validator lives in [`examples/extract_bitmap_sweep.rs`](examples/extract_bitmap_sweep.rs):
+Corpus-wide validators in [`examples/extract_bitmap_sweep.rs`](examples/extract_bitmap_sweep.rs) (DDS path) and [`examples/extract_tiff_sweep.rs`](examples/extract_tiff_sweep.rs) (TIFF path):
 
 ```sh
-cargo run --release -p blam-tags --example extract_bitmap_sweep -- \
+cargo run --release -p blam-tags --example extract_tiff_sweep -- \
     /path/to/halo3_mcc/tags /path/to/haloreach_mcc/tags
 ```
+
+#### Mip / layout caveats
+
+- **Mip 0 only.** Tool re-imports re-generate the mip chain; emitting all mips would be redundant.
+- **Cube maps** → 4×3 horizontal cross with face order `top=+Y`, middle `+X +Z -X -Z`, `bottom=-Y`. Empty cells are Bungie's color-plate magic blue (`R=0, G=0, B=255`).
+- **Sprite-sheet tags** preserve atlas pages verbatim — one TIFF per `bitmaps[]` entry. Tool round-trip via color-plate reconstruction is not implemented; sprite metadata in `manual_sequences[]` is preserved by the source tag, not in the TIFF.
+- **HDR** float formats (`abgrfp16`, `abgrfp32`) currently clamp `[0, 1]` × 255 → 8-bit. Float-TIFF emission is on the deferred list pending Tool acceptance verification.
 
 ### Animation (jmad → JMA-family)
 
@@ -472,9 +491,13 @@ Two facades sit on top of the raw storage types:
 
 Plus four group-specific helper layers (all built on the `api` facade):
 
-- **[`bitmap`]** — `Bitmap`, `BitmapImage`, `BitmapFormat`, plus a
-  `write_dds` writer covering the 18 formats observed in the
-  halo3_mcc + haloreach_mcc bitmap corpora.
+- **[`bitmap`]** — `Bitmap`, `BitmapImage`, `BitmapFormat`,
+  `BitmapCurve`, plus `write_tiff` (Tool-importable RGBA8, default)
+  and `write_dds` (legacy debug). Submodules: `format` (enum +
+  predicates + bpp), `decode` (per-format → RGBA8), `dds`, `tiff`,
+  `layout` (cube cross + array strip). Covers all 20 formats
+  observed in the halo3_mcc + haloreach_mcc bitmap corpora; both
+  output paths validated at 25,908 / 25,908 images.
 - **[`animation`]** — `Animation`, `AnimationGroup`, `AnimationClip`,
   `AnimationTracks`, `MovementData`, `NodeFlags`, `Skeleton`, `Pose`,
   `JmaKind`, `Codec`, `BitArray`. Decodes `model_animation_graph`

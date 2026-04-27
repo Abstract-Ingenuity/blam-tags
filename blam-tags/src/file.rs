@@ -469,5 +469,5 @@ fn collect_from_field(f: &crate::TagField<'_>, out: &mut Vec<(u32, String)>) {
     if let Some(crate::TagFieldData::TagReference(r)) = f.value()
         && let Some((g, p)) = r.group_tag_and_name {
             out.push((g, p));
-        }
+    }
 }
