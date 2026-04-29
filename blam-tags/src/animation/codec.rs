@@ -547,12 +547,24 @@ fn decode_fullframe(
     let frames = frame_count as usize;
     let quat_size = if quat_8byte { 8 } else { 16 };
 
-    // Rotation block: `node × rotation_stride + frame × quat_size`,
-    // anchored at byte 32. For static (frame_count=1) the stride per
-    // node should equal quat_size; for animated, stride = quat_size ×
-    // frame_count.
+    // Per-node stride. The fields at header bytes 20/24/28 carry
+    // `elem_size × frame_count` for animated codecs (Uncompressed-
+    // Animated, EightByteQuantizedRotationOnly, BlendScreen). For
+    // the *static* codec they're left zero in MCC-authored data —
+    // both TagTool's `UncompressedStaticDataCodec.Read` and
+    // Foundry's `animation_resource.py` ignore them and read
+    // sequentially. We mirror that: when the field is zero, fall
+    // back to `elem_size × frame_count`, which gives the correct
+    // sequential stride for static (frame_count=1) and matches the
+    // animated-codec value when the field is populated.
+    let stride_or = |stored: u32, elem_size: usize| -> usize {
+        if stored == 0 { elem_size * frames } else { stored as usize }
+    };
+    let rot_stride = stride_or(header.rotation_stride, quat_size);
+    let trans_stride = stride_or(header.translation_stride, 12);
+    let scale_stride = stride_or(header.scale_stride, 4);
+
     let rot_start = FullframeCodecHeader::SIZE;
-    let rot_stride = header.rotation_stride as usize;
     let rot_end = rot_start
         .checked_add(n_rot.checked_mul(rot_stride).unwrap_or(usize::MAX))
         .ok_or(AnimationError::TruncatedPayload { codec, want_end: usize::MAX, blob_size: blob.len() })?;
@@ -561,7 +573,6 @@ fn decode_fullframe(
     }
 
     let trans_start = header.base.translation_offset as usize;
-    let trans_stride = header.translation_stride as usize;
     let trans_end = trans_start
         .checked_add(n_trans.checked_mul(trans_stride).unwrap_or(usize::MAX))
         .ok_or(AnimationError::TruncatedPayload { codec, want_end: usize::MAX, blob_size: blob.len() })?;
@@ -570,7 +581,6 @@ fn decode_fullframe(
     }
 
     let scale_start = header.base.scale_offset as usize;
-    let scale_stride = header.scale_stride as usize;
     let scale_end = scale_start
         .checked_add(n_scale.checked_mul(scale_stride).unwrap_or(usize::MAX))
         .ok_or(AnimationError::TruncatedPayload { codec, want_end: usize::MAX, blob_size: blob.len() })?;
@@ -1352,6 +1362,37 @@ mod tests {
         assert!((q.j.abs()) < 1e-6);
         assert!((q.k.abs()) < 1e-6);
         assert!((q.w - 1.0).abs() < 1e-6);
+    }
+
+    /// Regression: in MCC-authored static codecs, the stride fields
+    /// at header bytes 20/24/28 are left zero — TagTool/Foundry both
+    /// ignore them and read sequential elements. Before the fix our
+    /// decoder used the stored stride (=0) and read offset 32 for
+    /// every node, returning identity for all rotations. This test
+    /// builds a static blob with stride=0 and expects each bone to
+    /// receive its own quaternion.
+    #[test]
+    fn static_stride_zero_falls_back_to_elem_size() {
+        let mut blob = build_static(3, 0, 0);
+        // Wipe the stride fields the on-disk way.
+        blob[20..32].fill(0);
+        // Three distinct quaternions: bone 0 = (0,0,0,1), bone 1 = (1,0,0,0), bone 2 = (0,1,0,0).
+        // Encoded as i16/32767 → 0 / 32767 / 0.
+        let mk = |i: i16, j: i16, k: i16, w: i16| {
+            [i.to_le_bytes(), j.to_le_bytes(), k.to_le_bytes(), w.to_le_bytes()].concat()
+        };
+        blob[32..40].copy_from_slice(&mk(0, 0, 0, i16::MAX));
+        blob[40..48].copy_from_slice(&mk(i16::MAX, 0, 0, 0));
+        blob[48..56].copy_from_slice(&mk(0, i16::MAX, 0, 0));
+
+        let tracks = decode_uncompressed_static(&blob).unwrap();
+        assert_eq!(tracks.rotations.len(), 3);
+        let q0 = tracks.rotations[0][0];
+        let q1 = tracks.rotations[1][0];
+        let q2 = tracks.rotations[2][0];
+        assert!(q0.w > 0.99 && q0.i.abs() < 1e-3, "bone 0 should be identity-ish, got {q0:?}");
+        assert!(q1.i > 0.99 && q1.w.abs() < 1e-3, "bone 1 should have i≈1, got {q1:?}");
+        assert!(q2.j > 0.99 && q2.w.abs() < 1e-3, "bone 2 should have j≈1, got {q2:?}");
     }
 
     #[test]

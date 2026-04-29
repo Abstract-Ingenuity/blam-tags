@@ -1,26 +1,47 @@
 //! JMA-family text export.
 //!
-//! [`Pose::write_jma`] serializes a composed pose plus optional
-//! movement data into one of the JMA-family text formats — JMM
-//! (base), JMA (dx/dy), JMT (dx/dy/dyaw), JMZ (dx/dy/dz/dyaw),
-//! JMO (overlay), JMR (replacement), or JMW (world-relative).
-//! [`JmaKind::from_metadata`] picks the right kind from the
-//! animation's `animation type` × `frame info type` schema fields.
+//! [`Pose::write_jma`] serializes a composed pose into one of the
+//! JMA-family text formats — JMM (base), JMA (dx/dy), JMT
+//! (dx/dy/dyaw), JMZ (dx/dy/dz/dyaw), JMO (overlay), JMR
+//! (replacement), or JMW (world-relative). [`JmaKind::from_metadata`]
+//! picks the right kind from the animation's `animation type` ×
+//! `frame info type` × `internal flags / world relative` schema fields.
 //!
 //! Halo→JMA conventions applied here:
 //! - **Translation `× 100`** (Halo world-units → JMA centimeter).
 //! - **Quaternion conjugate** serialization: JMA writes
 //!   `(-i, -j, -k, w)`.
-//! - **World-space movement composition** for JMA/JMT/JMZ — the tag
-//!   stores per-frame deltas in local space; we rotate `dx/dy` by
-//!   the accumulated yaw before applying this frame's `dyaw`. Per
-//!   Foundry commit `850d680d`.
+//! - **No separate movement section**. The H3 JMA spec (version
+//!   16392) is just `header + nodes + per-frame per-bone transforms`
+//!   — no trailing per-frame movement table. Movement deltas are
+//!   instead **folded into the root bone (index 0)** at write time:
+//!   `dx/dy` rotate from local to world space by the accumulated
+//!   yaw (per Foundry commit `850d680d` — fixes TagTool's
+//!   actor-slides-backwards bug on yawed-during-walk anims), then
+//!   the running translation+yaw is added/multiplied onto the root
+//!   bone's pose. Verified against `General-101/Halo-Asset-Blender-
+//!   Development-Toolset` (HABT) `process_file_retail.py` and
+//!   TagTool's `Animation.Process()`.
+//! - **Type-specific frame layout**:
+//!     - Base (JMM/JMA/JMT/JMZ) and JMW: codec frames + a duplicated
+//!       trailing frame (Tool expects a held terminal pose for
+//!       blending into the next anim).
+//!     - Replacement (JMR): a leading rest-pose frame, then codec
+//!       frames. Tool subtracts the leading frame at re-build time
+//!       to derive deltas.
+//!     - Overlay (JMO): a leading rest-pose frame, then per-frame
+//!       composed `(rest_rotation × codec_delta_rotation,
+//!       rest_translation + codec_delta_translation)`.
+//!
+//!   In all cases the final on-disk frame count is `codec_count + 1`.
 
-use super::{MovementData, Pose, Skeleton};
+use crate::math::{RealPoint3d, RealQuaternion};
+
+use super::{MovementData, MovementFrame, NodeTransform, Pose, Skeleton};
 
 /// JMA-family file extension — picked from the animation's
-/// `animation type` × `frame info type`.
-#[derive(Debug, Clone, Copy)]
+/// `animation type` × `frame info type` × world-relative flag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JmaKind {
     /// Base animation, no movement data.
     Jmm,
@@ -34,7 +55,8 @@ pub enum JmaKind {
     Jmo,
     /// Replacement animation.
     Jmr,
-    /// World-relative (no movement).
+    /// World-relative (no movement, but selected via
+    /// `internal_flags / world relative` rather than `animation type`).
     Jmw,
 }
 
@@ -48,13 +70,25 @@ impl JmaKind {
     }
 
     /// Pick the right JMA-family kind from the per-animation metadata.
-    /// Defaults to JMM when no movement data and base-type.
-    pub fn from_metadata(animation_type: Option<&str>, frame_info_type: Option<&str>) -> Self {
+    ///
+    /// `world_relative` is the `internal flags / world relative` bit
+    /// from the jmad's `animations[i]` block — JMW is base + this
+    /// bit, NOT a separate `animation_type` enum value (the schema
+    /// only has `base / overlay / replacement`). Mirrors TagTool's
+    /// `GetAnimationExtension(type, frame_info, worldRelative)` and
+    /// Foundry's `internal_flags.TestBit("world relative")`.
+    pub fn from_metadata(
+        animation_type: Option<&str>,
+        frame_info_type: Option<&str>,
+        world_relative: bool,
+    ) -> Self {
         match animation_type.unwrap_or("base") {
             "overlay" => return Self::Jmo,
             "replacement" => return Self::Jmr,
-            "world" => return Self::Jmw,
             _ => {}
+        }
+        if world_relative {
+            return Self::Jmw;
         }
         match frame_info_type.unwrap_or("none") {
             "dx,dy" => Self::Jma,
@@ -64,48 +98,74 @@ impl JmaKind {
         }
     }
 
-    /// Whether this kind needs per-frame movement-data lines after
-    /// the per-bone transforms. JMM/JMW/JMO/JMR don't; JMA/JMT/JMZ do.
-    pub fn has_movement_data(self) -> bool {
+    /// Whether this kind accumulates per-frame movement deltas into
+    /// the root bone at write time. Only the base kinds with movement
+    /// data (`Jma / Jmt / Jmz`) do; the rest emit per-bone transforms
+    /// without any movement folding.
+    pub fn folds_movement(self) -> bool {
         matches!(self, Self::Jma | Self::Jmt | Self::Jmz)
     }
 
-    /// Number of float components written per movement-data frame
-    /// (`0` when [`Self::has_movement_data`] is false).
-    pub fn movement_components(self) -> usize {
-        match self {
-            Self::Jma => 2, // dx, dy
-            Self::Jmt => 3, // dx, dy, dyaw
-            Self::Jmz => 4, // dx, dy, dz, dyaw
-            _ => 0,
-        }
+    /// `JMR / JMO` prepend a leading rest-pose frame so Tool's
+    /// importer can derive deltas/composition cleanly during re-build.
+    pub fn prepends_rest_pose(self) -> bool {
+        matches!(self, Self::Jmo | Self::Jmr)
+    }
+
+    /// Base kinds (`JMM / JMA / JMT / JMZ`) and `JMW` append a
+    /// duplicated trailing frame as the held terminal pose.
+    pub fn appends_held_frame(self) -> bool {
+        matches!(self, Self::Jmm | Self::Jma | Self::Jmt | Self::Jmz | Self::Jmw)
+    }
+
+    /// `JMO` composes per-frame `(rest × codec_delta)` rotations and
+    /// `(rest + codec_delta)` translations. The codec values are
+    /// deltas-from-rest; the writer combines them with the rest pose
+    /// so the on-disk JMA carries world poses Tool can re-import.
+    pub fn composes_overlay(self) -> bool {
+        matches!(self, Self::Jmo)
     }
 }
 
 impl Pose {
-    /// Write this pose as a JMA-family text file (.JMM/.JMA/.JMT/etc).
-    /// Applies the JMA-side conventions — translation `× 100` (Halo
-    /// world-units → JMA centimeter convention) and quaternion
-    /// **conjugate** serialization (JMA writes `(-i, -j, -k, w)`).
+    /// Write this pose as a JMA-family text file (`.JMM/.JMA/.JMT/...`).
+    /// See the [module docs](self) for the full layout convention.
     ///
-    /// `movement` carries per-frame root deltas in **local space** as
-    /// stored in the tag. For movement-bearing kinds (JMA/JMT/JMZ)
-    /// this writer composes them into **world space** at write time
-    /// per Foundry commit `850d680d`: dx/dy rotate by accumulated yaw
-    /// before the dyaw delta is applied. JMM/JMW/JMO/JMR ignore
-    /// `movement` entirely.
+    /// `defaults` is the per-skeleton-bone rest pose (typically built
+    /// from the render_model's `nodes[]` defaults plus the jmad's
+    /// `additional node data` fallback). It supplies the rest-pose
+    /// values for the leading frame (JMR/JMO), the base pose for
+    /// overlay composition (JMO), and is the source of identity-
+    /// vs-rest ambiguity-resolution callers should configure when
+    /// building the input `Pose` (overlay anims should be built with
+    /// identity defaults so unflagged-bone composition produces the
+    /// rest pose, not double-rest).
+    ///
+    /// `movement` carries per-frame root deltas in **local space**.
+    /// For movement-bearing kinds (JMA/JMT/JMZ) the writer rotates
+    /// `dx/dy` by the accumulated yaw before adding it to the root
+    /// bone's pose — Foundry-style local→world fix per commit
+    /// `850d680d`. JMM/JMW/JMO/JMR ignore `movement` entirely.
+    #[allow(clippy::too_many_arguments)] // each arg is load-bearing; bundling adds a builder type for one call site
     pub fn write_jma<W: std::io::Write>(
         &self,
         writer: &mut W,
         skeleton: &Skeleton,
+        defaults: &[NodeTransform],
         node_list_checksum: i32,
         kind: JmaKind,
         actor_name: &str,
         movement: Option<&MovementData>,
     ) -> std::io::Result<()> {
+        let codec_count = self.frames.len();
+        // Tool re-importers expect codec_count + 1 frames: a leading
+        // rest pose for JMR/JMO, or a held trailing frame for the
+        // base kinds and JMW.
+        let total_frames = if codec_count == 0 { 0 } else { codec_count + 1 };
+
         // Header.
         writeln!(writer, "16392")?;
-        writeln!(writer, "{}", self.frames.len())?;
+        writeln!(writer, "{total_frames}")?;
         writeln!(writer, "30")?;
         writeln!(writer, "1")?;
         writeln!(writer, "{actor_name}")?;
@@ -119,45 +179,155 @@ impl Pose {
             writeln!(writer, "{}", node.next_sibling)?;
         }
 
-        // Frames + per-frame movement (composed local→world per Foundry).
-        let mut accumulated_yaw = 0.0f32;
-        for (frame_idx, frame) in self.frames.iter().enumerate() {
-            for transform in frame {
-                let t = transform.translation;
-                // Halo world-units → JMA "centimeter" convention.
-                write_floats(writer, &[t.x * 100.0, t.y * 100.0, t.z * 100.0])?;
-                let q = transform.rotation;
-                // JMA wants the conjugate: negate i,j,k, keep w.
-                write_floats(writer, &[-q.i, -q.j, -q.k, q.w])?;
-                write_floats(writer, &[transform.scale])?;
+        if codec_count == 0 {
+            return writer.flush();
+        }
+
+        // Optional leading rest-pose frame for JMR/JMO. Movement
+        // accumulation hasn't started yet, so the rest pose is
+        // emitted unmodified.
+        if kind.prepends_rest_pose() {
+            for transform in defaults {
+                write_transform(writer, *transform)?;
             }
-            if kind.has_movement_data() {
+        }
+
+        // Movement folding state — accumulated through every codec
+        // frame. The trailing held frame (when present) inherits the
+        // final state with no further accumulation.
+        let mut accumulated_translation = RealPoint3d::default();
+        let mut accumulated_yaw = 0.0f32;
+
+        for (frame_idx, frame) in self.frames.iter().enumerate() {
+            // Advance movement accumulators FIRST so this frame's
+            // root bone reflects the new position. (Order matters:
+            // frame 0 already shows the first delta, not zero.)
+            if kind.folds_movement() {
                 let local = movement
                     .and_then(|m| m.frames.get(frame_idx))
                     .copied()
                     .unwrap_or_default();
-                // Rotate dx/dy from local space into world by the
-                // yaw accumulated up through the previous frame
-                // (Foundry's order: rotate first, then accumulate
-                // this frame's dyaw).
-                let cos_y = accumulated_yaw.cos();
-                let sin_y = accumulated_yaw.sin();
-                let world_dx = local.dx * cos_y - local.dy * sin_y;
-                let world_dy = local.dx * sin_y + local.dy * cos_y;
-                // JMA-side translation scale is ×100 (cm convention).
-                let row: Vec<f32> = match kind {
-                    JmaKind::Jma => vec![world_dx * 100.0, world_dy * 100.0],
-                    JmaKind::Jmt => vec![world_dx * 100.0, world_dy * 100.0, local.dyaw],
-                    JmaKind::Jmz => vec![world_dx * 100.0, world_dy * 100.0, local.dz * 100.0, local.dyaw],
-                    _ => Vec::new(),
-                };
-                write_floats(writer, &row)?;
-                accumulated_yaw += local.dyaw;
+                advance_movement(&mut accumulated_translation, &mut accumulated_yaw, &local);
+            }
+
+            for (bone_idx, transform) in frame.iter().enumerate() {
+                let composed = compose_frame_bone(
+                    *transform,
+                    bone_idx,
+                    defaults,
+                    accumulated_translation,
+                    accumulated_yaw,
+                    kind,
+                );
+                write_transform(writer, composed)?;
             }
         }
+
+        // Trailing held frame — duplicate of the last codec frame's
+        // (already-composed-where-relevant) values. Movement state
+        // freezes at the final accumulated translation/yaw.
+        if kind.appends_held_frame() {
+            let last_idx = codec_count - 1;
+            let last_frame = &self.frames[last_idx];
+            for (bone_idx, transform) in last_frame.iter().enumerate() {
+                let composed = compose_frame_bone(
+                    *transform,
+                    bone_idx,
+                    defaults,
+                    accumulated_translation,
+                    accumulated_yaw,
+                    kind,
+                );
+                write_transform(writer, composed)?;
+            }
+        }
+
         writer.flush()?;
         Ok(())
     }
+}
+
+/// Apply this frame's local movement delta — translation rotated
+/// into world space by the previously-accumulated yaw, then yaw
+/// itself accumulated. Foundry commit `850d680d` order: rotate
+/// first, accumulate after.
+fn advance_movement(
+    translation: &mut RealPoint3d,
+    accumulated_yaw: &mut f32,
+    local: &MovementFrame,
+) {
+    let (cos_y, sin_y) = (accumulated_yaw.cos(), accumulated_yaw.sin());
+    let world_dx = local.dx * cos_y - local.dy * sin_y;
+    let world_dy = local.dx * sin_y + local.dy * cos_y;
+    translation.x += world_dx;
+    translation.y += world_dy;
+    translation.z += local.dz;
+    *accumulated_yaw += local.dyaw;
+}
+
+/// Apply per-bone composition for the given JMA kind. Returns the
+/// transform that should be written to disk (post-conjugate, post-
+/// scale-by-100 are still applied by [`write_transform`]).
+fn compose_frame_bone(
+    transform: NodeTransform,
+    bone_idx: usize,
+    defaults: &[NodeTransform],
+    accumulated_translation: RealPoint3d,
+    accumulated_yaw: f32,
+    kind: JmaKind,
+) -> NodeTransform {
+    let mut t = transform.translation;
+    let mut q = transform.rotation;
+    let mut s = transform.scale;
+
+    if kind.composes_overlay() {
+        // Codec values are deltas from the rest pose; combine with
+        // the bone's rest pose to produce the world pose Tool wants.
+        if let Some(base) = defaults.get(bone_idx).copied() {
+            t = RealPoint3d {
+                x: base.translation.x + transform.translation.x,
+                y: base.translation.y + transform.translation.y,
+                z: base.translation.z + transform.translation.z,
+            };
+            q = base.rotation * transform.rotation;
+            // Overlay scale is additive: TagTool's `Animation.Overlay`
+            // and Foundry's `compose_overlay_animation` agree.
+            s = base.scale + transform.scale;
+        }
+    }
+
+    // Movement folding lives on the root bone (index 0) and runs
+    // after any per-bone composition above.
+    if kind.folds_movement() && bone_idx == 0 {
+        t = RealPoint3d {
+            x: t.x + accumulated_translation.x,
+            y: t.y + accumulated_translation.y,
+            z: t.z + accumulated_translation.z,
+        };
+        q = yaw_quat(accumulated_yaw) * q;
+    }
+
+    NodeTransform { translation: t, rotation: q, scale: s }
+}
+
+/// Rotation around +Z axis (Halo's up) by `yaw` radians, encoded as
+/// a quaternion. Used to fold accumulated movement yaw into the
+/// root bone at write time.
+fn yaw_quat(yaw: f32) -> RealQuaternion {
+    let half = yaw * 0.5;
+    RealQuaternion { i: 0.0, j: 0.0, k: half.sin(), w: half.cos() }
+}
+
+/// Write one (translation, rotation, scale) bone-frame triple in
+/// JMA-on-disk format: translation `× 100` (cm convention),
+/// quaternion **conjugate** (`(-i, -j, -k, w)`), scale unchanged.
+fn write_transform<W: std::io::Write>(writer: &mut W, t: NodeTransform) -> std::io::Result<()> {
+    let p = t.translation;
+    write_floats(writer, &[p.x * 100.0, p.y * 100.0, p.z * 100.0])?;
+    let q = t.rotation;
+    write_floats(writer, &[-q.i, -q.j, -q.k, q.w])?;
+    write_floats(writer, &[t.scale])?;
+    Ok(())
 }
 
 fn write_floats<W: std::io::Write>(writer: &mut W, values: &[f32]) -> std::io::Result<()> {

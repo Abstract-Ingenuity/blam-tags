@@ -787,7 +787,7 @@ $ blam-tag-shell list-animations objects/.../foo.model_animation_graph
 
 | Argument | Description |
 |-|-|
-| `<FILE>` | Path to a `.model_animation_graph` tag file. |
+| `<FILE>` | A `.model_animation_graph` (jmad), a `.model` (hlmt), or any object-inheriting tag (`.biped`, `.weapon`, `.scenery`, `.equipment`, `.vehicle`, …) that points at a `.model`. |
 | `[ANIM]` | Animation index (`definitions/animations[N]`) or resolved string-id name. **Optional** — omit to extract every animation in the tag. |
 
 | Long | Description |
@@ -808,9 +808,26 @@ The output layout matches what [Tool's `model-animations` command](https://c20.r
   animations/<anim_name>.<EXT>  # extract-animation, one file per anim
 ```
 
-`--format jma` writes a JMA-family text file (`.JMM/.JMA/.JMT/.JMZ/.JMO/.JMR/.JMW`), kind picked from the animation's `animation type` × `frame info type` per Bungie's convention. Movement-bearing kinds (JMA/JMT/JMZ) emit per-frame movement lines with **world-space** dx/dy (rotated by accumulated yaw at write time per Foundry's fix), translation × 100 cm, and conjugate-quaternion serialization.
+`--format jma` writes a JMA-family text file (`.JMM/.JMA/.JMT/.JMZ/.JMO/.JMR/.JMW`), kind picked from the animation's `animation type` × `frame info type` × `internal flags / world relative` (JMW = base + world-relative bit). Translations are scaled `× 100` (cm convention) and quaternions written as the conjugate `(-i, -j, -k, w)`. The H3 JMA spec (version 16392) has **no separate per-frame movement section** — for movement-bearing kinds (JMA/JMT/JMZ) the writer folds accumulated `dx/dy/dz/dyaw` deltas into the root bone (index 0) at each frame, with `dx/dy` rotated from local space into world space by the accumulated yaw per Foundry commit `850d680d`. Verified against `General-101/Halo-Asset-Blender-Development-Toolset` reader/writer and TagTool's `Animation.Process()` / `Export()`.
+
+Each on-disk JMA carries `codec_count + 1` frames per Tool's importer convention:
+- **Base (JMM/JMA/JMT/JMZ) and JMW**: codec frames + a duplicated trailing held frame (Tool's blend-into-next-anim convention).
+- **Replacement (JMR)**: a leading rest-pose frame, then codec frames.
+- **Overlay (JMO)**: a leading rest-pose frame, then per-frame composed `(rest_rotation × codec_delta_rotation, rest_translation + codec_delta_translation, rest_scale + codec_delta_scale)`.
 
 `--format json` dumps both static and animated tracks plus the animated-stream status — useful for diagnostics and for codecs not yet wired into the JMA writer.
+
+#### Input dispatch
+
+| Input | Resolution |
+|-|-|
+| `.model_animation_graph` (jmad) | Used directly. Rest pose comes from the jmad's own `additional node data` block — the only source available without a render_model in scope. |
+| `.model` (hlmt) | Follow the `animation` ref to load the jmad and the `render model` ref to load the render_model. Rest pose is built from `render_model.nodes[]` (authoritative), with `additional node data` filling in synthetic nodes the render_model lacks (e.g. `camera_control`). |
+| Object-inheriting (`.biped`, `.vehicle`, `.weapon`, `.equipment`, `.scenery`, `.crate`, …) | Follow the inherited `model` ref to a `.model`, then the `.model` case. |
+
+For first-person weapon animations specifically, pass the FP `.model_animation_graph` directly — its `additional node data` block already merges arms + gun rest poses. (Resolving FP via `.weapon` would only give you the gun render_model, missing the arms.)
+
+Source priority for each bone's rest pose: render_model nodes (when available) → `additional node data` → identity. Per the Foundry maintainer, render_model values are authoritative; additional_node_data is a denormalized cache that can drift on rare occasions.
 
 Verified across 36,270 / 36,270 H3 + Reach MCC animations.
 
@@ -827,27 +844,27 @@ When two animations would resolve to the same output path (e.g. `walk fast` and 
 ```sh
 # Bulk default → ./masterchief/animations/
 $ blam-tag-shell extract-animation masterchief.model_animation_graph
-masterchief/animations/any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
-masterchief/animations/any_idle.JMM: 30 frames × 55 bones [JMM]  movement=None (0 frames)
+masterchief/animations/any_any_any_morph.JMA: 122 frames (121+1) × 55 bones [JMA]  movement=DxDy
+masterchief/animations/any_idle.JMM: 31 frames (30+1) × 55 bones [JMM]  movement=None
 ...
 
 # Single anim by index → same source-tree layout
 $ blam-tag-shell extract-animation masterchief.model_animation_graph 0
-masterchief/animations/any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
+masterchief/animations/any_any_any_morph.JMA: 122 frames (121+1) × 55 bones [JMA]  movement=DxDy
 
 # Single anim by string-id name
 $ blam-tag-shell extract-animation masterchief.model_animation_graph "any:any:any:morph"
-masterchief/animations/any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
+masterchief/animations/any_any_any_morph.JMA: 122 frames (121+1) × 55 bones [JMA]  movement=DxDy
 
 # Exact output filename (bypasses the source-tree layout; single-anim only)
 $ blam-tag-shell extract-animation brute.model_animation_graph 139 \
     --output /tmp/brute_melee.JMT
-/tmp/brute_melee.JMT: 37 frames × 50 bones [JMT]  movement=DxDyDyaw (37 frames)
+/tmp/brute_melee.JMT: 38 frames (37+1) × 50 bones [JMT]  movement=DxDyDyaw
 
 # Choose a different source-tree root
 $ blam-tag-shell extract-animation brute.model_animation_graph --output build/
-build/brute/animations/idle.JMM: 30 frames × 50 bones [JMM]  movement=None (0 frames)
-build/brute/animations/melee.JMT: 37 frames × 50 bones [JMT]  movement=DxDyDyaw (37 frames)
+build/brute/animations/idle.JMM: 31 frames (30+1) × 50 bones [JMM]  movement=None
+build/brute/animations/melee.JMT: 38 frames (37+1) × 50 bones [JMT]  movement=DxDyDyaw
 ...
 
 # Tool round-trip: extract render + animations into the same source tree, import.
@@ -861,8 +878,8 @@ $ blam-tag-shell extract-animation elite.model_animation_graph 0 --format json |
 
 # --flat for ad-hoc inspection — drop everything next to each other
 $ blam-tag-shell extract-animation brute.model_animation_graph --flat
-brute.idle.JMM: 30 frames × 50 bones [JMM]  movement=None (0 frames)
-brute.melee.JMT: 37 frames × 50 bones [JMT]  movement=DxDyDyaw (37 frames)
+brute.idle.JMM: 31 frames (30+1) × 50 bones [JMM]  movement=None
+brute.melee.JMT: 38 frames (37+1) × 50 bones [JMT]  movement=DxDyDyaw
 ...
 ```
 

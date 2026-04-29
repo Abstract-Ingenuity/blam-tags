@@ -81,6 +81,18 @@ pub struct NodeTransform {
     pub scale: f32,
 }
 
+impl NodeTransform {
+    /// Identity transform: rotation `(0,0,0,1)`, translation
+    /// `(0,0,0)`, scale `1.0`. Useful as a fallback when no rest
+    /// pose is available — note `Default` is all-zeros (rotation
+    /// included) which is *not* identity.
+    pub const IDENTITY: Self = Self {
+        rotation: RealQuaternion::IDENTITY,
+        translation: RealPoint3d { x: 0.0, y: 0.0, z: 0.0 },
+        scale: 1.0,
+    };
+}
+
 /// Per-frame, per-bone transform table. `frames[frame_index][bone_index]`.
 #[derive(Debug, Clone)]
 pub struct Pose {
@@ -92,13 +104,14 @@ impl AnimationClip {
     /// using the per-component `node_flags` bitarrays. Result has one
     /// `NodeTransform` per (frame, skeleton bone).
     ///
-    /// Bones with neither flag set fall back to identity (rotation =
-    /// (0,0,0,1), translation = (0,0,0), scale = 1.0). This is wrong
-    /// for the rare bones whose rest pose lives in the skeleton's own
-    /// `z_pos`/`base_vector` fields, but most exported animations
-    /// have all bones in the static or animated set so the fallback
-    /// rarely matters in practice.
-    pub fn pose(&self, skeleton: &Skeleton) -> Pose {
+    /// `defaults` supplies the per-bone rest pose used when a bone is
+    /// flagged neither static nor animated. Pass `None` for identity
+    /// (legacy behavior — wrong for FP weapons and other tags whose
+    /// unflagged bones rely on the render_model's `default
+    /// translation` / `default rotation`); pass `Some(&[..])` with one
+    /// entry per skeleton bone for the canonical render_model defaults
+    /// (matches TagTool's `AnimationDefaultNodeHelper` behavior).
+    pub fn pose(&self, skeleton: &Skeleton, defaults: Option<&[NodeTransform]>) -> Pose {
         let bones = skeleton.len();
         let frames_n = self.frame_count.max(1) as usize;
         let mut frames = Vec::with_capacity(frames_n);
@@ -111,10 +124,14 @@ impl AnimationClip {
 
         for f in 0..frames_n {
             let mut row = Vec::with_capacity(bones);
-            for res in &resolutions {
-                let rotation = pick_rotation(self, res, f).unwrap_or(RealQuaternion::IDENTITY);
-                let translation = pick_translation(self, res, f).unwrap_or(RealPoint3d::default());
-                let scale = pick_scale(self, res, f).unwrap_or(1.0);
+            for (b, res) in resolutions.iter().enumerate() {
+                let default = defaults
+                    .and_then(|d| d.get(b))
+                    .copied()
+                    .unwrap_or(NodeTransform::IDENTITY);
+                let rotation = pick_rotation(self, res, f).unwrap_or(default.rotation);
+                let translation = pick_translation(self, res, f).unwrap_or(default.translation);
+                let scale = pick_scale(self, res, f).unwrap_or(default.scale);
                 row.push(NodeTransform { rotation, translation, scale });
             }
             frames.push(row);

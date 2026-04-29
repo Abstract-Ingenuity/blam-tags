@@ -178,6 +178,13 @@ pub struct AnimationGroup<'a> {
     /// Raw `animation_data` blob bytes. Empty slice if the
     /// group_member is missing or its data field is empty.
     pub blob: &'a [u8],
+    /// `internal flags / world relative` (bit 1). When set on a
+    /// `animation_type=base` animation, the export uses the JMW
+    /// extension. The schema doesn't expose "world" as a type enum
+    /// value; this bit is the only signal — same convention as
+    /// TagTool's `GetAnimationExtension(..., worldRelative)` and
+    /// Foundry's `internal_flags.TestBit("world relative")`.
+    pub world_relative: bool,
 }
 
 impl<'a> AnimationGroup<'a> {
@@ -302,6 +309,15 @@ impl<'a> Animation<'a> {
             let node_list_checksum = metadata.read_int_any("node list checksum").unwrap_or(0) as i32;
             let resource_group = metadata.read_int_any("resource_group").unwrap_or(-1) as i16;
             let resource_group_member = metadata.read_int_any("resource_group_member").unwrap_or(-1) as i16;
+            // `internal flags` bit 1 = "world relative". The schema's
+            // `animation type` enum has only base/overlay/replacement;
+            // JMW (world-relative base) is selected here, not from a
+            // type enum value. Matches Foundry's `internal_flags
+            // .TestBit("world relative")` lookup and TagTool's
+            // `GetAnimationExtension(type, frame_info, worldRelative)`
+            // boolean parameter.
+            let internal_flags = metadata.read_int_any("internal flags").unwrap_or(0) as u32;
+            let world_relative = (internal_flags >> 1) & 1 == 1;
 
             let (mut checksum, mut codec_frame_count, mut movement_type, mut data_sizes, mut codec_byte, mut blob) =
                 resolve_member(&group_member_table, resource_group, resource_group_member);
@@ -343,6 +359,7 @@ impl<'a> Animation<'a> {
                 data_sizes,
                 codec_byte,
                 blob,
+                world_relative,
             });
         }
 

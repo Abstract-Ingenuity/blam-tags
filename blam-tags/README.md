@@ -270,29 +270,46 @@ cargo run --release -p blam-tags --example extract_tiff_sweep -- \
 
 ### Animation (jmad → JMA-family)
 
-`Animation::new(&tag)` walks a `model_animation_graph` and pairs each user-facing entry in `definitions/animations` with its `tag resource groups[r]/tag_resource/group_members[m]` runtime payload. Each `AnimationGroup` carries header metadata + the raw `animation_data` blob; call `decode()` to turn the blob into an `AnimationClip` with separately decoded static + animated tracks, per-bone flag bitarrays, and per-frame movement deltas. Compose against a `Skeleton` via `clip.pose(&skeleton)` and emit a `.JMM/.JMA/.JMT/.JMZ/.JMO/.JMR/.JMW` text file with `pose.write_jma`:
+`Animation::new(&tag)` walks a `model_animation_graph` and pairs each user-facing entry in `definitions/animations` with its `tag resource groups[r]/tag_resource/group_members[m]` runtime payload. Each `AnimationGroup` carries header metadata + the raw `animation_data` blob; call `decode()` to turn the blob into an `AnimationClip` with separately decoded static + animated tracks, per-bone flag bitarrays, and per-frame movement deltas. Compose against a `Skeleton` via `clip.pose(skel, defaults)` (where `defaults` is the per-bone rest pose, typically read from the render_model's `nodes[]` block) and emit a `.JMM/.JMA/.JMT/.JMZ/.JMO/.JMR/.JMW` text file with `pose.write_jma`:
 
 ```rust
-use blam_tags::{Animation, JmaKind, Skeleton, TagFile};
+use blam_tags::{Animation, JmaKind, NodeTransform, Skeleton, TagFile};
 use std::fs::File;
 use std::io::BufWriter;
 
 let tag = TagFile::read("masterchief.model_animation_graph")?;
 let animation = Animation::new(&tag)?;
 let skeleton = Skeleton::from_tag(&tag);
+// Caller supplies per-bone rest pose (render_model defaults +
+// jmad's `additional node data` fallback). Identity stand-in here
+// for brevity — see `blam-tag-shell/src/commands/extract_animation.rs`
+// for a full builder.
+let defaults: Vec<_> = (0..skeleton.len()).map(|_| NodeTransform::IDENTITY).collect();
 
 for group in animation.iter() {
     let clip = group.decode()?;
-    let pose = clip.pose(&skeleton);
     let kind = JmaKind::from_metadata(
         group.animation_type.as_deref(),
         group.frame_info_type.as_deref(),
+        group.world_relative,  // base + this bit → JMW
     );
+    // Overlay anims should compose `rest × codec_delta`; pass `None`
+    // so unflagged bones decode as identity, then the writer's
+    // overlay composition produces the rest pose.
+    let pose_defaults = if kind.composes_overlay() { None } else { Some(&defaults[..]) };
+    let pose = clip.pose(&skeleton, pose_defaults);
     let path = format!("{}.{}", group.name.as_deref().unwrap_or("anim"), kind.extension());
     let mut out = BufWriter::new(File::create(path)?);
-    pose.write_jma(&mut out, &skeleton, group.node_list_checksum, kind, "actor", Some(&clip.movement))?;
+    pose.write_jma(&mut out, &skeleton, &defaults, group.node_list_checksum, kind, "actor", Some(&clip.movement))?;
 }
 ```
+
+The writer applies the type-specific JMA layout Tool's importer expects:
+- **Base (JMM/JMA/JMT/JMZ) + JMW**: codec frames + a duplicated trailing held frame.
+- **Replacement (JMR)**: a leading rest-pose frame, then codec frames.
+- **Overlay (JMO)**: a leading rest-pose frame, then per-frame composed `(rest_rotation × codec_delta_rotation, rest_translation + codec_delta_translation)`.
+
+Movement deltas (JMA/JMT/JMZ) are folded into the **root bone** (index 0) — the H3 JMA spec has no separate per-frame movement section. Verified against `General-101/Halo-Asset-Blender-Development-Toolset` reader/writer and TagTool's `Animation.Process()` / `Export()`.
 
 Inheriting jmads (zero local animations, parent reference set) are a normal success: `Animation::new` returns with `len() == 0` and `parent()` non-null. Walk the parent and merge if you need the inherited animations.
 

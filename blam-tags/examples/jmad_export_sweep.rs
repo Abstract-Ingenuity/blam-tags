@@ -48,10 +48,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         for g in animation.iter() {
             anims += 1;
             let clip = match g.decode() { Ok(c) => c, Err(_) => { failed += 1; continue; } };
-            let pose = clip.pose(&skeleton);
-            let kind = JmaKind::from_metadata(g.animation_type.as_deref(), g.frame_info_type.as_deref());
+            let pose = clip.pose(&skeleton, None);
+            let kind = JmaKind::from_metadata(
+                g.animation_type.as_deref(),
+                g.frame_info_type.as_deref(),
+                g.world_relative,
+            );
+            let defaults: Vec<_> = (0..skeleton.len()).map(|_| blam_tags::NodeTransform::IDENTITY).collect();
             let mut sink = std::io::sink();
-            match pose.write_jma(&mut sink, &skeleton, g.node_list_checksum, kind, "actor", Some(&clip.movement)) {
+            match pose.write_jma(&mut sink, &skeleton, &defaults, g.node_list_checksum, kind, "actor", Some(&clip.movement)) {
                 Ok(()) => exported += 1,
                 Err(_) => io_failed += 1,
             }
