@@ -62,7 +62,7 @@ The example commands below elide `--game` for readability — add it to every in
 | [`extract-ass`](#extract-ass--scenario-to-ass) | Extract a `.scenario` tag's structure BSPs as ASS files (one per BSP, with paired lighting baked in) |
 | [`extract-data`](#extract-data--dump-a-tag_data-field) | Write the bytes of a single `tag_data` field to a file |
 | [`list-animations`](#list-animations--enumerate-jmad-animations) | List the animations in a `model_animation_graph` tag |
-| [`extract-animation`](#extract-animation--decode-and-export-an-animation) | Decode a single jmad animation; write JMA-family text or JSON |
+| [`extract-animation`](#extract-animation--decode-and-export-an-animation) | Decode one or every jmad animation; write JMA-family text or JSON |
 | [`add-dependency-list`](#optional-stream-commands) | Attach an empty dependency-list stream |
 | [`remove-dependency-list`](#optional-stream-commands) | Drop the dependency-list stream |
 | [`rebuild-dependency-list`](#optional-stream-commands) | Repopulate the dependency list from the tag's own tag_references |
@@ -788,14 +788,25 @@ $ blam-tag-shell list-animations objects/.../foo.model_animation_graph
 | Argument | Description |
 |-|-|
 | `<FILE>` | Path to a `.model_animation_graph` tag file. |
-| `<ANIM>` | Animation index (`definitions/animations[N]`) or resolved string-id name. |
+| `[ANIM]` | Animation index (`definitions/animations[N]`) or resolved string-id name. **Optional** — omit to extract every animation in the tag. |
 
 | Long | Description |
 |-|-|
-| `--output <PATH>` | Output file path. Default: `<tag_stem>.<anim_name>.<EXT>` in cwd for `jma` format; stdout for `json`. |
+| `--output <PATH>` | Source-tree root. Files land at `<root>/<tag_stem>/animations/<anim_name>.<EXT>`. Default root is `.`. See semantics below. |
+| `--flat` | Flatten the layout: emit `<root>/<tag_stem>.<anim_name>.<EXT>` instead of nested subdirs. Mirrors [`extract-jms --flat`](#extract-jms--model-to-source-tree-jms-files). Ignored when `--output` is an exact filename. |
 | `--format <FMT>` | `jma` (default) or `json`. |
 
-Decodes one animation's static + animated codec streams + per-bone flag bitarrays + per-frame movement, composes them against the tag's skeleton, and writes the result.
+Decodes one or every animation's static + animated codec streams + per-bone flag bitarrays + per-frame movement, composes them against the tag's skeleton, and writes the result.
+
+The output layout matches what [Tool's `model-animations` command](https://c20.reclaimers.net/h3/h3-ek/h3-tool/#model-animations) consumes — `<source-directory>/animations/*.JM*` — so the result drops straight into an H3EK source tree alongside [`extract-jms`](#extract-jms--model-to-source-tree-jms-files)'s `render/` output. Pointing both verbs at the same `--output <root>` produces a Tool-importable tree at `<root>/<tag_stem>/`:
+
+```text
+<root>/<tag_stem>/
+  render/<tag_stem>.JMS         # extract-jms
+  collision/<tag_stem>.JMS      # extract-jms
+  physics/<tag_stem>.JMS        # extract-jms
+  animations/<anim_name>.<EXT>  # extract-animation, one file per anim
+```
 
 `--format jma` writes a JMA-family text file (`.JMM/.JMA/.JMT/.JMZ/.JMO/.JMR/.JMW`), kind picked from the animation's `animation type` × `frame info type` per Bungie's convention. Movement-bearing kinds (JMA/JMT/JMZ) emit per-frame movement lines with **world-space** dx/dy (rotated by accumulated yaw at write time per Foundry's fix), translation × 100 cm, and conjugate-quaternion serialization.
 
@@ -803,22 +814,56 @@ Decodes one animation's static + animated codec streams + per-bone flag bitarray
 
 Verified across 36,270 / 36,270 H3 + Reach MCC animations.
 
+#### `--output` semantics
+
+| `--output` | Behavior |
+|-|-|
+| omitted | Root is `.` — files land at `./<tag_stem>/animations/<anim_name>.<EXT>`. Single-anim `json` still prints to stdout for piping into `jq`. |
+| ends in `.jmm/.jma/.jmt/.jmz/.jmo/.jmr/.jmw/.json` | Treated as an exact filename, bypassing the source-tree layout. **Single-anim only** — multi-anim + filename is rejected. |
+| any other path (existing dir, trailing `/`, or unrecognized extension) | Becomes the source-tree root. Files land at `<root>/<tag_stem>/animations/<anim_name>.<EXT>`. |
+
+When two animations would resolve to the same output path (e.g. `walk fast` and `walk-fast` both sanitize to `walk_fast.JMA`), the command bails with both anim indexes instead of silently overwriting.
+
 ```sh
+# Bulk default → ./masterchief/animations/
+$ blam-tag-shell extract-animation masterchief.model_animation_graph
+masterchief/animations/any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
+masterchief/animations/any_idle.JMM: 30 frames × 55 bones [JMM]  movement=None (0 frames)
+...
+
+# Single anim by index → same source-tree layout
 $ blam-tag-shell extract-animation masterchief.model_animation_graph 0
-masterchief.any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
+masterchief/animations/any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
 
-# By name (string-id)
+# Single anim by string-id name
 $ blam-tag-shell extract-animation masterchief.model_animation_graph "any:any:any:morph"
-masterchief.any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
+masterchief/animations/any_any_any_morph.JMA: 121 frames × 55 bones [JMA]  movement=DxDy (121 frames)
 
-# Specific output path
+# Exact output filename (bypasses the source-tree layout; single-anim only)
 $ blam-tag-shell extract-animation brute.model_animation_graph 139 \
     --output /tmp/brute_melee.JMT
 /tmp/brute_melee.JMT: 37 frames × 50 bones [JMT]  movement=DxDyDyaw (37 frames)
 
-# JSON for diagnostics
-$ blam-tag-shell extract-animation elite.model_animation_graph 0 --format json --output anim.json
-anim.json: 121 frames, animated=Decoded
+# Choose a different source-tree root
+$ blam-tag-shell extract-animation brute.model_animation_graph --output build/
+build/brute/animations/idle.JMM: 30 frames × 50 bones [JMM]  movement=None (0 frames)
+build/brute/animations/melee.JMT: 37 frames × 50 bones [JMT]  movement=DxDyDyaw (37 frames)
+...
+
+# Tool round-trip: extract render + animations into the same source tree, import.
+$ blam-tag-shell extract-jms       brute.model            --output data/
+$ blam-tag-shell extract-animation brute.model_animation_graph --output data/
+$ tool model-animations brute    # consumes data/brute/render/ + data/brute/animations/
+
+# Single-anim JSON → stdout (pipe-friendly)
+$ blam-tag-shell extract-animation elite.model_animation_graph 0 --format json | jq '.frame_count'
+121
+
+# --flat for ad-hoc inspection — drop everything next to each other
+$ blam-tag-shell extract-animation brute.model_animation_graph --flat
+brute.idle.JMM: 30 frames × 50 bones [JMM]  movement=None (0 frames)
+brute.melee.JMT: 37 frames × 50 bones [JMT]  movement=DxDyDyaw (37 frames)
+...
 ```
 
 ---

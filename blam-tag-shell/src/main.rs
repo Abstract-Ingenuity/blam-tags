@@ -399,19 +399,32 @@ enum Commands {
         json: bool,
     },
 
-    /// Decode a single animation from a `model_animation_graph` tag.
-    /// Default output is a JMA-family text file (`.JMM/.JMA/.JMT/...`)
+    /// Decode animations from a `model_animation_graph` tag. Default
+    /// output is a JMA-family text file (`.JMM/.JMA/.JMT/...`)
     /// re-importable by Halo content tooling. `--format json` emits
-    /// the full per-frame transform table for diagnostics.
+    /// the full per-frame transform table for diagnostics. With no
+    /// `<anim>` arg, every animation in the tag is extracted.
     ExtractAnimation {
         /// Path to a `.model_animation_graph` tag file
         file: String,
-        /// Animation index (`definitions/animations[N]`) or name
-        anim: String,
-        /// Output path. Default: `<tag_stem>.<anim_name>.<EXT>` in cwd
-        /// for `jma` format, stdout for `json`.
+        /// Animation index (`definitions/animations[N]`) or name.
+        /// Omit to extract every animation in the tag.
+        anim: Option<String>,
+        /// Output path. Treated as a source-tree root: files land
+        /// at `<root>/<tag_stem>/animations/<anim_name>.<EXT>` to
+        /// match Tool's `model-animations` layout. Default root is
+        /// `.`. A path ending in a JMA-family or `.json` extension
+        /// is treated as an exact filename instead (single-anim
+        /// only). Single-anim `json` with no `--output` still
+        /// prints to stdout for piping.
         #[arg(long)]
         output: Option<String>,
+        /// Flatten the layout: emit `<root>/<tag_stem>.<anim_name>.<EXT>`
+        /// instead of nested `<root>/<tag_stem>/animations/...` subdirs.
+        /// Useful for ad-hoc inspection. Mirrors `extract-jms --flat`.
+        /// Ignored when `--output` is an exact filename.
+        #[arg(long)]
+        flat: bool,
         /// Output format
         #[arg(long, value_enum, default_value_t = commands::extract_animation::Format::Jma)]
         format: commands::extract_animation::Format,
@@ -610,9 +623,9 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::list_animations::run(ctx, json)
         }
 
-        Commands::ExtractAnimation { file, anim, output, format } => {
+        Commands::ExtractAnimation { file, anim, output, flat, format } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::extract_animation::run(ctx, &anim, output.as_deref(), format)
+            commands::extract_animation::run(ctx, anim.as_deref(), output.as_deref(), flat, format)
         }
 
         Commands::AddDependencyList { file, output } => {
