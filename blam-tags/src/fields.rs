@@ -37,6 +37,10 @@ pub enum TagFieldType {
     ShortInteger,
     LongInteger,
     Int64Integer,
+    ByteInteger,
+    WordInteger,
+    DwordInteger,
+    QwordInteger,
     Angle,
     Tag,
     CharEnum,
@@ -92,6 +96,7 @@ pub enum TagFieldType {
     PageableResource,
     ApiInterop,
     Terminator,
+    NonCacheRuntimeValue,
 }
 
 impl TagFieldType {
@@ -109,6 +114,10 @@ impl TagFieldType {
             "short integer" => Self::ShortInteger,
             "long integer" => Self::LongInteger,
             "int64 integer" => Self::Int64Integer,
+            "byte integer" => Self::ByteInteger,
+            "word integer" => Self::WordInteger,
+            "dword integer" => Self::DwordInteger,
+            "qword integer" => Self::QwordInteger,
             "angle" => Self::Angle,
             "tag" => Self::Tag,
             "char enum" => Self::CharEnum,
@@ -164,6 +173,7 @@ impl TagFieldType {
             "pageable resource" => Self::PageableResource,
             "api interop" => Self::ApiInterop,
             "terminator X" => Self::Terminator,
+            "non-cache runtime value" => Self::NonCacheRuntimeValue,
             _ => Self::Unknown,
         }
     }
@@ -345,6 +355,10 @@ pub enum TagFieldData {
     ShortInteger(i16),
     LongInteger(i32),
     Int64Integer(i64),
+    ByteInteger(u8),
+    WordInteger(u16),
+    DwordInteger(u32),
+    QwordInteger(u64),
     Tag(u32),
 
     // Enums: raw value + resolved variant name (None if out of range
@@ -491,6 +505,9 @@ impl TagFieldData {
 #[inline] fn read_i64(raw: &[u8], o: usize) -> i64 {
     i64::from_le_bytes(raw[o..o + 8].try_into().unwrap())
 }
+#[inline] fn read_u64(raw: &[u8], o: usize) -> u64 {
+    u64::from_le_bytes(raw[o..o + 8].try_into().unwrap())
+}
 #[inline] fn read_f32(raw: &[u8], o: usize) -> f32 {
     f32::from_le_bytes(raw[o..o + 4].try_into().unwrap())
 }
@@ -510,6 +527,9 @@ impl TagFieldData {
     raw[o..o + 4].copy_from_slice(&v.to_le_bytes());
 }
 #[inline] fn write_i64(raw: &mut [u8], o: usize, v: i64) {
+    raw[o..o + 8].copy_from_slice(&v.to_le_bytes());
+}
+#[inline] fn write_u64(raw: &mut [u8], o: usize, v: u64) {
     raw[o..o + 8].copy_from_slice(&v.to_le_bytes());
 }
 #[inline] fn write_f32(raw: &mut [u8], o: usize, v: f32) {
@@ -677,7 +697,8 @@ pub(crate) fn deserialize_field(
         | TagFieldType::UselessPad
         | TagFieldType::Skip
         | TagFieldType::Explanation
-        | TagFieldType::Terminator => None,
+        | TagFieldType::Terminator
+        | TagFieldType::NonCacheRuntimeValue => None,
 
         // Containers — navigated via sub_chunks directly.
         TagFieldType::Struct
@@ -701,6 +722,10 @@ pub(crate) fn deserialize_field(
         TagFieldType::ShortInteger => Some(TagFieldData::ShortInteger(read_i16(raw_struct, offset))),
         TagFieldType::LongInteger => Some(TagFieldData::LongInteger(read_i32(raw_struct, offset))),
         TagFieldType::Int64Integer => Some(TagFieldData::Int64Integer(read_i64(raw_struct, offset))),
+        TagFieldType::ByteInteger => Some(TagFieldData::ByteInteger(read_u8(raw_struct, offset))),
+        TagFieldType::WordInteger => Some(TagFieldData::WordInteger(read_u16(raw_struct, offset))),
+        TagFieldType::DwordInteger => Some(TagFieldData::DwordInteger(read_u32(raw_struct, offset))),
+        TagFieldType::QwordInteger => Some(TagFieldData::QwordInteger(read_u64(raw_struct, offset))),
         TagFieldType::Tag => Some(TagFieldData::Tag(read_u32(raw_struct, offset))),
 
         // Enums.
@@ -928,6 +953,10 @@ pub(crate) fn serialize_field(
         TagFieldData::ShortInteger(v) => { write_i16(raw_struct, offset, *v); None }
         TagFieldData::LongInteger(v) => { write_i32(raw_struct, offset, *v); None }
         TagFieldData::Int64Integer(v) => { write_i64(raw_struct, offset, *v); None }
+        TagFieldData::ByteInteger(v) => { write_u8(raw_struct, offset, *v); None }
+        TagFieldData::WordInteger(v) => { write_u16(raw_struct, offset, *v); None }
+        TagFieldData::DwordInteger(v) => { write_u32(raw_struct, offset, *v); None }
+        TagFieldData::QwordInteger(v) => { write_u64(raw_struct, offset, *v); None }
         TagFieldData::Tag(v) => { write_u32(raw_struct, offset, *v); None }
 
         TagFieldData::CharEnum { value, .. } => { write_i8(raw_struct, offset, *value); None }

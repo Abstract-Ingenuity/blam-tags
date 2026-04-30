@@ -27,7 +27,7 @@ Every invocation requires the global `--game <GAME>` flag (alias `-g`). The shel
 - **Schema lookup** — schemas are read from `definitions/<GAME>/<group>.json`. Required for `new`, the optional-stream attach commands, and any command that needs to know how to interpret a tag's contents.
 - **Tag-reference rendering** — group-tag → group-name resolution comes from `definitions/<GAME>/_meta.json`, which is loaded eagerly at startup. Bad/missing path errors out before any command runs.
 
-`<GAME>` is the directory name under `definitions/` — currently `halo3_mcc` and `haloreach_mcc`. The flag is global, so it can appear anywhere on the command line:
+`<GAME>` is the directory name under `definitions/` — currently `halo3_mcc`, `halo3odst_mcc`, `haloreach_mcc`, `halo4_mcc`, and `halo2amp_mcc`. The flag is global, so it can appear anywhere on the command line:
 
 ```sh
 blam-tag-shell --game halo3_mcc header masterchief.biped

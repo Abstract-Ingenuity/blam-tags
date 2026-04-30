@@ -182,10 +182,12 @@ From an instance you can always jump to its schema — `tag_struct.definition()`
 
 ### Create a new tag from a schema
 
-Schemas live under `definitions/<game>/<group>.json`, dumped from the engine DLLs by a pair of IDAPython scripts under `$HALO_ROOT/halo3_mcc/`:
+Schemas live under `definitions/<game>/<group>.json`, dumped from the engine DLLs by IDAPython scripts. Each dump's `_meta.json` records which tool produced it:
 
-- `halo3_dump_tag_definitions_json.py` — H3 guerilla.exe
-- `haloreach_dump_tag_definitions_json.py` — Reach sapien.exe
+- guerilla.exe: `halo3_mcc`, `halo3odst_mcc`
+- sapien.exe: `haloreach_mcc`, `halo4_mcc`, `halo2amp_mcc`
+
+Fresh sapien dumps need two idempotent post-processing passes before they'll load — see [`examples/dedupe_definitions.rs`](./examples/dedupe_definitions.rs) and [`examples/inline_parent_struct.rs`](./examples/inline_parent_struct.rs).
 
 The library builds a zero-filled tag directly from a schema:
 

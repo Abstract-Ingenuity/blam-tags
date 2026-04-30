@@ -41,7 +41,7 @@ Builds the library and the CLI binary (`blam-tag-shell`).
 
 ## Use the CLI
 
-The shell needs a `--game <GAME>` flag (alias `-g`) on every invocation — it scopes schema lookups and group-name resolution to `definitions/<GAME>/`. `<GAME>` is a directory name under `definitions/` (currently `halo3_mcc` or `haloreach_mcc`).
+The shell needs a `--game <GAME>` flag (alias `-g`) on every invocation — it scopes schema lookups and group-name resolution to `definitions/<GAME>/`. `<GAME>` is a directory name under `definitions/` (currently `halo3_mcc`, `halo3odst_mcc`, `haloreach_mcc`, `halo4_mcc`, or `halo2amp_mcc`).
 
 ```sh
 cargo run --release -p blam-tag-shell -- --game halo3_mcc header path/to/masterchief.biped

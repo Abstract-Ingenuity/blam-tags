@@ -229,6 +229,10 @@ fn field_type_info(ty: &str) -> Option<FieldTypeInfo> {
         "short_integer"            => FieldTypeInfo { ty: TagFieldType::ShortInteger,           canonical: "short integer",            size: 2,   needs_sub_chunk: 0 },
         "long_integer"             => FieldTypeInfo { ty: TagFieldType::LongInteger,            canonical: "long integer",             size: 4,   needs_sub_chunk: 0 },
         "int64_integer"            => FieldTypeInfo { ty: TagFieldType::Int64Integer,           canonical: "int64 integer",            size: 8,   needs_sub_chunk: 0 },
+        "byte_integer"             => FieldTypeInfo { ty: TagFieldType::ByteInteger,            canonical: "byte integer",             size: 1,   needs_sub_chunk: 0 },
+        "word_integer"             => FieldTypeInfo { ty: TagFieldType::WordInteger,            canonical: "word integer",             size: 2,   needs_sub_chunk: 0 },
+        "dword_integer"            => FieldTypeInfo { ty: TagFieldType::DwordInteger,           canonical: "dword integer",            size: 4,   needs_sub_chunk: 0 },
+        "qword_integer"            => FieldTypeInfo { ty: TagFieldType::QwordInteger,           canonical: "qword integer",            size: 8,   needs_sub_chunk: 0 },
         "angle"                    => FieldTypeInfo { ty: TagFieldType::Angle,                  canonical: "angle",                    size: 4,   needs_sub_chunk: 0 },
         "tag"                      => FieldTypeInfo { ty: TagFieldType::Tag,                    canonical: "tag",                      size: 4,   needs_sub_chunk: 0 },
         "char_enum"                => FieldTypeInfo { ty: TagFieldType::CharEnum,               canonical: "char enum",                size: 1,   needs_sub_chunk: 0 },
@@ -284,6 +288,7 @@ fn field_type_info(ty: &str) -> Option<FieldTypeInfo> {
         "tag_resource"             => FieldTypeInfo { ty: TagFieldType::PageableResource,       canonical: "pageable resource",        size: 8,   needs_sub_chunk: 1 },
         "tag_interop"              => FieldTypeInfo { ty: TagFieldType::ApiInterop,             canonical: "api interop",              size: 12,  needs_sub_chunk: 1 },
         "terminator"               => FieldTypeInfo { ty: TagFieldType::Terminator,             canonical: "terminator X",             size: 0,   needs_sub_chunk: 0 },
+        "non_cache_runtime_value"  => FieldTypeInfo { ty: TagFieldType::NonCacheRuntimeValue,   canonical: "non-cache runtime value",  size: 4,   needs_sub_chunk: 0 },
         _ => return None,
     })
 }
@@ -809,6 +814,10 @@ fn resolve_field_definition(
             | TagFieldType::ShortInteger
             | TagFieldType::LongInteger
             | TagFieldType::Int64Integer
+            | TagFieldType::ByteInteger
+            | TagFieldType::WordInteger
+            | TagFieldType::DwordInteger
+            | TagFieldType::QwordInteger
             | TagFieldType::Angle
             | TagFieldType::Tag
             | TagFieldType::Point2d
@@ -839,7 +848,8 @@ fn resolve_field_definition(
             | TagFieldType::CustomCharBlockIndex
             | TagFieldType::CustomShortBlockIndex
             | TagFieldType::CustomLongBlockIndex
-            | TagFieldType::Terminator,
+            | TagFieldType::Terminator
+            | TagFieldType::NonCacheRuntimeValue,
     ) {
         return Ok(0);
     }

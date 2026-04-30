@@ -99,6 +99,18 @@ fn parse_value(
         TagFieldType::Int64Integer => Ok(TagFieldData::Int64Integer(
             input.parse().map_err(|_| bad("expected i64"))?,
         )),
+        TagFieldType::ByteInteger => Ok(TagFieldData::ByteInteger(
+            input.parse().map_err(|_| bad("expected u8"))?,
+        )),
+        TagFieldType::WordInteger => Ok(TagFieldData::WordInteger(
+            input.parse().map_err(|_| bad("expected u16"))?,
+        )),
+        TagFieldType::DwordInteger => Ok(TagFieldData::DwordInteger(
+            input.parse().map_err(|_| bad("expected u32"))?,
+        )),
+        TagFieldType::QwordInteger => Ok(TagFieldData::QwordInteger(
+            input.parse().map_err(|_| bad("expected u64"))?,
+        )),
         TagFieldType::Tag => Ok(TagFieldData::Tag(
             parse_group_tag(input).ok_or_else(|| bad("group tag must be 1..=4 ASCII chars"))?,
         )),

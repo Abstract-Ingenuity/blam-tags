@@ -59,6 +59,18 @@ fn write_value(ctx: &CliContext, out: &mut String, value: &TagFieldData, hex: bo
         TagFieldData::Int64Integer(v) => {
             if hex { write!(out, "0x{:016X}", *v as u64).unwrap() } else { write!(out, "{}", v).unwrap() }
         }
+        TagFieldData::ByteInteger(v) => {
+            if hex { write!(out, "0x{:02X}", v).unwrap() } else { write!(out, "{}", v).unwrap() }
+        }
+        TagFieldData::WordInteger(v) => {
+            if hex { write!(out, "0x{:04X}", v).unwrap() } else { write!(out, "{}", v).unwrap() }
+        }
+        TagFieldData::DwordInteger(v) => {
+            if hex { write!(out, "0x{:08X}", v).unwrap() } else { write!(out, "{}", v).unwrap() }
+        }
+        TagFieldData::QwordInteger(v) => {
+            if hex { write!(out, "0x{:016X}", v).unwrap() } else { write!(out, "{}", v).unwrap() }
+        }
         TagFieldData::Tag(v) => out.push_str(&format_group_tag(*v)),
 
         TagFieldData::CharEnum { value, name } => write_enum(out, *value as i64, name.as_deref()),
@@ -192,6 +204,10 @@ pub fn value_to_json(ctx: &CliContext, value: &TagFieldData) -> Value {
         TagFieldData::ShortInteger(v) => json!(v),
         TagFieldData::LongInteger(v) => json!(v),
         TagFieldData::Int64Integer(v) => json!(v),
+        TagFieldData::ByteInteger(v) => json!(v),
+        TagFieldData::WordInteger(v) => json!(v),
+        TagFieldData::DwordInteger(v) => json!(v),
+        TagFieldData::QwordInteger(v) => json!(v),
         TagFieldData::Tag(v) => json!(format_group_tag(*v)),
 
         TagFieldData::CharEnum { value, name } => json!({ "value": value, "name": name }),
