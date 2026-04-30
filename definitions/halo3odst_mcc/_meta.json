@@ -1,6 +1,6 @@
 {
-  "game": "halo3_mcc",
-  "dumped_from": "guerilla.exe",
+  "game": "halo3odst_mcc",
+  "dumped_from": "sapien.exe",
   "dumped_at": "2026-04-30",
   "tag_index": {
     "hlmt": "model",
