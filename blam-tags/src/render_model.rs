@@ -126,6 +126,45 @@ pub struct RenderMesh {
     /// single bone all vertices are bound to. `None` for skinned
     /// meshes whose vertices carry their own per-vertex weights.
     pub rigid_node_index: Option<i16>,
+    /// `s_per_mesh_raw_data.raw_water_data` — per-mesh extra data for
+    /// water surfaces. `Some` when the mesh contains at least one part
+    /// with `_part_is_water_surface` set; `None` for non-water meshes.
+    /// Per-vertex `local_info` + `base_texcoord` are appended onto the
+    /// regular `vertices` pool (sequential indexing — see
+    /// [`RawWaterData::indices`]).
+    pub water_data: Option<RawWaterData>,
+}
+
+/// `s_raw_water_data` (24 bytes on disk) — per-mesh water-surface data.
+/// `indices` are 16-bit triangle-list indices into a SHARED vertex
+/// pool that combines [`RenderMesh::vertices`] (regular geometry) +
+/// `vertices` (the append data). Cache build packs (i, j, k) triples
+/// into the runtime per-instance 156 + 72-byte streams (see
+/// `reference_dllcache_water_pipeline.md`).
+#[derive(Debug, Clone, Default)]
+pub struct RawWaterData {
+    /// `raw water indices` — triangle-list u16 indices.
+    pub indices: Vec<u16>,
+    /// `raw water vertices` — per-vertex append data. Element count
+    /// equals the regular `RenderMesh::vertices` count for water-bearing
+    /// meshes (1:1 alignment with the regular vertex pool); the
+    /// `indices` field selects which vertices form water triangles.
+    pub vertices: Vec<RawWaterAppend>,
+}
+
+/// `s_raw_water_append` (36 bytes on disk) — extra per-vertex data for
+/// water surfaces. Three `real_point_3d` fields read by the water VS:
+/// - `local_info` → `s_water_render_vertex.local_info` — feeds foam
+///   height + paint sampling.
+/// - `water_velocity` → flow-direction sampling for animated wave
+///   displacement (Phase A7).
+/// - `base_texcoord` → `s_water_render_vertex.base_tex` — UV for the
+///   watercolor / foam / global_shape textures.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawWaterAppend {
+    pub local_info: RealPoint3d,
+    pub water_velocity: RealPoint3d,
+    pub base_texcoord: RealPoint3d,
 }
 
 /// Decompressed vertex from `raw_vertex_block`. UV is **unflipped**
@@ -165,6 +204,12 @@ pub struct RenderMeshPart {
     pub material_index: u16,
     pub index_start: u32,
     pub index_count: u32,
+    /// `e_geometry_part_type` enum (Ares
+    /// `geometry_definitions_new.h:25`):
+    /// 0=opaque_not_drawn, 1=opaque_shadow_only,
+    /// 2=opaque_shadow_casting, 3=opaque_non_shadowing,
+    /// 4=transparent, 5=lightmap_only.
+    pub part_type: i8,
 }
 
 /// One marker (attachment point). `region_index`/`permutation_index`
@@ -621,6 +666,7 @@ where
         for pi in 0..parts_block.len() {
             let part = parts_block.element(pi).unwrap();
             let material_index = part.read_int_any("render method index").unwrap_or(0).max(0) as u16;
+            let part_type = part.read_int_any("part type").unwrap_or(0) as i8;
             // `index start` / `index count` are schema-typed `short
             // integer` (i16) but functionally u16 — strips spanning
             // more than 32 767 indices wrap into negative i16. The
@@ -628,13 +674,17 @@ where
             let start_i = part.read_int_any("index start").unwrap_or(0);
             let count_i = part.read_int_any("index count").unwrap_or(0);
             if count_i <= 0 {
-                parts.push(RenderMeshPart { material_index, index_start: indices.len() as u32, index_count: 0 });
+                parts.push(RenderMeshPart {
+                    material_index, index_start: indices.len() as u32, index_count: 0, part_type,
+                });
                 continue;
             }
             let start = (start_i as i16 as u16) as usize;
             let count = count_i as usize;
             if start >= raw_index_list.len() {
-                parts.push(RenderMeshPart { material_index, index_start: indices.len() as u32, index_count: 0 });
+                parts.push(RenderMeshPart {
+                    material_index, index_start: indices.len() as u32, index_count: 0, part_type,
+                });
                 continue;
             }
             let end = (start + count).min(raw_index_list.len());
@@ -659,10 +709,12 @@ where
                 material_index,
                 index_start: part_index_start,
                 index_count: part_index_count,
+                part_type,
             });
         }
 
-        out.push(RenderMesh { vertices, indices, parts, rigid_node_index });
+        let water_data = read_raw_water_data(&pmt);
+        out.push(RenderMesh { vertices, indices, parts, rigid_node_index, water_data });
     }
     Ok(out)
 }
@@ -673,7 +725,49 @@ fn empty_mesh(rigid_node_index: Option<i16>) -> RenderMesh {
         indices: Vec::new(),
         parts: Vec::new(),
         rigid_node_index,
+        water_data: None,
     }
+}
+
+/// Read the `raw water data` block from a per_mesh_temporary entry.
+/// Schema: `raw_water_block` (24 bytes) with two child blocks —
+/// `raw water indices` (u16 triangle indices) and `raw water vertices`
+/// (`s_raw_water_append` 36-byte elements). The block is `max_count = 1`
+/// per-mesh; we read the first (and only) element if present and
+/// non-empty. Returns `None` when the mesh has no water data (the
+/// common case for non-water meshes).
+fn read_raw_water_data(pmt: &TagStruct<'_>) -> Option<RawWaterData> {
+    let block = pmt.field("raw water data").and_then(|f| f.as_block())?;
+    if block.is_empty() {
+        return None;
+    }
+    let elem = block.element(0)?;
+    let indices_block = elem.field("raw water indices").and_then(|f| f.as_block());
+    let vertices_block = elem.field("raw water vertices").and_then(|f| f.as_block());
+    let (Some(indices_block), Some(vertices_block)) = (indices_block, vertices_block) else {
+        return None;
+    };
+    if indices_block.is_empty() && vertices_block.is_empty() {
+        return None;
+    }
+
+    let mut indices = Vec::with_capacity(indices_block.len());
+    for k in 0..indices_block.len() {
+        let Some(e) = indices_block.element(k) else { continue };
+        indices.push(e.read_int_any("word").unwrap_or(0) as u16);
+    }
+
+    let mut vertices = Vec::with_capacity(vertices_block.len());
+    for k in 0..vertices_block.len() {
+        let Some(e) = vertices_block.element(k) else { continue };
+        vertices.push(RawWaterAppend {
+            local_info: e.read_point3d("local info"),
+            water_velocity: e.read_point3d("water velocity"),
+            base_texcoord: e.read_point3d("base texcoord"),
+        });
+    }
+
+    Some(RawWaterData { indices, vertices })
 }
 
 fn read_vertex(
