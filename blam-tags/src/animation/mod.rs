@@ -18,10 +18,15 @@
 //! and the binary references they were verified against.
 
 pub mod codec;
+pub mod graph;
 pub mod jma;
 pub mod pose;
 
 pub use codec::Codec;
+pub use graph::{
+    AnimationGraph, GraphAction, GraphActionAnimation, GraphMode, GraphTransition,
+    GraphWeaponClass, GraphWeaponType,
+};
 pub use jma::JmaKind;
 pub use pose::{NodeTransform, Pose, Skeleton, SkeletonNode};
 

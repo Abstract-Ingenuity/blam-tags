@@ -64,7 +64,7 @@ use serde_json::json;
 use blam_tags::{Animation, AnimationGroup, JmaKind, NodeTransform, Skeleton, TagFile};
 
 use crate::context::CliContext;
-use crate::paths::{derive_tags_root, resolve_tag_path, tag_ref_path, tag_stem};
+use blam_tags::paths::{derive_tags_root, resolve_tag_path, tag_ref_path, tag_stem};
 
 /// Output format selector for [`run`]. `Jma` writes a JMA-family
 /// text file (kind picked from the animation's metadata); `Json`

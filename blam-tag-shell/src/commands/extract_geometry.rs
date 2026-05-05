@@ -31,7 +31,7 @@ use anyhow::{Context, Result};
 use blam_tags::{AssFile, AssObjectPayload, JmsFile, TagFieldData, TagFile};
 
 use crate::context::CliContext;
-use crate::paths::{derive_tags_root, resolve_tag_path, tag_ref_path, tag_stem};
+use blam_tags::paths::{derive_tags_root, resolve_tag_path, tag_ref_path, tag_stem};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Kind { Render, Collision, Physics }

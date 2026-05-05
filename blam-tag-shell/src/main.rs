@@ -26,7 +26,6 @@ mod commands;
 mod context;
 mod format;
 mod parse;
-mod paths;
 mod repl;
 mod suggest;
 mod tag_index;

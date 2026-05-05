@@ -44,24 +44,24 @@ pub(crate) const SCALE: f32 = 100.0;
 /// values; multiplying by `(max - min)` and adding `min` recovers
 /// the original world / uv coordinate.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct CompressionBounds {
+pub struct CompressionBounds {
     /// `true` if positions in this group were quantized — when `false`,
     /// [`Self::decompress_position`] is a passthrough.
-    pub(crate) pos_compressed: bool,
+    pub pos_compressed: bool,
     /// `true` if texcoords were quantized.
-    pub(crate) uv_compressed: bool,
-    pub(crate) px_min: f32, pub(crate) px_max: f32,
-    pub(crate) py_min: f32, pub(crate) py_max: f32,
-    pub(crate) pz_min: f32, pub(crate) pz_max: f32,
-    pub(crate) u_min: f32, pub(crate) u_max: f32,
-    pub(crate) v_min: f32, pub(crate) v_max: f32,
+    pub uv_compressed: bool,
+    pub px_min: f32, pub px_max: f32,
+    pub py_min: f32, pub py_max: f32,
+    pub pz_min: f32, pub pz_max: f32,
+    pub u_min: f32, pub u_max: f32,
+    pub v_min: f32, pub v_max: f32,
 }
 
 impl CompressionBounds {
     /// Identity bounds — `decompress_*` returns its input unchanged.
     /// Used for cluster meshes (already in world units) and as a
     /// fallback when the `compression info` index is out of range.
-    pub(crate) fn identity() -> Self {
+    pub fn identity() -> Self {
         Self {
             pos_compressed: false, uv_compressed: false,
             px_min: 0.0, px_max: 1.0, py_min: 0.0, py_max: 1.0, pz_min: 0.0, pz_max: 1.0,
@@ -71,7 +71,7 @@ impl CompressionBounds {
 
     /// Map a 0..1 quantized position back into world units.
     /// Passthrough when [`Self::pos_compressed`] is `false`.
-    pub(crate) fn decompress_position(&self, p: RealPoint3d) -> RealPoint3d {
+    pub fn decompress_position(&self, p: RealPoint3d) -> RealPoint3d {
         if !self.pos_compressed { return p; }
         RealPoint3d {
             x: self.px_min + p.x * (self.px_max - self.px_min),
@@ -82,7 +82,7 @@ impl CompressionBounds {
 
     /// Map a 0..1 quantized texcoord back into uv units.
     /// Passthrough when [`Self::uv_compressed`] is `false`.
-    pub(crate) fn decompress_texcoord(&self, uv: RealPoint2d) -> RealPoint2d {
+    pub fn decompress_texcoord(&self, uv: RealPoint2d) -> RealPoint2d {
         if !self.uv_compressed { return uv; }
         RealPoint2d {
             x: self.u_min + uv.x * (self.u_max - self.u_min),
@@ -93,7 +93,7 @@ impl CompressionBounds {
 
 /// Read `render geometry/compression info[0]`. For `render_model`
 /// and sbsp clusters which share the global bounds.
-pub(crate) fn read_compression_bounds(root: &TagStruct<'_>) -> CompressionBounds {
+pub fn read_compression_bounds(root: &TagStruct<'_>) -> CompressionBounds {
     read_compression_bounds_at(root, 0)
 }
 
@@ -101,7 +101,7 @@ pub(crate) fn read_compression_bounds(root: &TagStruct<'_>) -> CompressionBounds
 /// definitions carry per-definition `compression index` since each
 /// instanced geometry has its own bounds. Falls back to identity if
 /// the index is out of range.
-pub(crate) fn read_compression_bounds_at(root: &TagStruct<'_>, index: usize) -> CompressionBounds {
+pub fn read_compression_bounds_at(root: &TagStruct<'_>, index: usize) -> CompressionBounds {
     let Some(ci_block) = root.field_path("render geometry/compression info").and_then(|f| f.as_block())
         else { return CompressionBounds::identity(); };
     if index >= ci_block.len() { return CompressionBounds::identity(); }

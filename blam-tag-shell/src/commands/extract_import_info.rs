@@ -38,7 +38,7 @@ use anyhow::{anyhow, Context, Result};
 use flate2::read::ZlibDecoder;
 
 use crate::context::CliContext;
-use crate::paths::tag_stem;
+use blam_tags::paths::tag_stem;
 
 pub fn run(
     ctx: &mut CliContext,

@@ -27,7 +27,7 @@ use anyhow::{Context, Result};
 use blam_tags::Bitmap;
 
 use crate::context::CliContext;
-use crate::paths::tag_stem;
+use blam_tags::paths::tag_stem;
 
 #[derive(Debug, Clone, Copy)]
 enum OutFormat { Tif, Dds }

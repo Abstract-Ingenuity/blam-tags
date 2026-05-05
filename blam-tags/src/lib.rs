@@ -76,9 +76,19 @@ pub mod api;
 pub mod definition;
 pub mod bitmap;
 pub mod animation;
-pub(crate) mod geometry;
+pub mod geometry;
 pub mod jms;
 pub mod ass;
+pub mod render_model;
+pub mod tag_function;
+pub mod render_method;
+pub mod scenario;
+pub mod scenario_lightmap;
+pub mod sky_atmosphere;
+pub mod camera_fx_settings;
+pub mod rasterizer_globals;
+pub mod structure_bsp;
+pub mod paths;
 
 // Facade re-exports — the recommended surface for editing tags.
 pub use api::{
@@ -106,6 +116,15 @@ pub use jms::{
 pub use ass::{
     AssError, AssFile, AssInstance, AssLight, AssLightKind, AssMaterial, AssObject,
     AssObjectPayload, AssTriangle, AssVertex,
+};
+pub use render_model::{
+    extract_per_instance_lightmap_uvs, PerInstanceLightmapUvs, RenderMarker, RenderMaterial,
+    RenderMesh, RenderMeshPart, RenderModel, RenderModelError, RenderNode, RenderPermutation,
+    RenderRegion, RenderVertex,
+};
+pub use tag_function::{
+    ColorGraphType, FunctionFlags, FunctionType, TagFunction, TagFunctionError,
+    TagFunctionHeader,
 };
 pub use animation::{
     Animation, AnimationClip, AnimationError, AnimationGroup, AnimationTracks,

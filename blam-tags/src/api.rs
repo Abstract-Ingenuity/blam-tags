@@ -285,6 +285,9 @@ impl<'a> TagStruct<'a> {
             TagFieldData::ByteFlags { value, .. } => Some(value as i64),
             TagFieldData::WordFlags { value, .. } => Some(value as i64),
             TagFieldData::LongFlags { value, .. } => Some(value as i64),
+            TagFieldData::ByteBlockFlags(v) => Some(v as i64),
+            TagFieldData::WordBlockFlags(v) => Some(v as i64),
+            TagFieldData::LongBlockFlags(v) => Some(v as i64),
             _ => None,
         }
     }
@@ -327,6 +330,18 @@ impl<'a> TagStruct<'a> {
     pub fn read_tag_ref_path(&self, name: &str) -> Option<String> {
         match self.field(name)?.value()? {
             TagFieldData::TagReference(r) => r.group_tag_and_name.map(|(_, p)| p),
+            _ => None,
+        }
+    }
+
+    /// Read a `tag_reference` field's `(group_tag, relative_path)` pair.
+    /// Returns `None` for missing fields, non-reference values, or
+    /// null/empty refs. Used when the caller needs the FOURCC group
+    /// tag to determine the on-disk file extension (e.g. `rmsh` →
+    /// `.shader`, `rmtr` → `.shader_terrain`).
+    pub fn read_tag_ref_with_group(&self, name: &str) -> Option<(u32, String)> {
+        match self.field(name)?.value()? {
+            TagFieldData::TagReference(r) => r.group_tag_and_name,
             _ => None,
         }
     }
@@ -547,6 +562,17 @@ impl<'a> TagField<'a> {
             TagSubChunkContent::Data(bytes) => Some(bytes.as_slice()),
             _ => None,
         }
+    }
+
+    /// Decode the field as a [`crate::TagFunction`] (`mapping_function`
+    /// data blob). The schema declares these as `data` fields with a
+    /// 32-byte header + variable per-type compact data; this helper
+    /// reads the bytes via [`Self::as_data`] and parses them. Returns
+    /// `None` if the field isn't a `data` field, the bytes don't
+    /// belong to a function blob, or parsing fails.
+    pub fn as_function(&self) -> Option<crate::TagFunction> {
+        let bytes = self.as_data()?;
+        crate::TagFunction::parse(bytes).ok()
     }
 
     /// Step into a `pageable_resource` field. `None` if this isn't a
