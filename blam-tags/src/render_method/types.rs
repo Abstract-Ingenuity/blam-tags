@@ -430,26 +430,35 @@ impl TagBlockIndex {
 
 /// Per-pass routing entry — maps a constant-table source into a
 /// destination D3D register. Mirrors `s_render_method_routing_info`
-/// (4 bytes). On-disk layout: `[dest:u16, overlay:u8, source:u8]`.
+/// (4 bytes). On-disk layout: `[dest:u16, source:u8, type_specific:u8]`.
 ///
-/// The schema field names are misleading (the file calls byte 2
-/// "source index" and byte 3 "type specific"), but the engine reads
-/// byte 2 as the overlay/animated-parameter index (into
-/// `overlays[]`) and byte 3 as the source slot (into
-/// `real_constants[]`). Verified against `update_constants @
-/// 0x180685300` and `submit_static_ps_parameters @ 0x180685860`.
+/// Per the H3 schema (`render_method_routing_info_block` in
+/// `definitions/halo3_mcc/render_method_template.json`):
+/// - byte 0..1 = `destination index` — D3D constant register or sampler index
+/// - byte 2    = `source index` — index into `rmt2.float_constants[]` (the
+///               source slot in the constant table this entry pulls from)
+/// - byte 3    = `type specific` — "bitmap flags or shader component mask",
+///               not used by `submit_static_ps_parameters` for the real-
+///               constant path
+///
+/// Verified against runtime dump of multiple riverworld rmt2s 2026-05-06:
+/// byte 2 increments 0,1,2,3 across routing entries (= source_index per
+/// schema), byte 3 is always 0 for real-constant routing. (Earlier docs
+/// in this file labelled byte 2 as "overlay" — that was wrong; the engine
+/// reads byte 2 as the source index.)
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RenderMethodRoutingInfo {
     /// D3D constant index (or sampler index for textures).
     /// Byte offset 0..1 in the routing entry.
     pub destination_index: u16,
-    /// Index into `overlays[]` — used by `update_constants` to
-    /// evaluate animated_parameter curves and overlay them onto the
-    /// real_constants slot. Byte offset 2.
-    pub overlay_index: u8,
-    /// Index into `real_constants[]` — the source vec4 slot from the
-    /// cache-builder bake. Byte offset 3.
+    /// Index into `rmt2.float_constants[]` — which slot's resolved
+    /// vec4 to write at this destination. Byte offset 2.
     pub source_index: u8,
+    /// "type specific" — bitmap flags or shader component mask.
+    /// Engine `submit_static_ps_parameters` ignores this for the
+    /// real-constant path; relevant for bitmap routing variants.
+    /// Byte offset 3.
+    pub type_specific: u8,
 }
 
 // =============================================================================
@@ -1047,11 +1056,10 @@ impl RenderMethodTemplatePass {
 
 impl RenderMethodRoutingInfo {
     fn from_struct(s: &TagStruct<'_>) -> Self {
-        // Schema field names lie — see struct doc.
         Self {
             destination_index: s.read_int_any("destination index").unwrap_or(0) as u16,
-            overlay_index:     s.read_int_any("source index").unwrap_or(0) as u8,
-            source_index:      s.read_int_any("type specific").unwrap_or(0) as u8,
+            source_index:      s.read_int_any("source index").unwrap_or(0) as u8,
+            type_specific:     s.read_int_any("type specific").unwrap_or(0) as u8,
         }
     }
 }

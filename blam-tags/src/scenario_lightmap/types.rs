@@ -280,6 +280,43 @@ impl LightmapProbe {
         read_short_array(s, "blue lightprobe terms", &mut probe.blue_terms);
         probe
     }
+
+    /// Dequantize from the on-disk half-float bit pattern.
+    /// `LightmapProbe` reads the values as `i16` (the schema says
+    /// "short"), but the bytes are actually IEEE half floats — see
+    /// dllcache `real_rgb_lightprobe_from_half @ 0x180519A20` and
+    /// `half_to_real`. Reinterpret as `half::f16` and widen.
+    pub fn dequantize(&self) -> DequantizedLightmapProbe {
+        let half_to_f32 = |x: i16| -> f32 {
+            half::f16::from_bits(x as u16).to_f32()
+        };
+        DequantizedLightmapProbe {
+            dominant_light_direction: [
+                half_to_f32(self.dominant_light_direction[0]),
+                half_to_f32(self.dominant_light_direction[1]),
+                half_to_f32(self.dominant_light_direction[2]),
+            ],
+            dominant_light_intensity: [
+                half_to_f32(self.dominant_light_intensity[0]),
+                half_to_f32(self.dominant_light_intensity[1]),
+                half_to_f32(self.dominant_light_intensity[2]),
+            ],
+            red_terms: std::array::from_fn(|i| half_to_f32(self.red_terms[i])),
+            green_terms: std::array::from_fn(|i| half_to_f32(self.green_terms[i])),
+            blue_terms: std::array::from_fn(|i| half_to_f32(self.blue_terms[i])),
+        }
+    }
+}
+
+/// `LightmapProbe` with all i16 half bit-patterns expanded to f32 —
+/// the form the runtime reads after `real_rgb_lightprobe_from_half`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DequantizedLightmapProbe {
+    pub dominant_light_direction: [f32; 3],
+    pub dominant_light_intensity: [f32; 3],
+    pub red_terms: [f32; 9],
+    pub green_terms: [f32; 9],
+    pub blue_terms: [f32; 9],
 }
 
 /// One per-vertex SH block — a flat list of vertex-aligned probes.
@@ -328,6 +365,30 @@ impl LightmapPerVertexProbe {
         read_short_array(s, "blue lightprobe terms", &mut p.blue_terms);
         p
     }
+
+    /// Dequantize from on-disk half-float bit patterns. Order-2 SH (4
+    /// coefs / channel). Same encoding rule as [`LightmapProbe`].
+    pub fn dequantize(&self) -> DequantizedPerVertexProbe {
+        let h2f = |x: i16| half::f16::from_bits(x as u16).to_f32();
+        DequantizedPerVertexProbe {
+            dominant_light_intensity: [
+                h2f(self.dominant_light_intensity[0]),
+                h2f(self.dominant_light_intensity[1]),
+                h2f(self.dominant_light_intensity[2]),
+            ],
+            red_terms: std::array::from_fn(|i| h2f(self.red_terms[i])),
+            green_terms: std::array::from_fn(|i| h2f(self.green_terms[i])),
+            blue_terms: std::array::from_fn(|i| h2f(self.blue_terms[i])),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DequantizedPerVertexProbe {
+    pub dominant_light_intensity: [f32; 3],
+    pub red_terms: [f32; 4],
+    pub green_terms: [f32; 4],
+    pub blue_terms: [f32; 4],
 }
 
 // =============================================================================

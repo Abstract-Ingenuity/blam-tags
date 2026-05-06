@@ -111,11 +111,19 @@ pub fn resolve_pixel_user_cbuffer(
 
 /// Time-aware variant — evaluates animated functions at `eval_time`
 /// instead of 0. Engine equivalent at runtime: `update_constants @
-/// 0x180685300` overlays animated values from
-/// `postprocess.overlays[routing.overlay_index]` per frame. The
-/// overlays are pre-baked at startup; we re-evaluate on the fly
-/// (cheaper than materializing 256-step tables, and we can use float
-/// time directly).
+/// 0x180685300` overlays animated values from `postprocess.overlays[]`
+/// per frame. The overlays are pre-baked at startup; we re-evaluate
+/// on the fly (cheaper than materializing 256-step tables, and we can
+/// use float time directly).
+///
+/// Engine layout vs ours: the engine writes per `routing_info[N]`
+/// where `dest_register = (destination_index & 0xFF)` may reorder
+/// `float_constants[i]` to non-sequential registers. We use a simpler
+/// sequential `byte_offset = i * 16` layout because our generated
+/// WGSL declares its struct fields in `float_constants` order — so
+/// our cbuffer layout matches our WGSL field offsets, even though it
+/// doesn't match the engine's offline-DXBC register allocation.
+/// Result is identical, the route is just different.
 pub fn resolve_pixel_user_cbuffer_at_time(
     rmsh: &RenderMethod,
     rmt2: &RenderMethodTemplate,

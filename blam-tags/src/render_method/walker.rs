@@ -30,12 +30,10 @@
 
 use std::collections::BTreeMap;
 
-use crate::math::ArgbColor;
-use crate::tag_function::{ColorGraphType, TagFunction};
-
+use super::cbuffer::compile_real_constant;
 use super::types::{
-    BitmapAddressMode, BitmapFilterMode, RenderMethod, RenderMethodAnimatedParameter,
-    RenderMethodDefinition, RenderMethodExtern, RenderMethodOption, RenderMethodOptionParameter,
+    BitmapAddressMode, BitmapFilterMode, RenderMethod, RenderMethodDefinition,
+    RenderMethodExtern, RenderMethodOption, RenderMethodOptionParameter,
     RenderMethodParameter, RenderMethodParameterType,
 };
 
@@ -261,21 +259,26 @@ fn resolve_one(
     // 2. rmsh override by name.
     let rm_param = rm.parameters.iter().find(|p| p.parameter_name == op_param.parameter_name);
 
+    let _ = time_seconds; // canonical merge evaluates curves at (0, 0)
     let value = match parameter_type {
         RenderMethodParameterType::Bitmap => {
             ResolvedValue::Bitmap(resolve_bitmap(op_param, rm_param))
         }
         RenderMethodParameterType::Color | RenderMethodParameterType::ArgbColor => {
-            ResolvedValue::Color(resolve_color(op_param, rm_param, time_seconds))
+            let (slot, _) = compile_real_constant(op_param, rm_param);
+            ResolvedValue::Color(slot)
         }
         RenderMethodParameterType::Real => {
-            ResolvedValue::Real(resolve_real(op_param, rm_param, time_seconds))
+            let (slot, _) = compile_real_constant(op_param, rm_param);
+            ResolvedValue::Real(slot[0])
         }
         RenderMethodParameterType::Int => {
-            ResolvedValue::Int(resolve_int(op_param, rm_param))
+            let (slot, _) = compile_real_constant(op_param, rm_param);
+            ResolvedValue::Int(slot[0] as i32)
         }
         RenderMethodParameterType::Bool => {
-            ResolvedValue::Bool(resolve_bool(op_param, rm_param))
+            let (slot, _) = compile_real_constant(op_param, rm_param);
+            ResolvedValue::Bool(slot[0] != 0.0)
         }
     };
 
@@ -319,106 +322,3 @@ fn resolve_bitmap(
     BitmapBinding { bitmap_path: path, bitmap_index, filter_mode, address_mode, extern_texture_mode, anisotropy_amount }
 }
 
-fn resolve_real(
-    op_param: &RenderMethodOptionParameter,
-    rm_param: Option<&RenderMethodParameter>,
-    time_seconds: f32,
-) -> f32 {
-    if let Some(p) = rm_param {
-        // Animated parameter index 0 holds the value source — the runtime
-        // never reads `real_parameter` for material params; that field is
-        // a legacy fallback. Walk animated parameters first.
-        if let Some(anim) = first_value_function(&p.animated_parameters) {
-            return anim.evaluate(time_seconds, time_seconds);
-        }
-        // Static fallback for tags without animated_parameters at all.
-        if p.real_parameter != 0.0 {
-            return p.real_parameter;
-        }
-    }
-    op_param.default_real_value
-}
-
-fn resolve_int(
-    op_param: &RenderMethodOptionParameter,
-    rm_param: Option<&RenderMethodParameter>,
-) -> i32 {
-    if let Some(p) = rm_param {
-        if p.int_parameter != 0 {
-            return p.int_parameter;
-        }
-    }
-    op_param.default_int_bool_value
-}
-
-fn resolve_bool(
-    op_param: &RenderMethodOptionParameter,
-    rm_param: Option<&RenderMethodParameter>,
-) -> bool {
-    if let Some(p) = rm_param {
-        if p.int_parameter != 0 {
-            return p.int_parameter != 0;
-        }
-    }
-    op_param.default_int_bool_value != 0
-}
-
-fn resolve_color(
-    op_param: &RenderMethodOptionParameter,
-    rm_param: Option<&RenderMethodParameter>,
-    _time_seconds: f32,
-) -> [f32; 4] {
-    if let Some(p) = rm_param {
-        if let Some(anim) = first_color_function(&p.animated_parameters) {
-            if let Some(c) = anim.function.as_ref().and_then(extract_first_color) {
-                return c;
-            }
-        }
-    }
-    argb_u32_to_f32(op_param.default_color)
-}
-
-// ---- TagFunction helpers ----
-
-fn first_value_function(anims: &[RenderMethodAnimatedParameter]) -> Option<&TagFunction> {
-    // Most material scalars have a single Value-typed animated_parameters[0].
-    anims.first().and_then(|a| a.function.as_ref())
-}
-
-fn first_color_function(anims: &[RenderMethodAnimatedParameter]) -> Option<&RenderMethodAnimatedParameter> {
-    anims.iter().find(|a| {
-        a.function.as_ref().is_some_and(|f| f.color_graph_type() != ColorGraphType::Scalar)
-    })
-}
-
-/// Extract the first (constant) color from a TagFunction's color graph,
-/// returned as `[r, g, b, a]` in [0, 1]. Halo packs each entry as a
-/// u32 ARGB; we unpack and normalize.
-///
-/// **Alpha defaults to 1.0** — the .shader tag stores the alpha byte
-/// as 0 because the color-picker UI doesn't touch alpha for plain
-/// color params (`normal_specular_tint`, `albedo_color`, etc.). Halo's
-/// cache builder sources alpha from a SEPARATE `animated[Alpha]`
-/// function (per `reference_canonical_cbuffer_merge.md`: "Color via
-/// animated[Color] + animated[Alpha]") when authored, else defaults
-/// to 1.0. We don't yet read animated[Alpha] from a second
-/// animated_parameters entry; the 1.0 default matches TagTool's
-/// `SetArgument <name> R G B 1` output for unauthored alphas.
-fn extract_first_color(f: &TagFunction) -> Option<[f32; 4]> {
-    if f.color_graph_type() == ColorGraphType::Scalar {
-        return None;
-    }
-    let packed = f.header().colors[0];
-    let mut rgba = argb_u32_to_f32(ArgbColor(packed));
-    rgba[3] = 1.0;
-    Some(rgba)
-}
-
-fn argb_u32_to_f32(c: ArgbColor) -> [f32; 4] {
-    let v = c.0;
-    let a = ((v >> 24) & 0xff) as f32 / 255.0;
-    let r = ((v >> 16) & 0xff) as f32 / 255.0;
-    let g = ((v >>  8) & 0xff) as f32 / 255.0;
-    let b = ((v      ) & 0xff) as f32 / 255.0;
-    [r, g, b, a]
-}

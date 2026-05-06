@@ -149,11 +149,31 @@ pub struct RenderMesh {
 ///   `RawWaterData::vertices[control_point.water_idx]`.
 #[derive(Debug, Clone, Default)]
 pub struct RawWaterData {
-    /// One entry per source water triangle.
+    /// One entry per source water triangle. Ordered by source part —
+    /// each part's triangles are contiguous (see [`Self::parts`]).
     pub triangles: Vec<RawWaterTriangle>,
     /// `raw water vertices` — per-water-vertex append pool.
     /// `RawWaterControlPoint::water_idx` indexes into this.
     pub vertices: Vec<RawWaterAppend>,
+    /// Per-part triangle ranges within [`Self::triangles`]. Each entry
+    /// indexes into [`RenderMesh::parts`] and gives the
+    /// `(triangle_start, triangle_count)` slice — used by the renderer
+    /// to dispatch per-rmw-material draws (different water parts on a
+    /// mesh can carry different rmw materials with different option
+    /// vectors → different pipelines). Engine equivalent: each part is
+    /// its own iteration of `c_water_renderer::render_water_part`.
+    pub parts: Vec<RawWaterPart>,
+}
+
+/// One water-flagged part's triangle range within [`RawWaterData::triangles`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawWaterPart {
+    /// Index into [`RenderMesh::parts`] — gives the rmw material.
+    pub mesh_part_index: u16,
+    /// Start triangle in `RawWaterData::triangles` (inclusive).
+    pub triangle_start: u32,
+    /// Number of triangles in this part.
+    pub triangle_count: u32,
 }
 
 /// One source water triangle — 3 control points each pulling from
@@ -788,7 +808,23 @@ fn read_raw_water_data(
         raw_water_indices.push(e.read_int_any("word").unwrap_or(0) as u16);
     }
 
-    // 3. Decode raw_water_vertices (the append pool).
+    // 3. Decode raw_water_vertices (the append pool). Per
+    // `s_raw_water_append` schema: 36 bytes total = local_info(rp3d)
+    // + water_velocity(rp3d) + base_texcoord(rp3d). For BSP geometry
+    // the canonical source is the lightmap tag's
+    // `scenario_lightmap_bsp_data.raw_water_append_block` (identical
+    // 36-byte layout to render_model's version).
+    //
+    // Empirical riverworld values (1500+ verts across 11 BSPs):
+    //   local_info.x = 3.178 (constant across ALL vertices) — engine
+    //                  line 447 `displacement *= IN.local_info.x`, so
+    //                  this is the scenario-wide wave amplitude scale
+    //                  (NOT a per-vertex shore taper as initially
+    //                  speculated). Another scenario could pick a
+    //                  different constant.
+    //   local_info.y = water_depth, varies [0, 8.168]. Drives
+    //                  `misc_info.w` → `bank_alpha` shore color fade.
+    //   local_info.z = 0 (unused in PC water_shading_fx).
     let mut vertices: Vec<RawWaterAppend> = Vec::with_capacity(vertices_block.len());
     for k in 0..vertices_block.len() {
         let Some(e) = vertices_block.element(k) else { continue };
@@ -812,12 +848,17 @@ fn read_raw_water_data(
         return None;
     }
 
-    // 5. Walk parts; for each water-flagged one, emit triangles.
-    //    Per Reach `create_mesh_water_vertex_buffer`:
+    // 5. Walk parts; for each water-flagged one, emit triangles AND
+    //    record the part's (start, count) range. Per Reach
+    //    `create_mesh_water_vertex_buffer`:
     //      regular_idx[j] = raw_indices[part.index_start + j]
     //      water_idx[j]   = raw_water_indices[water_indices_start[p] + j]
     //    Triangles formed by chunking j in 0..part.index_count by 3.
+    //    Per-part ranges let the renderer dispatch a separate water
+    //    draw per part (different rmw materials on the same mesh =
+    //    different shader pipelines + cbuffers).
     let mut triangles: Vec<RawWaterTriangle> = Vec::new();
+    let mut parts: Vec<RawWaterPart> = Vec::new();
     for p in 0..parts_block.len() {
         let Some(part) = parts_block.element(p) else { continue };
         let part_flags = part.read_int_any("part flags").unwrap_or(0) as u32;
@@ -844,6 +885,7 @@ fn read_raw_water_data(
             continue;
         }
         let triangles_in_part = count / 3;
+        let triangle_start = triangles.len() as u32;
         for tri in 0..triangles_in_part {
             let mut control_points = [RawWaterControlPoint::default(); 3];
             for j in 0..3 {
@@ -855,13 +897,18 @@ fn read_raw_water_data(
             }
             triangles.push(RawWaterTriangle { control_points });
         }
+        parts.push(RawWaterPart {
+            mesh_part_index: p as u16,
+            triangle_start,
+            triangle_count: triangles_in_part as u32,
+        });
     }
 
     if triangles.is_empty() && vertices.is_empty() {
         return None;
     }
 
-    Some(RawWaterData { triangles, vertices })
+    Some(RawWaterData { triangles, vertices, parts })
 }
 
 fn read_vertex(

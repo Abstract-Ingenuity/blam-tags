@@ -6,6 +6,7 @@
 mod types;
 
 pub use types::{
-    LightmapBspData, LightmapClusterEntry, LightmapError, LightmapInstanceEntry,
-    LightmapPerVertexBlock, LightmapPerVertexProbe, LightmapPolicy, LightmapProbe,
+    DequantizedLightmapProbe, DequantizedPerVertexProbe, LightmapBspData, LightmapClusterEntry,
+    LightmapError, LightmapInstanceEntry, LightmapPerVertexBlock, LightmapPerVertexProbe,
+    LightmapPolicy, LightmapProbe,
 };
