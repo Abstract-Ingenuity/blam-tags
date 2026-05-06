@@ -28,7 +28,7 @@
 //! buffers inline under `render geometry/per mesh temporary[i]`. Cache
 //! map files would need a different code path.
 
-use crate::api::TagStruct;
+use crate::api::{TagBlock, TagStruct};
 use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::geometry::{read_compression_bounds, strip_to_list, CompressionBounds};
@@ -135,21 +135,42 @@ pub struct RenderMesh {
     pub water_data: Option<RawWaterData>,
 }
 
-/// `s_raw_water_data` (24 bytes on disk) — per-mesh water-surface data.
-/// `indices` are 16-bit triangle-list indices into a SHARED vertex
-/// pool that combines [`RenderMesh::vertices`] (regular geometry) +
-/// `vertices` (the append data). Cache build packs (i, j, k) triples
-/// into the runtime per-instance 156 + 72-byte streams (see
-/// `reference_dllcache_water_pipeline.md`).
+/// Per-mesh water-surface data, fully resolved at parse time. Each
+/// triangle's 3 control points carry (regular_idx, water_idx) pairs
+/// already de-referenced through `raw_indices` and `raw_water_indices`.
+/// Mirrors the cache-build walk in
+/// `?create_mesh_water_vertex_buffer @ 0x82e094e8` (Reach XEX) — see
+/// `reference_water_vertex_buffer_build.md`.
+///
+/// At runtime, control point N's:
+/// - position / texcoord / tangent / binormal / lightmap_uv comes from
+///   `RenderMesh::vertices[control_point.regular_idx]`.
+/// - local_info / water_velocity / base_texcoord comes from
+///   `RawWaterData::vertices[control_point.water_idx]`.
 #[derive(Debug, Clone, Default)]
 pub struct RawWaterData {
-    /// `raw water indices` — triangle-list u16 indices.
-    pub indices: Vec<u16>,
-    /// `raw water vertices` — per-vertex append data. Element count
-    /// equals the regular `RenderMesh::vertices` count for water-bearing
-    /// meshes (1:1 alignment with the regular vertex pool); the
-    /// `indices` field selects which vertices form water triangles.
+    /// One entry per source water triangle.
+    pub triangles: Vec<RawWaterTriangle>,
+    /// `raw water vertices` — per-water-vertex append pool.
+    /// `RawWaterControlPoint::water_idx` indexes into this.
     pub vertices: Vec<RawWaterAppend>,
+}
+
+/// One source water triangle — 3 control points each pulling from
+/// two parallel pools.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawWaterTriangle {
+    pub control_points: [RawWaterControlPoint; 3],
+}
+
+/// One control point in a water triangle. The two indices reference
+/// parallel pools per the Reach `create_mesh_water_vertex_buffer`
+/// walk: `regular_idx = raw_indices[part.index_start + j]`,
+/// `water_idx = raw_water_indices[mesh.water_indices_start[part_idx] + j]`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawWaterControlPoint {
+    pub regular_idx: u16,
+    pub water_idx: u16,
 }
 
 /// `s_raw_water_append` (36 bytes on disk) — extra per-vertex data for
@@ -713,7 +734,7 @@ where
             });
         }
 
-        let water_data = read_raw_water_data(&pmt);
+        let water_data = read_raw_water_data(&mesh, &pmt, &raw_index_list, &parts_block);
         out.push(RenderMesh { vertices, indices, parts, rigid_node_index, water_data });
     }
     Ok(out)
@@ -729,35 +750,46 @@ fn empty_mesh(rigid_node_index: Option<i16>) -> RenderMesh {
     }
 }
 
-/// Read the `raw water data` block from a per_mesh_temporary entry.
-/// Schema: `raw_water_block` (24 bytes) with two child blocks —
-/// `raw water indices` (u16 triangle indices) and `raw water vertices`
-/// (`s_raw_water_append` 36-byte elements). The block is `max_count = 1`
-/// per-mesh; we read the first (and only) element if present and
-/// non-empty. Returns `None` when the mesh has no water data (the
-/// common case for non-water meshes).
-fn read_raw_water_data(pmt: &TagStruct<'_>) -> Option<RawWaterData> {
+/// Walk water-flagged parts and produce already-resolved per-triangle
+/// `(regular_idx, water_idx)` control-point pairs. Mirrors the cache-build
+/// walk in `?create_mesh_water_vertex_buffer @ 0x82e094e8` (Reach XEX) —
+/// see `reference_water_vertex_buffer_build.md`.
+///
+/// Schema:
+/// - `per_mesh_temporary[i].raw water data` (1-element block) =
+///   `s_raw_water_data` with `raw water indices` + `raw water vertices`.
+/// - `meshes[i].water indices start` (per-part u16 offsets into the
+///   water-index pool — one entry per part).
+/// - `meshes[i].parts[p].part flags` bit 3 = `_part_is_water_surface`.
+/// - `meshes[i].parts[p].index_start` / `index_count` reference
+///   `raw indices` (the regular pool).
+fn read_raw_water_data(
+    mesh: &TagStruct<'_>,
+    pmt: &TagStruct<'_>,
+    raw_index_list: &[u16],
+    parts_block: &TagBlock<'_>,
+) -> Option<RawWaterData> {
+    // 1. raw_water_data block (1 element if water-bearing).
     let block = pmt.field("raw water data").and_then(|f| f.as_block())?;
     if block.is_empty() {
         return None;
     }
     let elem = block.element(0)?;
-    let indices_block = elem.field("raw water indices").and_then(|f| f.as_block());
-    let vertices_block = elem.field("raw water vertices").and_then(|f| f.as_block());
-    let (Some(indices_block), Some(vertices_block)) = (indices_block, vertices_block) else {
-        return None;
-    };
-    if indices_block.is_empty() && vertices_block.is_empty() {
+    let water_indices_block = elem.field("raw water indices").and_then(|f| f.as_block())?;
+    let vertices_block = elem.field("raw water vertices").and_then(|f| f.as_block())?;
+    if water_indices_block.is_empty() && vertices_block.is_empty() {
         return None;
     }
 
-    let mut indices = Vec::with_capacity(indices_block.len());
-    for k in 0..indices_block.len() {
-        let Some(e) = indices_block.element(k) else { continue };
-        indices.push(e.read_int_any("word").unwrap_or(0) as u16);
+    // 2. Decode raw_water_indices into a flat u16 array.
+    let mut raw_water_indices: Vec<u16> = Vec::with_capacity(water_indices_block.len());
+    for k in 0..water_indices_block.len() {
+        let Some(e) = water_indices_block.element(k) else { continue };
+        raw_water_indices.push(e.read_int_any("word").unwrap_or(0) as u16);
     }
 
-    let mut vertices = Vec::with_capacity(vertices_block.len());
+    // 3. Decode raw_water_vertices (the append pool).
+    let mut vertices: Vec<RawWaterAppend> = Vec::with_capacity(vertices_block.len());
     for k in 0..vertices_block.len() {
         let Some(e) = vertices_block.element(k) else { continue };
         vertices.push(RawWaterAppend {
@@ -767,7 +799,69 @@ fn read_raw_water_data(pmt: &TagStruct<'_>) -> Option<RawWaterData> {
         });
     }
 
-    Some(RawWaterData { indices, vertices })
+    // 4. mesh.water_indices_start — per-part u16 base offsets.
+    let water_starts_block = mesh
+        .field("water indices start")
+        .and_then(|f| f.as_block())?;
+    let mut water_indices_start: Vec<u16> = Vec::with_capacity(water_starts_block.len());
+    for k in 0..water_starts_block.len() {
+        let Some(e) = water_starts_block.element(k) else { continue };
+        water_indices_start.push(e.read_int_any("word").unwrap_or(0) as u16);
+    }
+    if water_indices_start.is_empty() {
+        return None;
+    }
+
+    // 5. Walk parts; for each water-flagged one, emit triangles.
+    //    Per Reach `create_mesh_water_vertex_buffer`:
+    //      regular_idx[j] = raw_indices[part.index_start + j]
+    //      water_idx[j]   = raw_water_indices[water_indices_start[p] + j]
+    //    Triangles formed by chunking j in 0..part.index_count by 3.
+    let mut triangles: Vec<RawWaterTriangle> = Vec::new();
+    for p in 0..parts_block.len() {
+        let Some(part) = parts_block.element(p) else { continue };
+        let part_flags = part.read_int_any("part flags").unwrap_or(0) as u32;
+        // Bit 3 = `_part_is_water_surface` per `e_part_flags`
+        // (`Ares/source/geometry/geometry_definitions.h:44-51`).
+        if (part_flags & 0x08) == 0 {
+            continue;
+        }
+        let regular_base = part.read_int_any("index start").unwrap_or(0);
+        // `index_start` is schema-typed `short integer` (i16) but
+        // functionally u16 — strips spanning >32767 wrap. Reinterpret
+        // matches the existing protomorph behavior in render_model.
+        let regular_base = (regular_base as i16 as u16) as usize;
+        let count = part.read_int_any("index count").unwrap_or(0) as usize;
+        if count == 0 || count % 3 != 0 {
+            continue;
+        }
+        let Some(&water_base) = water_indices_start.get(p) else { continue };
+        let water_base = water_base as usize;
+        if water_base + count > raw_water_indices.len() {
+            continue;
+        }
+        if regular_base + count > raw_index_list.len() {
+            continue;
+        }
+        let triangles_in_part = count / 3;
+        for tri in 0..triangles_in_part {
+            let mut control_points = [RawWaterControlPoint::default(); 3];
+            for j in 0..3 {
+                let off = tri * 3 + j;
+                control_points[j] = RawWaterControlPoint {
+                    regular_idx: raw_index_list[regular_base + off],
+                    water_idx: raw_water_indices[water_base + off],
+                };
+            }
+            triangles.push(RawWaterTriangle { control_points });
+        }
+    }
+
+    if triangles.is_empty() && vertices.is_empty() {
+        return None;
+    }
+
+    Some(RawWaterData { triangles, vertices })
 }
 
 fn read_vertex(
