@@ -192,6 +192,105 @@ impl TagFunctionHeader {
 }
 
 // ---------------------------------------------------------------------------
+// Periodic + transition helpers
+// ---------------------------------------------------------------------------
+//
+// Engine helpers `periodic_function_evaluate(index, time)` and
+// `transition_function_evaluate(index, value)` (Ares
+// `periodic_functions.cpp`) sample analytic curves through 1024-byte
+// lookup tables baked at startup by `periodic_functions_initialize`.
+// The table-bake bodies are stripped from both Ares and Groundhog
+// decompiles. We reproduce the same analytic curves directly — same
+// semantics, no precision loss from byte quantization.
+
+/// `e_transition_function` — input ∈ [0, 1] → output ∈ [0, 1].
+/// Maps to `global_transition_functions_enum` in `h3_guerilla_tag_definitions/math/periodic_functions.cpp`.
+#[allow(dead_code)]
+const TRANSITION_LINEAR: u8     = 0;
+const TRANSITION_EARLY: u8      = 1;
+const TRANSITION_VERY_EARLY: u8 = 2;
+const TRANSITION_LATE: u8       = 3;
+const TRANSITION_VERY_LATE: u8  = 4;
+const TRANSITION_COSINE: u8     = 5;
+const TRANSITION_ONE: u8        = 6;
+const TRANSITION_ZERO: u8       = 7;
+
+/// Analytic transition functions. "early" front-loads the curve (output
+/// near 1 well before input=1), "late" back-loads it. "very" variants
+/// are quartic instead of quadratic for sharper curvature. cosine is
+/// the smoothstep half-cosine.
+pub fn transition_function_evaluate(function_index: u8, value: f32) -> f32 {
+    let t = value.clamp(0.0, 1.0);
+    match function_index {
+        TRANSITION_LINEAR     => t,
+        TRANSITION_EARLY      => 1.0 - (1.0 - t).powi(2),
+        TRANSITION_VERY_EARLY => 1.0 - (1.0 - t).powi(4),
+        TRANSITION_LATE       => t.powi(2),
+        TRANSITION_VERY_LATE  => t.powi(4),
+        TRANSITION_COSINE     => 0.5 * (1.0 - (std::f32::consts::PI * t).cos()),
+        TRANSITION_ONE        => 1.0,
+        TRANSITION_ZERO       => 0.0,
+        _                     => 0.0,
+    }
+}
+
+const PERIODIC_ONE: u8                              = 0;
+const PERIODIC_ZERO: u8                             = 1;
+const PERIODIC_COSINE: u8                           = 2;
+#[allow(dead_code)]
+const PERIODIC_COSINE_WITH_RANDOM_PERIOD: u8        = 3;
+const PERIODIC_DIAGONAL_WAVE: u8                    = 4;
+#[allow(dead_code)]
+const PERIODIC_DIAGONAL_WAVE_WITH_RANDOM_PERIOD: u8 = 5;
+const PERIODIC_SLIDE: u8                            = 6;
+#[allow(dead_code)]
+const PERIODIC_SLIDE_WITH_RANDOM_PERIOD: u8         = 7;
+#[allow(dead_code)]
+const PERIODIC_NOISE: u8                            = 8;
+#[allow(dead_code)]
+const PERIODIC_JITTER: u8                           = 9;
+#[allow(dead_code)]
+const PERIODIC_WANDER: u8                           = 10;
+#[allow(dead_code)]
+const PERIODIC_SPARK: u8                            = 11;
+
+/// Analytic periodic functions. `time` is cyclic — most functions wrap
+/// at integer boundaries. Output range is [0, 1] (the engine's table
+/// stores bytes 0..255 representing this range).
+///
+/// Random-period variants (3, 5, 7) and the noise/jitter/wander/spark
+/// types use a deterministic per-instance seed in the engine; without
+/// the seed plumbed through they're stubbed to their non-random
+/// counterpart or zero. Riverworld water doesn't use any of these.
+pub fn periodic_function_evaluate(function_index: u8, time: f32) -> f32 {
+    // Wrap input to [0, 1) for cyclic functions.
+    let t = time - time.floor();
+    match function_index {
+        PERIODIC_ONE => 1.0,
+        PERIODIC_ZERO => 0.0,
+        PERIODIC_COSINE | PERIODIC_COSINE_WITH_RANDOM_PERIOD => {
+            // Half-amplitude cosine in [0, 1]: 0.5 - 0.5*cos(2π t).
+            // Engine baked table stores values in [0, 1] range.
+            0.5 - 0.5 * (std::f32::consts::TAU * t).cos()
+        }
+        PERIODIC_DIAGONAL_WAVE | PERIODIC_DIAGONAL_WAVE_WITH_RANDOM_PERIOD => {
+            // Triangle wave: ramp up then down per cycle.
+            if t < 0.5 { 2.0 * t } else { 2.0 * (1.0 - t) }
+        }
+        PERIODIC_SLIDE | PERIODIC_SLIDE_WITH_RANDOM_PERIOD => {
+            // Sawtooth: linear ramp 0→1 per cycle.
+            t
+        }
+        // Deterministic-ish stub for the random/noise types until we
+        // plumb a per-instance seed. Returns 0.5 (mid-amplitude). The
+        // engine drives these from a shared random_math seeded RNG;
+        // shipped tags rarely use them outside particle effects.
+        PERIODIC_NOISE | PERIODIC_JITTER | PERIODIC_WANDER | PERIODIC_SPARK => 0.5,
+        _ => 0.0,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Per-type compact data structures
 // ---------------------------------------------------------------------------
 
@@ -291,6 +390,68 @@ impl Spline2Compact {
     }
 }
 
+/// `c_transition_function_compact` — 12 bytes. Per
+/// `function_definitions.cpp:1094`:
+/// `f(x) = (amp_max - amp_min) * transition_function_evaluate(idx, x)
+///       + amp_min`.
+#[derive(Debug, Clone, Copy)]
+pub struct TransitionCompact {
+    pub function_index: u8,
+    pub amplitude_min: f32,
+    pub amplitude_max: f32,
+}
+
+impl TransitionCompact {
+    fn parse(data: &[u8]) -> Option<Self> {
+        if data.len() < 12 { return None; }
+        Some(Self {
+            function_index: data[0],
+            // bytes 1..4 unused / padding
+            amplitude_min: f32::from_le_bytes(data[4..8].try_into().unwrap()),
+            amplitude_max: f32::from_le_bytes(data[8..12].try_into().unwrap()),
+        })
+    }
+    fn evaluate(&self, input: f32) -> f32 {
+        (self.amplitude_max - self.amplitude_min)
+            * transition_function_evaluate(self.function_index, input)
+            + self.amplitude_min
+    }
+}
+
+/// `c_periodic_function_compact` — 20 bytes. Per
+/// `function_definitions.cpp:1041` (decompiled body):
+/// ```text
+/// adjusted_time = input * frequency + phase
+/// periodic_value = periodic_function_evaluate(idx, adjusted_time)
+/// return (amp_max - amp_min) * periodic_value + amp_min
+/// ```
+#[derive(Debug, Clone, Copy)]
+pub struct PeriodicCompact {
+    pub function_index: u8,
+    pub frequency: f32,
+    pub phase: f32,
+    pub amplitude_min: f32,
+    pub amplitude_max: f32,
+}
+
+impl PeriodicCompact {
+    fn parse(data: &[u8]) -> Option<Self> {
+        if data.len() < 20 { return None; }
+        Some(Self {
+            function_index: data[0],
+            frequency:     f32::from_le_bytes(data[4..8].try_into().unwrap()),
+            phase:         f32::from_le_bytes(data[8..12].try_into().unwrap()),
+            amplitude_min: f32::from_le_bytes(data[12..16].try_into().unwrap()),
+            amplitude_max: f32::from_le_bytes(data[16..20].try_into().unwrap()),
+        })
+    }
+    fn evaluate(&self, input: f32) -> f32 {
+        let adjusted = input * self.frequency + self.phase;
+        let v = periodic_function_evaluate(self.function_index, adjusted);
+        (self.amplitude_max - self.amplitude_min) * v + self.amplitude_min
+    }
+}
+
 /// `c_exponent_function_compact` — 12 bytes. Per
 /// `function_definitions.cpp:976-1003`:
 /// ```text
@@ -337,6 +498,8 @@ impl ExponentCompact {
 pub enum TagFunction {
     Identity { header: TagFunctionHeader },
     Constant { header: TagFunctionHeader },
+    Transition { header: TagFunctionHeader, compact: TransitionCompact },
+    Periodic { header: TagFunctionHeader, compact: PeriodicCompact },
     Linear   { header: TagFunctionHeader, compact: LinearCompact },
     Spline   { header: TagFunctionHeader, compact: SplineCompact },
     Spline2  { header: TagFunctionHeader, compact: Spline2Compact },
@@ -379,6 +542,14 @@ impl TagFunction {
         Ok(match header.function_type {
             FunctionType::Identity => Self::Identity { header },
             FunctionType::Constant => Self::Constant { header },
+            FunctionType::Transition => match TransitionCompact::parse(compact) {
+                Some(c) => Self::Transition { header, compact: c },
+                None => Self::Unsupported { header, raw: data.to_vec() },
+            },
+            FunctionType::Periodic => match PeriodicCompact::parse(compact) {
+                Some(c) => Self::Periodic { header, compact: c },
+                None => Self::Unsupported { header, raw: data.to_vec() },
+            },
             FunctionType::Linear => match LinearCompact::parse(compact) {
                 Some(c) => Self::Linear { header, compact: c },
                 None => Self::Unsupported { header, raw: data.to_vec() },
@@ -406,6 +577,8 @@ impl TagFunction {
         match self {
             Self::Identity { header }
             | Self::Constant { header }
+            | Self::Transition { header, .. }
+            | Self::Periodic { header, .. }
             | Self::Linear { header, .. }
             | Self::Spline { header, .. }
             | Self::Spline2 { header, .. }
@@ -448,10 +621,12 @@ impl TagFunction {
             // clamp_range = (0, 1). For Linear / Spline / Spline2,
             // the engine applies clamp_range as the [out_min, out_max]
             // interpretation per `map_to_output_range_legacy`.
-            Self::Linear   { compact, .. } => compact.evaluate(input),
-            Self::Spline   { compact, .. } => compact.evaluate(input),
-            Self::Spline2  { compact, .. } => compact.evaluate(input),
-            Self::Exponent { compact, .. } => compact.evaluate(input),
+            Self::Transition { compact, .. } => compact.evaluate(input),
+            Self::Periodic   { compact, .. } => compact.evaluate(input),
+            Self::Linear     { compact, .. } => compact.evaluate(input),
+            Self::Spline     { compact, .. } => compact.evaluate(input),
+            Self::Spline2    { compact, .. } => compact.evaluate(input),
+            Self::Exponent   { compact, .. } => compact.evaluate(input),
             Self::Unsupported { .. } => 0.0,
         }
     }
@@ -726,6 +901,84 @@ mod tests {
         assert_eq!(f.function_type(), FunctionType::Exponent);
         assert!((f.evaluate(0.5, 0.0) - 0.25).abs() < 1e-5);
         assert!((f.evaluate(0.7, 0.0) - 0.49).abs() < 1e-5);
+    }
+
+    #[test]
+    fn transition_linear_passes_through() {
+        // function_index=0 (linear), amp_min=0, amp_max=1
+        let mut blob = header_with(2, 0.0, 1.0).to_vec();
+        blob.push(0); blob.extend_from_slice(&[0, 0, 0]); // linear + padding
+        blob.extend_from_slice(&0.0f32.to_le_bytes());
+        blob.extend_from_slice(&1.0f32.to_le_bytes());
+        let f = TagFunction::parse(&blob).unwrap();
+        assert_eq!(f.function_type(), FunctionType::Transition);
+        // linear ramp 0..1
+        assert!((f.evaluate(0.0, 0.0) - 0.0).abs() < 1e-5);
+        assert!((f.evaluate(0.5, 0.0) - 0.5).abs() < 1e-5);
+        assert!((f.evaluate(1.0, 0.0) - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn transition_late_eases_in() {
+        // function_index=3 (late = ease-in), amp_min=0, amp_max=1
+        let mut blob = header_with(2, 0.0, 1.0).to_vec();
+        blob.push(3); blob.extend_from_slice(&[0, 0, 0]);
+        blob.extend_from_slice(&0.0f32.to_le_bytes());
+        blob.extend_from_slice(&1.0f32.to_le_bytes());
+        let f = TagFunction::parse(&blob).unwrap();
+        // late = t^2 → at midpoint < 0.5
+        assert!((f.evaluate(0.5, 0.0) - 0.25).abs() < 1e-5);
+    }
+
+    #[test]
+    fn transition_one_constant() {
+        // function_index=6 (one) → constant amp_max
+        let mut blob = header_with(2, 0.0, 1.0).to_vec();
+        blob.push(6); blob.extend_from_slice(&[0, 0, 0]);
+        blob.extend_from_slice(&0.5f32.to_le_bytes()); // amp_min
+        blob.extend_from_slice(&3.0f32.to_le_bytes()); // amp_max
+        let f = TagFunction::parse(&blob).unwrap();
+        // (3 - 0.5) * 1.0 + 0.5 = 3.0
+        assert!((f.evaluate(0.42, 0.0) - 3.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn periodic_cosine_oscillates() {
+        // function_index=2 (cosine), frequency=1, phase=0, amp [-1, 1]
+        let mut blob = header_with(3, -1.0, 1.0).to_vec();
+        blob.push(2); blob.extend_from_slice(&[0, 0, 0]);
+        blob.extend_from_slice(&1.0f32.to_le_bytes()); // frequency
+        blob.extend_from_slice(&0.0f32.to_le_bytes()); // phase
+        blob.extend_from_slice(&0.0f32.to_le_bytes()); // amp_min (compact)
+        blob.extend_from_slice(&1.0f32.to_le_bytes()); // amp_max (compact)
+        let f = TagFunction::parse(&blob).unwrap();
+        assert_eq!(f.function_type(), FunctionType::Periodic);
+        // periodic cosine at t=0 = 0 (= 0.5 - 0.5*1), so compact = (1-0)*0+0=0
+        // outer clamp [-1, 1] → -1 + 0*(1 - -1) = -1
+        assert!((f.evaluate(0.0, 0.0) - (-1.0)).abs() < 1e-5);
+        // at t=0.25 (quarter cycle): cos(π/2) = 0 → periodic = 0.5
+        // compact = (1-0)*0.5+0 = 0.5; outer = -1 + 0.5*2 = 0
+        assert!((f.evaluate(0.25, 0.0) - 0.0).abs() < 1e-5);
+        // at t=0.5: cos(π) = -1 → periodic = 1.0
+        // compact = 1; outer = -1 + 1*2 = 1
+        assert!((f.evaluate(0.5, 0.0) - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn periodic_diagonal_wave_triangle() {
+        // function_index=4 (diagonal_wave / triangle wave)
+        let mut blob = header_with(3, 0.0, 1.0).to_vec();
+        blob.push(4); blob.extend_from_slice(&[0, 0, 0]);
+        blob.extend_from_slice(&1.0f32.to_le_bytes());
+        blob.extend_from_slice(&0.0f32.to_le_bytes());
+        blob.extend_from_slice(&0.0f32.to_le_bytes());
+        blob.extend_from_slice(&1.0f32.to_le_bytes());
+        let f = TagFunction::parse(&blob).unwrap();
+        // peak at t=0.5
+        assert!((f.evaluate(0.5, 0.0) - 1.0).abs() < 1e-5);
+        // zeros at t=0 and t=1
+        assert!((f.evaluate(0.0, 0.0) - 0.0).abs() < 1e-5);
+        assert!((f.evaluate(1.0, 0.0) - 0.0).abs() < 1e-5);
     }
 
     #[test]
