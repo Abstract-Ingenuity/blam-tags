@@ -97,10 +97,30 @@ impl ResolvedCbuffer {
 ///
 /// Names not found in either rmop chain or rmsh fall back to the
 /// extern/multiplier defaults (engine-bound at runtime).
+///
+/// Animated parameters are evaluated at `eval_time = 0.0` — the static
+/// load-time bake. Use [`rebuild_cbuffer_bytes_at_time`] to re-evaluate
+/// at a per-frame `current_time` for animated rmsh tags.
 pub fn resolve_pixel_user_cbuffer(
     rmsh: &RenderMethod,
     rmt2: &RenderMethodTemplate,
     rmop_params: &[RenderMethodOptionParameter],
+) -> ResolvedCbuffer {
+    resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, 0.0)
+}
+
+/// Time-aware variant — evaluates animated functions at `eval_time`
+/// instead of 0. Engine equivalent at runtime: `update_constants @
+/// 0x180685300` overlays animated values from
+/// `postprocess.overlays[routing.overlay_index]` per frame. The
+/// overlays are pre-baked at startup; we re-evaluate on the fly
+/// (cheaper than materializing 256-step tables, and we can use float
+/// time directly).
+pub fn resolve_pixel_user_cbuffer_at_time(
+    rmsh: &RenderMethod,
+    rmt2: &RenderMethodTemplate,
+    rmop_params: &[RenderMethodOptionParameter],
+    eval_time: f32,
 ) -> ResolvedCbuffer {
     let names = &rmt2.float_constants;
     let n = names.len() as u32;
@@ -113,7 +133,7 @@ pub fn resolve_pixel_user_cbuffer(
         let rmsh_param = rmsh.parameters.iter().find(|p| p.parameter_name == *name);
 
         let (value, is_xform) = match op_param {
-            Some(op) => compile_real_constant(op, rmsh_param),
+            Some(op) => compile_real_constant_at_time(op, rmsh_param, eval_time),
             None => (default_for_unknown(name), name_is_xform(name)),
         };
 
@@ -134,19 +154,39 @@ pub fn resolve_pixel_user_cbuffer(
     ResolvedCbuffer { slots, total_bytes, bytes }
 }
 
+/// Just the bytes — useful when a renderer caches the slot table from
+/// a static `resolve_pixel_user_cbuffer` and only needs the per-frame
+/// upload buffer. Walks the same path as `resolve_pixel_user_cbuffer_at_time`.
+pub fn rebuild_cbuffer_bytes_at_time(
+    rmsh: &RenderMethod,
+    rmt2: &RenderMethodTemplate,
+    rmop_params: &[RenderMethodOptionParameter],
+    eval_time: f32,
+) -> Vec<u8> {
+    resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, eval_time).bytes
+}
+
 /// Canonical per-slot merge — mirror of
 /// `c_render_method::compile_single_real_constant @ 0x826E42E8` from
-/// Reach tag-debug XEX. Reproduces the cache-builder's two-stage bake:
-///
-/// 1. Stage 1 (always): set slot to rmop default.
-/// 2. Stage 2 (if rmsh has the parameter): override based on
-///    rmsh.m_real_parameter / m_int_parameter / animated_parameters
-///    according to op_param.parameter_type.
-///
-/// Returns `(value, is_xform_slot)`.
+/// Reach tag-debug XEX. Reproduces the cache-builder's two-stage bake.
+/// Animated functions evaluate at `(input, range) = (0, 0)` — what the
+/// engine does at load time for the static cache. Use
+/// [`compile_real_constant_at_time`] for the per-frame runtime overlay.
 pub fn compile_real_constant(
     op_param: &RenderMethodOptionParameter,
     rmsh_param: Option<&RenderMethodParameter>,
+) -> ([f32; 4], bool) {
+    compile_real_constant_at_time(op_param, rmsh_param, 0.0)
+}
+
+/// Time-aware variant — animated functions evaluate at `eval_time`
+/// instead of 0, with cyclic-input handling per the function's
+/// `time_period_in_seconds` (input = (t mod period) / period when
+/// period > 0; raw t otherwise).
+pub fn compile_real_constant_at_time(
+    op_param: &RenderMethodOptionParameter,
+    rmsh_param: Option<&RenderMethodParameter>,
+    eval_time: f32,
 ) -> ([f32; 4], bool) {
     use RenderMethodAnimatedParameterType as A;
     use RenderMethodParameterType as P;
@@ -175,7 +215,9 @@ pub fn compile_real_constant(
         Some(P::Bitmap) => {
             // Per-channel write based on each animated_parameter's type.
             for anim in &rm.animated_parameters {
-                let v = anim.function.as_ref().map(eval_value).unwrap_or(0.0);
+                let v = anim.function.as_ref()
+                    .map(|f| eval_value_at(f, anim.time_period_in_seconds, eval_time))
+                    .unwrap_or(0.0);
                 match anim.parameter_type {
                     Some(A::ScaleUniform) => { slot[0] = v; slot[1] = v; }
                     Some(A::ScaleX) => slot[0] = v,
@@ -192,7 +234,9 @@ pub fn compile_real_constant(
             slot = [rm.real_parameter; 4];
             for anim in &rm.animated_parameters {
                 if matches!(anim.parameter_type, Some(A::Value)) {
-                    let v = anim.function.as_ref().map(eval_value).unwrap_or(0.0);
+                    let v = anim.function.as_ref()
+                        .map(|f| eval_value_at(f, anim.time_period_in_seconds, eval_time))
+                        .unwrap_or(0.0);
                     slot = [v; 4];
                 }
             }
@@ -212,7 +256,9 @@ pub fn compile_real_constant(
                         }
                     }
                     Some(A::Alpha) => {
-                        let v = anim.function.as_ref().map(eval_value).unwrap_or(0.0);
+                        let v = anim.function.as_ref()
+                            .map(|f| eval_value_at(f, anim.time_period_in_seconds, eval_time))
+                            .unwrap_or(0.0);
                         slot[3] = v;
                     }
                     _ => {}
@@ -265,6 +311,20 @@ fn name_is_multiplier(name: &str) -> bool {
 
 fn eval_value(f: &TagFunction) -> f32 {
     f.evaluate(0.0, 0.0)
+}
+
+/// Time-aware scalar eval — feeds the function input from
+/// `(time_period, eval_time)`. If `time_period > 0`, input is the
+/// normalized phase `(t mod period) / period` (cyclic). Otherwise the
+/// input is `eval_time` directly (engine path for non-cyclic
+/// time-driven params).
+fn eval_value_at(f: &TagFunction, time_period: f32, eval_time: f32) -> f32 {
+    let input = if time_period > 0.0 {
+        (eval_time.rem_euclid(time_period)) / time_period
+    } else {
+        eval_time
+    };
+    f.evaluate(input, 0.0)
 }
 
 fn extract_first_color(f: &TagFunction) -> Option<[f32; 4]> {
