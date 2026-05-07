@@ -11,7 +11,8 @@
 mod types;
 
 pub use types::{
-    CubemapEntry, DecoratorPlacementBlock, ObjectPlacement, PlacementMultiplayerData,
-    PlacementObjectData, PlacementPermutationData, Scenario, ScenarioError, SkyReference,
+    CubemapEntry, DecoratorPalette, DecoratorSetEntry, ObjectPlacement,
+    PlacementMultiplayerData, PlacementObjectData, PlacementPermutationData, Scenario,
+    ScenarioDecoratorBlock, ScenarioDecoratorPlacement, ScenarioError, SkyReference,
     StructureBspReference, TagReferencePalette, ZoneSet,
 };

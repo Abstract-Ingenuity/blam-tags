@@ -34,7 +34,7 @@
 
 use crate::api::{TagBlock, TagStruct};
 use crate::file::TagFile;
-use crate::math::{RealEulerAngles3d, RealPoint3d, RgbColor};
+use crate::math::{RealEulerAngles3d, RealPoint3d, RealQuaternion, RgbColor};
 
 const SCNR_GROUP: [u8; 4] = *b"scnr";
 
@@ -114,7 +114,7 @@ pub struct Scenario {
     pub lights: Vec<ObjectPlacement>,
 
     // ---- Decorators (foliage) ----
-    pub decorators: Vec<DecoratorPlacementBlock>,
+    pub decorators: Vec<ScenarioDecoratorBlock>,
 
     // ---- Cubemaps + lightmaps ----
     pub cubemaps: Vec<CubemapEntry>,
@@ -205,7 +205,7 @@ impl Scenario {
                 ObjectPlacement::from_struct,
             ),
 
-            decorators: read_block(s, "new decorator block", DecoratorPlacementBlock::from_struct),
+            decorators: read_block(s, "decorators", ScenarioDecoratorBlock::from_struct),
 
             cubemaps: read_block(s, "cubemaps", CubemapEntry::from_struct),
             new_lightmaps: s.read_tag_ref_path("new lightmaps").unwrap_or_default(),
@@ -485,19 +485,165 @@ impl PlacementMultiplayerData {
 // =============================================================================
 // Decorators
 // =============================================================================
+//
+// Schema (per `definitions/halo3_mcc/scenario_decorators_resource.json` and
+// confirmed via `blam-tag-shell --game halo3_mcc inspect --full
+// <scenario>`):
+//
+//   decorators [block, top-level on scenario]
+//   └─ each entry = ScenarioDecoratorBlock
+//      ├─ brush [struct]            (editor settings — ignored at runtime)
+//      ├─ decorator count* [long]   (computed total across all sets)
+//      ├─ current bsp count* [long]
+//      ├─ global offset/x/y/z [real_vector_3d × 4]
+//      ├─ palette [block of DecoratorPalette]
+//      │  └─ name + 8× (decorator_set_block_index, weight)
+//      └─ sets [block of DecoratorSetEntry]
+//         └─ decorator_set tag ref + placements [block of ScenarioDecoratorPlacement]
+//
+// Riverworld carries 11 sets, ~26K placements (thistle 17K, wildgrass 5.5K,
+// etc). MCC tag-ships the AUTHORING data but NOT the runtime per-cluster
+// arrays in the sbsp's `decorator sets` (which is `[0 elements]` on every
+// MCC sbsp). Runtime cluster assignment must be re-computed at load time —
+// each placement carries `runtime_bsp_index = -1`, `cluster_index = -1`.
+// See `reference_mcc_strips_decorator_data.md` for the data-availability
+// audit; the WAY foliage data lives is in this scenario block, not in the
+// sbsp.
 
-/// One entry in `new decorator block` — references a decorator set
-/// (palette) plus per-cluster instance buffer indices.
+/// Top-level `decorators[i]` entry on a scenario. Holds the editor brush
+/// + per-palette weights + the actual per-set placement arrays.
 #[derive(Debug, Clone, Default)]
-pub struct DecoratorPlacementBlock {
-    /// `decorator set` tag reference (`.decorator_set`).
-    pub decorator_set: String,
+pub struct ScenarioDecoratorBlock {
+    /// `decorator count` (computed total of all set placement counts).
+    pub decorator_count: i32,
+    /// `current bsp count`.
+    pub current_bsp_count: i32,
+    /// `palette` block — named groupings of decorator sets with weights.
+    pub palettes: Vec<DecoratorPalette>,
+    /// `sets` block — actual decorator_set tag refs + placement arrays.
+    pub sets: Vec<DecoratorSetEntry>,
 }
 
-impl DecoratorPlacementBlock {
+impl ScenarioDecoratorBlock {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            decorator_count: s.read_int_any("decorator count").unwrap_or(0) as i32,
+            current_bsp_count: s.read_int_any("current bsp count").unwrap_or(0) as i32,
+            palettes: read_block(s, "palette", DecoratorPalette::from_struct),
+            sets: read_block(s, "sets", DecoratorSetEntry::from_struct),
+        }
+    }
+}
+
+/// One entry in `palette` — a named collection (e.g. "ferns",
+/// "grass_cover", "wetlands") of up to 8 decorator-set indices with
+/// authoring weights. The runtime distributes painted placements by
+/// weight; we just preserve the data.
+#[derive(Debug, Clone, Default)]
+pub struct DecoratorPalette {
+    pub name: String,
+    /// 8 × (set_block_index, weight). Block indices point into the
+    /// containing `ScenarioDecoratorBlock::sets`; -1 = unused slot.
+    pub set_indices: [i16; 8],
+    pub set_weights: [i16; 8],
+}
+
+impl DecoratorPalette {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        let mut set_indices = [-1i16; 8];
+        let mut set_weights = [0i16; 8];
+        for i in 0..8 {
+            set_indices[i] = s.read_block_index(&format!("decorator set {i}"));
+            set_weights[i] = s
+                .read_int_any(&format!("decorator weight {i}"))
+                .unwrap_or(0) as i16;
+        }
+        Self {
+            name: s.read_string_id("name").unwrap_or_default(),
+            set_indices,
+            set_weights,
+        }
+    }
+}
+
+/// One entry in `sets` — a decorator_set tag ref + the array of
+/// authored placements that reference it.
+#[derive(Debug, Clone, Default)]
+pub struct DecoratorSetEntry {
+    /// Tag reference path to the `.decorator_set` tag.
+    pub decorator_set: String,
+    pub placements: Vec<ScenarioDecoratorPlacement>,
+}
+
+impl DecoratorSetEntry {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
             decorator_set: s.read_tag_ref_path("decorator set").unwrap_or_default(),
+            placements: read_block(s, "placements", ScenarioDecoratorPlacement::from_struct),
+        }
+    }
+}
+
+/// One painted decorator placement. Position + orientation + per-instance
+/// tint + scale + the decorator-internal type index. Runtime cluster
+/// assignment fields (`runtime_bsp_index`, `cluster_index`,
+/// `cluster_decorator_set_index`) are all `-1` in MCC-shipped tags —
+/// the cache-builder normally fills them; we have to recompute at load.
+#[derive(Debug, Clone, Default)]
+pub struct ScenarioDecoratorPlacement {
+    pub position: RealPoint3d,
+    /// Index into the parent decorator_set's `decorator_types` array
+    /// (which mesh subpart this placement instances).
+    pub type_index: i8,
+    /// Wind-sway intensity scalar (0-255 → 0.0-1.0 in shader).
+    pub motion_scale: i8,
+    /// Per-instance ground-tint blend factor.
+    pub ground_tint: i8,
+    pub flags: u8,
+    pub rotation: RealQuaternion,
+    pub scale: f32,
+    pub tint_color: RealPoint3d,
+    pub original_point: RealPoint3d,
+    pub original_normal: RealPoint3d,
+    /// Block index into the BSP-level decorator structures
+    /// (editor_bound_to_bsp). -1 = unbound at authoring time.
+    pub editor_bound_to_bsp: i8,
+    /// `runtime_bsp_index` — -1 in MCC-shipped tags. The cache-builder
+    /// fills this with the BSP this placement falls inside; we
+    /// recompute at load.
+    pub runtime_bsp_index: i8,
+    /// `cluster_index` — -1 in MCC. Fills via point-in-cluster test.
+    pub cluster_index: i16,
+    /// `cluster_decorator_set_index` — -1 in MCC. Index into the
+    /// per-cluster runtime decorator-set table.
+    pub cluster_decorator_set_index: i16,
+    /// Compressed grid-aligned block coordinates for the runtime LOD
+    /// chunking (-1 if not yet computed).
+    pub block_x: i8,
+    pub block_y: i8,
+}
+
+impl ScenarioDecoratorPlacement {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            position: s.read_point3d("position"),
+            type_index: s.read_int_any("type index").unwrap_or(0) as i8,
+            motion_scale: s.read_int_any("motion scale").unwrap_or(0) as i8,
+            ground_tint: s.read_int_any("ground tint").unwrap_or(0) as i8,
+            flags: s.read_int_any("flags").unwrap_or(0) as u8,
+            rotation: read_quaternion(s, "rotation"),
+            scale: s.read_real("scale").unwrap_or(0.0),
+            tint_color: s.read_point3d("tint color"),
+            original_point: s.read_point3d("original point"),
+            original_normal: s.read_point3d("original normal"),
+            editor_bound_to_bsp: s.read_block_index("editor bound to bsp") as i8,
+            runtime_bsp_index: s.read_int_any("runtime bsp index").unwrap_or(-1) as i8,
+            cluster_index: s.read_int_any("cluster index").unwrap_or(-1) as i16,
+            cluster_decorator_set_index: s
+                .read_int_any("cluster decorator set index")
+                .unwrap_or(-1) as i16,
+            block_x: s.read_int_any("block x").unwrap_or(0) as i8,
+            block_y: s.read_int_any("block y").unwrap_or(0) as i8,
         }
     }
 }
@@ -566,6 +712,14 @@ fn read_euler3d(s: &TagStruct<'_>, name: &str) -> RealEulerAngles3d {
     match s.field(name).and_then(|f| f.value()) {
         Some(TagFieldData::RealEulerAngles3d(a)) => a,
         _ => RealEulerAngles3d::default(),
+    }
+}
+
+fn read_quaternion(s: &TagStruct<'_>, name: &str) -> RealQuaternion {
+    use crate::fields::TagFieldData;
+    match s.field(name).and_then(|f| f.value()) {
+        Some(TagFieldData::RealQuaternion(q)) => q,
+        _ => RealQuaternion::default(),
     }
 }
 

@@ -85,6 +85,7 @@ pub mod render_method;
 pub mod scenario;
 pub mod scenario_lightmap;
 pub mod sky_atmosphere;
+pub mod decorator_set;
 pub mod camera_fx_settings;
 pub mod rasterizer_globals;
 pub mod structure_bsp;
