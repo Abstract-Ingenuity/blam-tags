@@ -10,7 +10,7 @@
 
 use crate::api::TagStruct;
 use crate::file::TagFile;
-use crate::math::{RealPoint3d, RealRgbColor};
+use crate::math::{RealPoint3d, RealRgbColor, RealVector3d};
 
 /// Errors from sky_atm_parameters walking.
 #[derive(Debug)]
@@ -70,6 +70,24 @@ pub struct AtmosphereSettings {
     pub distance_bias: f32,
     /// Maximum fog thickness clamp.
     pub max_fog_thickness: f32,
+
+    // --- Per-setting patchy fog ---
+    // Engine `c_atmosphere_setting`. Accumulated by
+    // `c_atmosphere_fog_interface::accumulate_atmosphere_settings @
+    // 0x1803AFD90` only when the setting's `flags & 4` (bit 2 =
+    // "Patchy Fog") is set. Zero-default when unauthored.
+    /// Schema "Sheet density" → engine `m_patchy_fog_density`. Per-
+    /// sheet density multiplier; PS uses it as `sheet_fade_factors *=
+    /// patchy_fog_density`.
+    pub patchy_fog_density: f32,
+    /// Height (world z) above which fog density starts decaying.
+    pub full_intensity_height: f32,
+    /// Height where fog has half its full-intensity density. Drives
+    /// the exponential height fade `exp(rate × (full - z))`.
+    pub half_intensity_height: f32,
+    /// World-space wind direction. PS-side accumulated into per-sheet
+    /// UV offsets each frame.
+    pub wind_direction: RealVector3d,
 }
 
 impl AtmosphereSettings {
@@ -90,7 +108,18 @@ impl AtmosphereSettings {
             desaturation: s.read_real("De-saturation").unwrap_or(0.0),
             distance_bias: s.read_real("Distance Bias").unwrap_or(0.0),
             max_fog_thickness: s.read_real("Max Fog Thickness").unwrap_or(65536.0),
+            patchy_fog_density: s.read_real("Sheet density").unwrap_or(0.0),
+            full_intensity_height: s.read_real("Full intensity height").unwrap_or(0.0),
+            half_intensity_height: s.read_real("Half intensity height").unwrap_or(0.0),
+            wind_direction: s.read_vec3("Wind direction"),
         }
+    }
+
+    /// True iff the "Patchy Fog" flag (bit 2 / mask 4) is set. Engine:
+    /// `c_atmosphere_fog_interface::accumulate_atmosphere_settings @
+    /// 0x1803AFD90` gates the patchy-fog field accumulation on this bit.
+    pub fn has_patchy_fog(&self) -> bool {
+        (self.flags & 0x0004) != 0
     }
 
     /// Compute world-space sun direction (z-up) from pitch + heading.
@@ -139,6 +168,36 @@ pub struct SkyAtmosphere {
     pub atmosphere_settings: Vec<AtmosphereSettings>,
     /// Per-water-physics-volume underwater fog settings.
     pub underwater_settings: Vec<UnderwaterSettings>,
+
+    // --- Global patchy fog parameters ---
+    // Per-tag (not per-cluster). Engine reads via global pointer
+    // `c_atmosphere_fog_interface::get_global_atmosphere_parameters()`.
+    /// Relative path to the noise bitmap used by `patchy_fog.hlsl`.
+    /// Empty string = no patchy fog texture authored.
+    pub patchy_fog_texture: String,
+    /// `g_shadow_pixel_size`-style texture-space repeat applied to the
+    /// noise bitmap UVs.
+    pub texture_repeat_rate: f32,
+    /// World-space spacing between adjacent fog sheets along the camera
+    /// forward axis. Engine default order ~10 wu.
+    pub distance_between_sheets: f32,
+    /// Higher values = sharper near-surface fade (PS `1 -
+    /// exp(-depth_diff × depth_fade_factor)`).
+    pub depth_fade_factor: f32,
+    /// World-units search radius for cross-fading neighbouring cluster
+    /// settings. Default 25.
+    pub cluster_search_radius: f32,
+    /// World-units distance from cluster boundary at which influence
+    /// starts fading. Default 5.
+    pub falloff_start_distance: f32,
+    /// Power applied to the cluster influence falloff curve. Default 2.
+    pub distance_falloff_power: f32,
+    /// World-units depth at which the patchy-fog effect is sorted into
+    /// the transparency renderer (`c_player_view::queue_patchy_fog`).
+    pub transparent_sort_distance: f32,
+    /// `e_global_sort_layer` enum byte. 0 means "use _normal" per
+    /// `c_player_view::queue_patchy_fog`.
+    pub transparent_sort_layer: u8,
 }
 
 impl SkyAtmosphere {
@@ -177,7 +236,32 @@ impl SkyAtmosphere {
                 out
             })
             .unwrap_or_default();
-        Self { atmosphere_settings, underwater_settings }
+        let patchy_fog_texture = s
+            .read_tag_ref_path("Fog Bitmap")
+            .unwrap_or_default();
+        let texture_repeat_rate = s.read_real("Texture repeat rate").unwrap_or(1.0);
+        let distance_between_sheets = s.read_real("Distance between sheets").unwrap_or(10.0);
+        let depth_fade_factor = s.read_real("Depth fade factor").unwrap_or(1.0);
+        let cluster_search_radius = s.read_real("Cluster search radius").unwrap_or(25.0);
+        let falloff_start_distance = s.read_real("Falloff start distance").unwrap_or(5.0);
+        let distance_falloff_power = s.read_real("Distance falloff power").unwrap_or(2.0);
+        let transparent_sort_distance = s.read_real("Transparent sort distance").unwrap_or(100.0);
+        let transparent_sort_layer = s
+            .read_int_any("Transparent sort layer")
+            .unwrap_or(0) as u8;
+        Self {
+            atmosphere_settings,
+            underwater_settings,
+            patchy_fog_texture,
+            texture_repeat_rate,
+            distance_between_sheets,
+            depth_fade_factor,
+            cluster_search_radius,
+            falloff_start_distance,
+            distance_falloff_power,
+            transparent_sort_distance,
+            transparent_sort_layer,
+        }
     }
 
     /// Find the first enabled atmosphere setting (Enable Atmosphere
