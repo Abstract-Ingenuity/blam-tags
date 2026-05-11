@@ -29,7 +29,6 @@
 //! - HS scripts / globals / source files
 //! - Cutscenes / cinematic camera points
 //! - Trigger volumes / kill zones / safe zones
-//! - Decals (TODO — visible but additive, not foundational)
 //! - Player starting profiles / spawn data
 
 use crate::api::{TagBlock, TagStruct};
@@ -115,6 +114,14 @@ pub struct Scenario {
 
     // ---- Decorators (foliage) ----
     pub decorators: Vec<ScenarioDecoratorBlock>,
+
+    // ---- Decals ----
+    /// `decal palette` — list of `.decal_system` tag refs. Each
+    /// placement in `decals[]` cites one entry by index.
+    pub decal_palette: Vec<DecalPaletteEntry>,
+    /// `decals` — author-placed decal projections onto BSP surfaces.
+    /// Cyberdyne (Epitaph) has 252 placements / 46 palette entries.
+    pub decals: Vec<DecalPlacement>,
 
     // ---- Cubemaps + lightmaps ----
     pub cubemaps: Vec<CubemapEntry>,
@@ -228,6 +235,9 @@ impl Scenario {
             ),
 
             decorators: read_block(s, "decorators", ScenarioDecoratorBlock::from_struct),
+
+            decal_palette: read_block(s, "decal palette", DecalPaletteEntry::from_struct),
+            decals: read_block(s, "decals", DecalPlacement::from_struct),
 
             cubemaps: read_block(s, "cubemaps", CubemapEntry::from_struct),
             new_lightmaps: s.read_tag_ref_path("new lightmaps").unwrap_or_default(),
@@ -676,6 +686,79 @@ impl ScenarioDecoratorPlacement {
                 .unwrap_or(-1) as i16,
             block_x: s.read_int_any("block x").unwrap_or(0) as i8,
             block_y: s.read_int_any("block y").unwrap_or(0) as i8,
+        }
+    }
+}
+
+// =============================================================================
+// Decals
+// =============================================================================
+//
+// Schema (per `definitions/halo3_mcc/scenario.json`):
+//   `decal palette` block — `scenario_decal_palette_block`. Each entry
+//      is a single tag_reference to a `.decal_system` (`decs` group).
+//   `decals` block — `scenario_decals_block` (sizeof=36).
+//      Each entry has:
+//        - decal palette index   (short_block_index)
+//        - editing bound to bsp* (char_block_index)
+//        - rotation*             (real_quaternion)
+//        - position*             (real_point_3d)
+//        - scale*                (real)
+//      plus inline editor-only custom fields (filt header + rede footer)
+//      that we ignore.
+//
+// Cyberdyne (Epitaph) authors 252 placements / 46 palette entries.
+// Mesh projection is performed at runtime — `c_decal_system::create →
+// collide → build_mesh` clips BSP triangles against the projection
+// volume. That bake happens in protomorph at scenario load.
+
+/// One entry in `scenario.decal_palette` — a tag reference to a
+/// `.decal_system` tag.
+#[derive(Debug, Clone, Default)]
+pub struct DecalPaletteEntry {
+    /// `reference^` — path to the `.decal_system` tag.
+    pub decal_system: String,
+}
+
+impl DecalPaletteEntry {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            decal_system: s
+                .read_tag_ref_path("reference")
+                .or_else(|| s.read_tag_ref_path("reference^"))
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// One author-placed decal — projects onto BSP geometry at the
+/// referenced palette entry's projection parameters.
+#[derive(Debug, Clone, Default)]
+pub struct DecalPlacement {
+    /// `decal palette index` — into `Scenario::decal_palette`.
+    /// -1 if the placement is unbound.
+    pub palette_index: i16,
+    /// `editing bound to bsp*!` — which structure_bsp this placement
+    /// was authored against. -1 = unbound.
+    pub editing_bound_to_bsp: i8,
+    /// `rotation*` — projection orientation (forward + up axes
+    /// derived from the quaternion in the runtime bake).
+    pub rotation: RealQuaternion,
+    /// `position*` — projection center (world units).
+    pub position: RealPoint3d,
+    /// `scale*` — projection-quad scale (world units). The runtime
+    /// projection box is `radius × scale` along forward / up / right.
+    pub scale: f32,
+}
+
+impl DecalPlacement {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            palette_index: s.read_block_index("decal palette index"),
+            editing_bound_to_bsp: s.read_block_index("editing bound to bsp") as i8,
+            rotation: read_quaternion(s, "rotation"),
+            position: s.read_point3d("position"),
+            scale: s.read_real("scale").unwrap_or(1.0),
         }
     }
 }

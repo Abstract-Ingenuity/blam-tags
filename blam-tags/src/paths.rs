@@ -46,11 +46,21 @@ pub fn tag_ref_path(s: &TagStruct<'_>, path: &str) -> Option<String> {
 
 /// Resolve a Halo-style relative tag path (`objects\foo\bar`) against
 /// an absolute `tags_root` and stamp on the target group's extension.
+///
+/// Always APPENDS `.{ext}` to the filename — never replaces an existing
+/// dot-suffix. Authoring names can contain literal dots (e.g.
+/// `decal_road_stripe_short_1.bitmap`) and the engine's tag-ref
+/// resolver appends the group extension without stripping, producing
+/// on-disk files like `..._1.bitmap.decal_system`. Using
+/// `Path::set_extension` here would strip the `.bitmap` portion and
+/// miss those files.
 pub fn resolve_tag_path(tags_root: &Path, rel: &str, ext: &str) -> PathBuf {
     let rel_path: PathBuf = rel.split('\\').collect();
-    let mut p = tags_root.join(&rel_path);
-    p.set_extension(ext);
-    p
+    let p = tags_root.join(&rel_path);
+    let mut s = p.into_os_string();
+    s.push(".");
+    s.push(ext);
+    PathBuf::from(s)
 }
 
 /// Map a tag group FOURCC (big-endian u32 such as `rmtr`) to the
@@ -92,6 +102,7 @@ pub fn group_tag_to_extension(group: u32) -> Option<&'static str> {
         b"scnr" => "scenario",
         b"Lbsp" => "scenario_lightmap_bsp_data",
         b"skya" => "sky_atm_parameters",
+        b"decs" => "decal_system",
         b"cfxs" => "camera_fx_settings",
         b"rasg" => "rasterizer_globals",
         b"obje" => "object",

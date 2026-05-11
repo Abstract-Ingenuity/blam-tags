@@ -1,0 +1,235 @@
+//! Decal system tag (`decs`) walker.
+//!
+//! Each scenario palette entry (`scenario.decal_palette[i]`) references
+//! one of these tags. A `.decal_system` wraps 1+ `c_decal_definition`
+//! entries; runtime decal placements (`scenario.decals[]`) cite a
+//! palette index → tag → definition pair when projecting onto BSP
+//! surfaces.
+//!
+//! Schema: `definitions/halo3_mcc/decal_system.json`
+//! Engine: `c_decal_system_definition` (sizeof=36),
+//! `c_decal_definition` (sizeof=116). Source:
+//! `effects/decal_definitions.cpp`.
+//!
+//! Authoring source of truth — runtime per-decal mesh build
+//! (`c_decal_system::build_mesh`) is handled separately at load time.
+//! See umbrella `project_decals_port_plan_2026_05_10.md`.
+//!
+//! ## Pass enum convention
+//!
+//! Schema names the two values "pre-lighting" / "post-lighting"; the
+//! engine internally aliases them as `_pass_post_albedo` (0) and
+//! `_pass_post_static_lighting` (1) in `c_decal_system::render_all`.
+//! We keep the schema names; the renderer can translate.
+
+use crate::api::{TagBlock, TagStruct};
+use crate::file::TagFile;
+use crate::render_method::{RenderMethod, RenderMethodError};
+
+const DECS_GROUP: [u8; 4] = *b"decs";
+
+#[derive(Debug)]
+pub enum DecalSystemError {
+    WrongGroup { expected: [u8; 4], actual: [u8; 4] },
+    RenderMethod(RenderMethodError),
+}
+
+impl std::fmt::Display for DecalSystemError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongGroup { expected, actual } => write!(
+                f,
+                "decal_system: wrong tag group (expected {:?}, got {:?})",
+                std::str::from_utf8(expected).unwrap_or("????"),
+                std::str::from_utf8(actual).unwrap_or("????"),
+            ),
+            Self::RenderMethod(e) => write!(f, "decal_system: actual shader: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for DecalSystemError {}
+
+impl From<RenderMethodError> for DecalSystemError {
+    fn from(e: RenderMethodError) -> Self {
+        Self::RenderMethod(e)
+    }
+}
+
+/// `_pass_post_albedo` (0) / `_pass_post_static_lighting` (1) — which
+/// render pass `c_decal_system::render_all` should draw this definition
+/// during. See umbrella plan for state-setup deltas between the two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DecalPass {
+    /// Schema "pre-lighting"; engine `_pass_post_albedo`. Writes to
+    /// `_surface_post_HDR` (RT1) during the albedo pass — used for
+    /// surface stains, posters, weathering that participate in the
+    /// downstream lighting pass like the BSP underneath.
+    #[default]
+    PreLighting = 0,
+    /// Schema "post-lighting"; engine `_pass_post_static_lighting`.
+    /// Writes to RT0 (final lit color) — used for additive decals
+    /// (laser scorches, blood) that don't want re-lighting.
+    PostLighting = 1,
+}
+
+impl DecalPass {
+    pub fn from_index(i: i64) -> Self {
+        match i {
+            1 => Self::PostLighting,
+            _ => Self::PreLighting,
+        }
+    }
+}
+
+/// Decal system tag (`decs`) — one palette entry.
+#[derive(Debug, Clone, Default)]
+pub struct DecalSystem {
+    /// `decal_system_flags` — 9 authoring bits (random rotation,
+    /// random u/v mirror, force quad, force planar, restrict single
+    /// material, primary collision only, don't collide with
+    /// structure/instances). Consumed by `c_decal_system::create` +
+    /// `collide` + `build_mesh`.
+    pub flags: u32,
+    /// `max overlapping` — 0 means no limit. Drives the per-cluster
+    /// LRU eviction at `add_decal_to_cluster` time.
+    pub max_overlapping: i32,
+    /// `overlapping threshold` (world units) — distance at which two
+    /// decals count as "overlapping" for the eviction check.
+    pub overlapping_threshold: f32,
+    /// `distance fade range` (start, end) in world units — feeds
+    /// `c_decal_system::get_distance_fade`.
+    pub distance_fade_range: (f32, f32),
+    /// `runtime max radius!` — populated by the cache compiler from
+    /// the max of all `decals[i].radius.max`.
+    pub runtime_max_radius: f32,
+    /// `decals` block — up to 16 per system.
+    pub definitions: Vec<DecalDefinition>,
+}
+
+impl DecalSystem {
+    pub fn from_tag(tag: &TagFile) -> Result<Self, DecalSystemError> {
+        let actual = tag.group().tag.to_be_bytes();
+        if actual != DECS_GROUP {
+            return Err(DecalSystemError::WrongGroup { expected: DECS_GROUP, actual });
+        }
+        let root = tag.root();
+        Self::from_struct(&root)
+    }
+
+    pub fn from_struct(s: &TagStruct<'_>) -> Result<Self, DecalSystemError> {
+        let (fade_start, fade_end) = read_real_bounds(s, "distance fade range");
+        let definitions = if let Some(block) = s.field("decals").and_then(|f| f.as_block()) {
+            read_definitions(&block)?
+        } else {
+            Vec::new()
+        };
+        Ok(Self {
+            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            max_overlapping: s.read_int_any("max overlapping").unwrap_or(0) as i32,
+            overlapping_threshold: s.read_real("overlapping threshold").unwrap_or(0.0),
+            distance_fade_range: (fade_start, fade_end),
+            runtime_max_radius: s
+                .read_real("runtime max radius")
+                .or_else(|| s.read_real("runtime max radius!"))
+                .unwrap_or(0.0),
+            definitions,
+        })
+    }
+}
+
+/// One entry of `decal_system.decals[]` — `c_decal_definition`.
+#[derive(Debug, Clone, Default)]
+pub struct DecalDefinition {
+    /// `decal name^` (string_id).
+    pub name: String,
+    /// `decal_flags` (long_flags). Per the umbrella plan the active
+    /// bits are: 0 = specular_modulate, 1 = bump_modulate, 2 =
+    /// has_sprite, 3 = debug_border_color_white. (Schema ships an
+    /// empty options list — bit interpretation is engine-side.)
+    pub flags: u32,
+    /// `actual shader?` (inline `c_render_method_shader_decal` struct).
+    /// Same shape as rmsh: definition rmdf + options + parameters +
+    /// postprocess + sort_layer + custom_fog. `None` if the slot is
+    /// empty or unparseable.
+    pub shader: Option<RenderMethod>,
+    /// `radius` (world units, start/end) — projection sphere bounds.
+    pub radius: (f32, f32),
+    /// `decay time` (seconds, start/end).
+    pub decay_time: (f32, f32),
+    /// `lifespan` (seconds, start/end).
+    pub lifespan: (f32, f32),
+    /// `clamp angle` (degrees) — projections beyond this surface
+    /// normal angle are clamped to it.
+    pub clamp_angle_degrees: f32,
+    /// `cull angle` (degrees) — projections beyond this are dropped.
+    pub cull_angle_degrees: f32,
+    /// `runtime pass!` — which c_player_view sub-pass to draw in.
+    pub pass: DecalPass,
+    /// `runtime specular_multiplier!`.
+    pub specular_multiplier: f32,
+    /// `runtime bitmap aspect!` — width/height ratio precomputed by
+    /// the cache builder for sprite atlases.
+    pub bitmap_aspect: f32,
+}
+
+fn read_definitions(block: &TagBlock<'_>) -> Result<Vec<DecalDefinition>, DecalSystemError> {
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        if let Some(elem) = block.element(i) {
+            out.push(DecalDefinition::from_struct(&elem)?);
+        }
+    }
+    Ok(out)
+}
+
+impl DecalDefinition {
+    pub fn from_struct(s: &TagStruct<'_>) -> Result<Self, DecalSystemError> {
+        let shader_struct = s
+            .descend("actual shader")
+            .or_else(|| s.descend("actual shader?"));
+        let shader = match shader_struct {
+            Some(view) => Some(RenderMethod::from_struct(&view)?),
+            None => None,
+        };
+        let radius = read_real_bounds(s, "radius");
+        let decay_time = read_real_bounds(s, "decay time");
+        let lifespan = read_real_bounds(s, "lifespan");
+        let pass = DecalPass::from_index(
+            s.read_int_any("runtime pass")
+                .or_else(|| s.read_int_any("runtime pass!"))
+                .unwrap_or(0),
+        );
+        Ok(Self {
+            name: s
+                .read_string_id("decal name")
+                .or_else(|| s.read_string_id("decal name^"))
+                .unwrap_or_default(),
+            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            shader,
+            radius,
+            decay_time,
+            lifespan,
+            clamp_angle_degrees: s.read_real("clamp angle").unwrap_or(90.0),
+            cull_angle_degrees: s.read_real("cull angle").unwrap_or(90.0),
+            pass,
+            specular_multiplier: s
+                .read_real("runtime specular_multiplier")
+                .or_else(|| s.read_real("runtime specular_multiplier!"))
+                .unwrap_or(1.0),
+            bitmap_aspect: s
+                .read_real("runtime bitmap aspect")
+                .or_else(|| s.read_real("runtime bitmap aspect!"))
+                .unwrap_or(1.0),
+        })
+    }
+}
+
+fn read_real_bounds(s: &TagStruct<'_>, name: &str) -> (f32, f32) {
+    use crate::fields::TagFieldData;
+    match s.field(name).and_then(|f| f.value()) {
+        Some(TagFieldData::RealBounds(b)) => (b.lower, b.upper),
+        _ => (0.0, 0.0),
+    }
+}
+

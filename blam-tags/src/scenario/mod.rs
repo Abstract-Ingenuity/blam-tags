@@ -11,8 +11,10 @@
 mod types;
 
 pub use types::{
-    CubemapEntry, DecoratorPalette, DecoratorSetEntry, ObjectPlacement,
+    CubemapEntry, DecalPaletteEntry, DecalPlacement, DecoratorPalette, DecoratorSetEntry,
+    DevicePortalAssociation, GamePortalToPortalMapping, ObjectPlacement,
     PlacementMultiplayerData, PlacementObjectData, PlacementPermutationData, Scenario,
     ScenarioDecoratorBlock, ScenarioDecoratorPlacement, ScenarioError, SkyReference,
-    StructureBspReference, TagReferencePalette, ZoneSet,
+    StructureBspReference, TagReferencePalette, ZoneSet, ZoneSetBspPvs, ZoneSetClusterPvs,
+    ZoneSetPortalDeviceMapping, ZoneSetPvs,
 };

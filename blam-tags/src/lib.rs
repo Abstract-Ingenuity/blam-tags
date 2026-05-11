@@ -85,6 +85,7 @@ pub mod render_method;
 pub mod scenario;
 pub mod scenario_lightmap;
 pub mod sky_atmosphere;
+pub mod decal_system;
 pub mod decorator_set;
 pub mod structure_lighting_info;
 pub mod light;
