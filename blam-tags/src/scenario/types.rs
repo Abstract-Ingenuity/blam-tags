@@ -129,6 +129,13 @@ pub struct Scenario {
     /// Empty for scenarios with no atmosphere.
     pub atmospheric: String,
 
+    /// `global screen effect` tag reference — points at a
+    /// `.area_screen_effect` (`sefc` group) that the engine's per-frame
+    /// `screen_effect_sample @ 0x1803A4E90` accumulates at falloff = 1.0
+    /// (no falloff curves apply, per the schema annotation "ignores
+    /// the falloff curves"). Empty when unauthored.
+    pub global_screen_effect: String,
+
     /// `camera fx settings` tag reference — points at a
     /// `.camera_fx_settings` tag (`cfxs` group) that holds the level's
     /// exposure / bloom / tone curve. Halo's
@@ -144,6 +151,14 @@ pub struct Scenario {
     /// from here. Schema also exposes a `chocalate mountains` block
     /// of overrides — only the singular bake target is surfaced.
     pub chocolate_mountain: String,
+
+    /// `zone set pvs*!` (offset 0x3C in scenario tag) — one entry per
+    /// scenario zone set, holding the precomputed PVS bit vectors and
+    /// portal-device mappings. Indexed by `ZoneSet::pvs_index`. Engine:
+    /// `s_scenario_zone_set_pvs` (44B per entry) walked by
+    /// `scenario_zone_set_pvs_get_row @ 0x180333630` and
+    /// `structure_bsp_compute_cluster_active_pvs @ 0x180334F80`.
+    pub zone_set_pvs: Vec<ZoneSetPvs>,
 }
 
 impl Scenario {
@@ -217,6 +232,10 @@ impl Scenario {
             cubemaps: read_block(s, "cubemaps", CubemapEntry::from_struct),
             new_lightmaps: s.read_tag_ref_path("new lightmaps").unwrap_or_default(),
             atmospheric: s.read_tag_ref_path("atmospheric").unwrap_or_default(),
+            global_screen_effect: s
+                .read_tag_ref_path("global screen effect")
+                .or_else(|| s.read_tag_ref_path("global_screen_effect"))
+                .unwrap_or_default(),
             camera_fx_settings: s
                 .read_tag_ref_path("camera fx settings")
                 .or_else(|| s.read_tag_ref_path("camera_fx_settings"))
@@ -226,6 +245,8 @@ impl Scenario {
                 .read_tag_ref_path("chocalate mountain")
                 .or_else(|| s.read_tag_ref_path("chocolate mountain"))
                 .unwrap_or_default(),
+
+            zone_set_pvs: read_block(s, "zone set pvs", ZoneSetPvs::from_struct),
         }
     }
 
@@ -663,18 +684,47 @@ impl ScenarioDecoratorPlacement {
 // Cubemaps
 // =============================================================================
 
-/// One entry in scenario `cubemaps` — global cubemap palette. Per-cluster
-/// references come from `structure_bsp.clusters[].cubemaps[]`.
+/// One entry in scenario `cubemaps` — author-placed probe descriptor.
+/// The actual cube content lives in
+/// `<scenario_dir>/<scenario>_<bsp_name>_cubemaps.bitmap` as one cube
+/// per scenario probe (1:1 by index for single-BSP MP maps;
+/// partitioned by point-in-BSP for multi-BSP campaign maps). The
+/// per-cluster routing block (`structure_cluster.cluster_cubemaps[]`)
+/// is stripped on MCC; the engine recomputes it via
+/// `c_dynamic_cubemap_sample::search_for_cubemap_sample_in_cluster` —
+/// nearest scenario probe by 3D distance to the cluster centroid.
+///
+/// Schema (`scenario_cubemap_definitions.cpp`): the position field is
+/// labelled `_field_real_vector_2d` in the original tag def but the
+/// 16-byte struct sizing forces a 12-byte vec3 layout — both the H3
+/// `tool.exe` baker and the runtime read it as a `real_point_3d`.
+/// MCC's tag inspector also surfaces it as `real point 3d`. Resolution
+/// is a `short_enum` with values 0=16, 1=32, 2=64, 3=128, 4=256.
 #[derive(Debug, Clone, Default)]
 pub struct CubemapEntry {
-    /// `cubemap` tag reference (`.bitmap` of cubemap type).
-    pub cubemap_bitmap: String,
+    /// World-space position of this probe.
+    pub position: crate::math::RealPoint3d,
+    /// Authored cube resolution in pixels (16 / 32 / 64 / 128 / 256).
+    /// Decoded from the `cubemap resolution` short_enum.
+    pub resolution_pixels: u32,
 }
 
 impl CubemapEntry {
     fn from_struct(s: &TagStruct<'_>) -> Self {
+        let resolution_pixels = match s
+            .read_enum_name("cubemap resolution")
+            .as_deref()
+        {
+            Some("16") => 16,
+            Some("32") => 32,
+            Some("64") => 64,
+            Some("128") => 128,
+            Some("256") => 256,
+            _ => 128,
+        };
         Self {
-            cubemap_bitmap: s.read_tag_ref_path("cubemap").unwrap_or_default(),
+            position: s.read_point3d("cubemap position"),
+            resolution_pixels,
         }
     }
 }
@@ -740,4 +790,265 @@ fn read_rgb_color(s: &TagStruct<'_>, name: &str) -> RgbColor {
         Some(TagFieldData::RgbColor(c)) => c,
         _ => RgbColor::default(),
     }
+}
+
+
+// =============================================================================
+// Zone-set PVS — Ares `scenario_definitions.h:622-654` /
+// MCC `scenario_zone_set_pvs_block`
+// =============================================================================
+
+/// `zone set pvs[i]` — `scenario_zone_set_pvs_block` (44B per entry,
+/// MCC schema). One entry per scenario zone set. Holds the
+/// precomputed cluster-PVS bit vectors (open + closed) per active BSP,
+/// plus per-cluster sky/audio annotations and portal→device mappings
+/// (for door-portal activation).
+///
+/// Engine consumers:
+/// - `scenario_zone_set_pvs_get_row @ 0x180333630` reads
+///   `structure_bsp_pvs[bsp_idx].cluster_pvs[cluster_idx].pvs[]` to
+///   populate an `s_scenario_pvs_row` (192B per row).
+/// - `structure_bsp_compute_cluster_active_pvs @ 0x180334F80` merges
+///   open/closed rows based on `portal_activation` state.
+#[derive(Debug, Clone, Default)]
+pub struct ZoneSetPvs {
+    /// `structure bsp mask` — bitmask of BSP indices this zone set
+    /// activates. Bit i set ⇒ BSP i is active in this zone set.
+    pub structure_bsp_mask: u32,
+    /// `version` — incremented when the PVS bake format changes.
+    pub version: i16,
+    /// `flags` — `scenario_zone_set_pvs_flags`.
+    pub flags: u16,
+    /// `bsp checksums` — per-active-BSP checksum used to detect
+    /// scenario↔BSP mismatch at load time.
+    pub bsp_checksums: Vec<i32>,
+    /// `structure bsp pvs` — per-active-BSP PVS bundle (open + closed
+    /// + sky/audio annotations).
+    pub structure_bsp_pvs: Vec<ZoneSetBspPvs>,
+    /// `portal=>device mapping` — per-active-BSP portal→device-machine
+    /// mapping for door-portal activation. Empty on BSPs with no
+    /// machine doors. Phase D5 needs this for `structure_bsp_compute_cluster_active_pvs`
+    /// when a cluster's `pvs_affected_by_door_portal` flag is set.
+    pub portal_device_mapping: Vec<ZoneSetPortalDeviceMapping>,
+}
+
+impl ZoneSetPvs {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            structure_bsp_mask: s.read_int_any("structure bsp mask").unwrap_or(0) as u32,
+            version: s.read_int_any("version").unwrap_or(0) as i16,
+            flags: s.read_int_any("flags").unwrap_or(0) as u16,
+            bsp_checksums: s
+                .field("bsp checksums")
+                .and_then(|f| f.as_block())
+                .map(|b| {
+                    let mut out = Vec::with_capacity(b.len());
+                    for i in 0..b.len() {
+                        if let Some(e) = b.element(i) {
+                            out.push(e.read_int_any("bsp checksum").unwrap_or(0) as i32);
+                        }
+                    }
+                    out
+                })
+                .unwrap_or_default(),
+            structure_bsp_pvs: read_block(
+                s,
+                "structure bsp pvs",
+                ZoneSetBspPvs::from_struct,
+            ),
+            portal_device_mapping: read_block(
+                s,
+                "portal=>device mapping",
+                ZoneSetPortalDeviceMapping::from_struct,
+            ),
+        }
+    }
+}
+
+/// `structure bsp pvs[i]` — `scenario_zone_set_bsp_pvs_block` (84B).
+/// Per-active-BSP PVS bundle. Each `cluster_pvs[c]` row holds the
+/// per-active-BSP bit vectors describing which clusters in which
+/// active BSPs are reachable from cluster `c`.
+#[derive(Debug, Clone, Default)]
+pub struct ZoneSetBspPvs {
+    /// `cluster pvs` — open PVS rows. One entry per cluster in this
+    /// BSP. `cluster_pvs[c].bsp_bit_vectors[bsp][word]` = u32 word of
+    /// the per-cluster reachable-from-cluster-c bitset.
+    pub cluster_pvs: Vec<ZoneSetClusterPvs>,
+    /// `cluster pvs doors closed` — same shape as `cluster_pvs`, but
+    /// with all door portals treated as closed. Engine merges these
+    /// based on portal-activation state at runtime.
+    pub cluster_pvs_doors_closed: Vec<ZoneSetClusterPvs>,
+    /// `attached sky indices` — per-cluster sky reference (signed
+    /// 8-bit index into scenario.skies, -1 = no sky). Stored as raw
+    /// `u8`; -1 sentinel comes back as `0xFF`. Cast to `i8` at use.
+    pub attached_sky_indices: Vec<u8>,
+    /// `visible sky indices` — per-cluster: which sky is rendered
+    /// for that cluster. Same convention as `attached_sky_indices`.
+    pub visible_sky_indices: Vec<u8>,
+    /// `mutiple skies visible bitvector` — bit per cluster set when
+    /// >1 sky is visible from that cluster (engine renders both,
+    /// stencil-masked).
+    pub multiple_skies_visible_bit_vector: Vec<u32>,
+    /// `cluster audio bitvector` — per-cluster audio activation bits.
+    pub cluster_audio_bit_vector: Vec<u32>,
+    /// `cluster audio cluster neighbors` — packed neighbor table for
+    /// audio propagation. Phase F+ for audio plumbing; raw bytes
+    /// retained.
+    pub cluster_audio_cluster_neighbors: Vec<u8>,
+}
+
+impl ZoneSetBspPvs {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            cluster_pvs: read_block(s, "cluster pvs", ZoneSetClusterPvs::from_struct),
+            cluster_pvs_doors_closed: read_block(
+                s,
+                "cluster pvs doors closed",
+                ZoneSetClusterPvs::from_struct,
+            ),
+            attached_sky_indices: read_byte_block(s, "attached sky indices", "sky index"),
+            visible_sky_indices: read_byte_block(s, "visible sky indices", "sky index"),
+            multiple_skies_visible_bit_vector: read_u32_block(
+                s,
+                "mutiple skies visible bitvector",
+                "bitvector",
+            ),
+            cluster_audio_bit_vector: read_u32_block(
+                s,
+                "cluster audio bitvector",
+                "bitvector",
+            ),
+            cluster_audio_cluster_neighbors: read_byte_block(
+                s,
+                "cluster audio cluster neighbors",
+                "neighbor",
+            ),
+        }
+    }
+}
+
+/// `cluster pvs[i]` — `scenario_zone_set_cluster_pvs_block` (12B).
+/// One entry per BSP cluster. Holds the per-active-BSP bit vectors
+/// describing which clusters are reachable from this one.
+#[derive(Debug, Clone, Default)]
+pub struct ZoneSetClusterPvs {
+    /// `cluster pvs bit vectors` — outer Vec is per-active-BSP (max
+    /// 16); inner Vec is u32 words of the bit vector for that BSP
+    /// (max 8 words = 256 cluster bits per BSP).
+    pub bsp_bit_vectors: Vec<Vec<u32>>,
+}
+
+impl ZoneSetClusterPvs {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        let bsp_bit_vectors = s
+            .field("cluster pvs bit vectors")
+            .and_then(|f| f.as_block())
+            .map(|outer| {
+                let mut bsps = Vec::with_capacity(outer.len());
+                for i in 0..outer.len() {
+                    if let Some(bsp_elem) = outer.element(i) {
+                        bsps.push(read_u32_block(&bsp_elem, "bits", "dword"));
+                    }
+                }
+                bsps
+            })
+            .unwrap_or_default();
+        Self { bsp_bit_vectors }
+    }
+}
+
+/// `portal=>device mapping[i]` — `structure_portal_device_mapping_block`
+/// (per-active-BSP). Maps cluster portals to door machines for
+/// runtime portal activation (Phase D5). Most BSPs have no doors;
+/// stored as opaque sub-blocks for future use.
+#[derive(Debug, Clone, Default)]
+pub struct ZoneSetPortalDeviceMapping {
+    /// `device portal associations` — (portal_index, device_index) pairs.
+    pub device_portal_associations: Vec<DevicePortalAssociation>,
+    /// `game portal to portal mapping` — engine portal→game portal
+    /// renumbering.
+    pub game_portal_to_portal_mapping: Vec<GamePortalToPortalMapping>,
+}
+
+impl ZoneSetPortalDeviceMapping {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            device_portal_associations: read_block(
+                s,
+                "device portal associations",
+                DevicePortalAssociation::from_struct,
+            ),
+            game_portal_to_portal_mapping: read_block(
+                s,
+                "game portal to portal mapping",
+                GamePortalToPortalMapping::from_struct,
+            ),
+        }
+    }
+}
+
+/// `structure_device_portal_association_block`. (Schema-driven;
+/// fields populated when needed.)
+#[derive(Debug, Clone, Default)]
+pub struct DevicePortalAssociation {
+    pub device_object_name: i16,
+    pub portal_index: i16,
+}
+
+impl DevicePortalAssociation {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            device_object_name: s.read_block_index("device object name"),
+            portal_index: s.read_int_any("portal index").unwrap_or(-1) as i16,
+        }
+    }
+}
+
+/// `game_portal_to_portal_mapping_block`.
+#[derive(Debug, Clone, Default)]
+pub struct GamePortalToPortalMapping {
+    pub portal_index: i16,
+    pub game_portal_index: i16,
+}
+
+impl GamePortalToPortalMapping {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            portal_index: s.read_int_any("portal index").unwrap_or(-1) as i16,
+            game_portal_index: s.read_int_any("game portal index").unwrap_or(-1) as i16,
+        }
+    }
+}
+
+// ---- helpers used by ZoneSetBspPvs / ClusterPvs ----
+
+fn read_byte_block(s: &TagStruct<'_>, block_name: &str, field_name: &str) -> Vec<u8> {
+    s.field(block_name)
+        .and_then(|f| f.as_block())
+        .map(|b| {
+            let mut out = Vec::with_capacity(b.len());
+            for i in 0..b.len() {
+                if let Some(e) = b.element(i) {
+                    out.push(e.read_int_any(field_name).unwrap_or(0) as i8 as u8);
+                }
+            }
+            out
+        })
+        .unwrap_or_default()
+}
+
+fn read_u32_block(s: &TagStruct<'_>, block_name: &str, field_name: &str) -> Vec<u32> {
+    s.field(block_name)
+        .and_then(|f| f.as_block())
+        .map(|b| {
+            let mut out = Vec::with_capacity(b.len());
+            for i in 0..b.len() {
+                if let Some(e) = b.element(i) {
+                    out.push(e.read_int_any(field_name).unwrap_or(0) as u32);
+                }
+            }
+            out
+        })
+        .unwrap_or_default()
 }
