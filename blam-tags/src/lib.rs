@@ -88,6 +88,7 @@ pub mod sky_atmosphere;
 pub mod decorator_set;
 pub mod structure_lighting_info;
 pub mod light;
+pub mod area_screen_effect;
 pub mod camera_fx_settings;
 pub mod chocolate_mountain;
 pub mod rasterizer_globals;

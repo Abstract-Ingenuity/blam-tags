@@ -17,7 +17,8 @@
 
 use crate::api::{TagBlock, TagStruct};
 use crate::file::TagFile;
-use crate::math::{RealBounds, RealPoint3d, RealVector3d};
+use crate::fields::TagFieldData;
+use crate::math::{RealBounds, RealPlane3d, RealPoint3d, RealVector3d};
 
 const SBSP_GROUP: [u8; 4] = *b"sbsp";
 
@@ -60,6 +61,21 @@ pub struct StructureBsp {
 
     /// Per-collision-surface shaders (separate list from `materials`).
     pub collision_materials: Vec<BspCollisionMaterial>,
+
+    /// `leaves*` (offset 0x30) — one per BSP3D leaf node. Each entry
+    /// holds a single `cluster` index (i8, -1 = no cluster). The
+    /// BSP3D collision tree walks down to a leaf via plane tests
+    /// (`bsp3d_test_point @ 0x1803342E0`); the leaf's `cluster` field
+    /// then maps position → cluster_index. Phase C2 of the visibility
+    /// port (`scenario_location_from_point @ 0x18017BFE0`) needs this.
+    pub leaves: Vec<BspLeaf>,
+
+    /// `collision bsp*` (block of `global_collision_bsp_block`, max 1).
+    /// The collision/BSP3D tree used for camera→leaf→cluster lookup.
+    /// `None` if absent (some BSPs have no collision data). Schema
+    /// also exposes `large collision bsp*` and `render bsp*`; we
+    /// surface only the standard one here.
+    pub collision_bsp: Option<Bsp3d>,
 
     pub clusters: Vec<BspCluster>,
 
@@ -132,6 +148,8 @@ impl StructureBsp {
                 "collision materials",
                 BspCollisionMaterial::from_struct,
             ),
+            leaves: read_block(s, "leaves", BspLeaf::from_struct),
+            collision_bsp: Bsp3d::from_collision_block(s),
             clusters: read_block(s, "clusters", BspCluster::from_struct),
             instanced_geometry_instances: read_block(
                 s,
@@ -323,6 +341,224 @@ impl BspCollisionMaterial {
     }
 }
 
+// =============================================================================
+// BSP3D — collision/visibility tree (Ares `physics/bsp3d.h`)
+// =============================================================================
+
+/// One BSP3D node — schema `bsp3d_nodes_block_struct` (8B per entry,
+/// stored as a single `int64_integer` "node data designator!" in the
+/// tag schema). Bit-packed engine layout (`bsp3d_node` in
+/// `physics/bsp3d.h:39-52`):
+///
+/// ```text
+///   bits  0-15  plane_index           (signed 16-bit)
+///   bits 16-39  below_child_index     (24-bit; bit 23 = leaf bit)
+///   bits 40-63  above_child_index     (24-bit; bit 23 = leaf bit)
+/// ```
+///
+/// Child encoding: bit 23 of the 24-bit value is the leaf bit. When
+/// set, the lower 23 bits are a leaf index into
+/// [`StructureBsp::leaves`]. When clear, the lower 23 bits are a
+/// child node index.
+///
+/// `bsp3d_test_point @ 0x1803342E0` walks down via plane tests until
+/// it lands on a leaf-flagged child.
+/// Canonical large-format encoding (Reach `s_large_bsp3d_types`,
+/// verified against `bsp3d_child_index_is_node @ 0x8271B4A8` /
+/// `bsp3d_child_index_from_leaf_index @ 0x82F902B8` /
+/// `bsp3d_leaf_index_from_child_index @ 0x8271B4C0`):
+///   - `child >= 0`              → child is another node, index = child
+///   - `child <  0` && `child != -1` → child is a leaf,
+///                                     leaf_index = `child & 0x7FFFFFFF`
+///   - `child == -1`             → walker bails (sentinel)
+/// Both small (8B-packed) and large (3 × i32) tag variants are
+/// unpacked into this form at parse time so the runtime walker only
+/// knows one convention.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Bsp3dNode {
+    pub plane_index: i32,
+    pub below_child: i32,
+    pub above_child: i32,
+}
+
+impl Bsp3dNode {
+    pub const NULL_CHILD: i32 = -1;
+    /// Sign bit — `child < 0` ⇔ leaf.
+    pub const LEAF_FLAG: u32 = 0x8000_0000;
+    /// Mask for the leaf-index payload (bits 0-30).
+    pub const LEAF_INDEX_MASK: i32 = 0x7FFF_FFFF;
+
+    pub fn child_is_leaf(child: i32) -> bool {
+        child < 0
+    }
+
+    pub fn child_leaf_index(child: i32) -> i32 {
+        child & Self::LEAF_INDEX_MASK
+    }
+
+    pub fn plane_index(self) -> i32 {
+        self.plane_index
+    }
+    pub fn below_child_index(self) -> i32 {
+        self.below_child
+    }
+    pub fn above_child_index(self) -> i32 {
+        self.above_child
+    }
+}
+
+/// `bsp3d` — schema `global_collision_bsp_block`. Engine
+/// `Ares/source/physics/bsp3d.h:32-37`. Holds the node table + plane
+/// table; `bsp3d_test_point` walks down node[0] applying plane tests
+/// until reaching a leaf.
+#[derive(Debug, Clone, Default)]
+pub struct Bsp3d {
+    pub nodes: Vec<Bsp3dNode>,
+    pub planes: Vec<RealPlane3d>,
+}
+
+impl Bsp3d {
+    /// Read the BSP3D node + plane tables. In MCC the collision data
+    /// is paged through the structure_bsp's resource interface, not
+    /// stored at the top-level tag. Both the small (`collision bsp`,
+    /// 8-byte packed nodes) and large (`large collision bsp`, 12-byte
+    /// 3-int nodes) variants are tried in order; whichever has data
+    /// wins. Returns `None` only if neither variant carries any nodes.
+    pub fn from_collision_block(s: &TagStruct<'_>) -> Option<Self> {
+        const SMALL_PATH: &str =
+            "resource interface/raw_resources[0]/raw_items/collision bsp";
+        const LARGE_PATH: &str =
+            "resource interface/raw_resources[0]/raw_items/large collision bsp";
+
+        if let Some(block) = s.field_path(SMALL_PATH).and_then(|f| f.as_block()) {
+            if let Some(entry) = block.element(0) {
+                let parsed = parse_small_bsp3d(&entry);
+                if !parsed.nodes.is_empty() {
+                    return Some(parsed);
+                }
+            }
+        }
+        if let Some(block) = s.field_path(LARGE_PATH).and_then(|f| f.as_block()) {
+            if let Some(entry) = block.element(0) {
+                let parsed = parse_large_bsp3d(&entry);
+                if !parsed.nodes.is_empty() {
+                    return Some(parsed);
+                }
+            }
+        }
+        None
+    }
+}
+
+fn parse_small_bsp3d(entry: &TagStruct<'_>) -> Bsp3d {
+    // 64-bit packed: bits 0-15 plane, 16-39 below (24b, bit 23 = leaf),
+    // 40-63 above (24b, bit 23 = leaf). Re-encode into canonical
+    // sign-bit-leaf form: leaf_index → `leaf_index | 0x8000_0000`.
+    let to_canonical = |raw24: u32| -> i32 {
+        if raw24 == 0x00FF_FFFF {
+            -1 // engine sentinel: walker bails
+        } else if (raw24 & 0x0080_0000) != 0 {
+            let leaf_idx = raw24 & 0x007F_FFFF;
+            (leaf_idx | Bsp3dNode::LEAF_FLAG) as i32
+        } else {
+            (raw24 & 0x007F_FFFF) as i32
+        }
+    };
+    let nodes = entry
+        .field("bsp3d nodes")
+        .and_then(|f| f.as_block())
+        .map(|b| {
+            let mut out = Vec::with_capacity(b.len());
+            for i in 0..b.len() {
+                if let Some(e) = b.element(i) {
+                    let raw = e
+                        .read_int_any("node data designator")
+                        .unwrap_or(0) as u64;
+                    let plane_index = (raw & 0xFFFF) as u16 as i16 as i32;
+                    let below_raw24 = ((raw >> 16) & 0x00FF_FFFF) as u32;
+                    let above_raw24 = ((raw >> 40) & 0x00FF_FFFF) as u32;
+                    out.push(Bsp3dNode {
+                        plane_index,
+                        below_child: to_canonical(below_raw24),
+                        above_child: to_canonical(above_raw24),
+                    });
+                }
+            }
+            out
+        })
+        .unwrap_or_default();
+    let planes = read_planes(entry);
+    Bsp3d { nodes, planes }
+}
+
+fn parse_large_bsp3d(entry: &TagStruct<'_>) -> Bsp3d {
+    // 3 × i32: plane / back_child / front_child. Engine convention:
+    // child >= 0 = node index, child < 0 with bit 31 set = leaf
+    // (leaf_index = child & 0x7FFFFFFF). back = below.
+    let nodes = entry
+        .field("bsp3d nodes")
+        .and_then(|f| f.as_block())
+        .map(|b| {
+            let mut out = Vec::with_capacity(b.len());
+            for i in 0..b.len() {
+                if let Some(e) = b.element(i) {
+                    let plane_index = e.read_int_any("plane").unwrap_or(0) as i32;
+                    let below_child = e.read_int_any("back child").unwrap_or(-1) as i32;
+                    let above_child = e.read_int_any("front child").unwrap_or(-1) as i32;
+                    out.push(Bsp3dNode { plane_index, below_child, above_child });
+                }
+            }
+            out
+        })
+        .unwrap_or_default();
+    let planes = read_planes(entry);
+    Bsp3d { nodes, planes }
+}
+
+fn read_planes(entry: &TagStruct<'_>) -> Vec<RealPlane3d> {
+    entry
+        .field("planes")
+        .and_then(|f| f.as_block())
+        .map(|b| {
+            let mut out = Vec::with_capacity(b.len());
+            for i in 0..b.len() {
+                if let Some(e) = b.element(i) {
+                    let plane = match e.field("plane").and_then(|f| f.value()) {
+                        Some(TagFieldData::RealPlane3d(p)) => p,
+                        _ => RealPlane3d::default(),
+                    };
+                    out.push(plane);
+                }
+            }
+            out
+        })
+        .unwrap_or_default()
+}
+
+/// One BSP3D leaf node entry — schema
+/// `structure_bsp_leaf_block` (1B per entry). The BSP3D collision
+/// tree's leaves index into this table; the entry's `cluster` field
+/// is the cluster index a world-position falling into that leaf
+/// belongs to.
+///
+/// Engine: `c_structure_bsp_leaf` in `structure_bsp_definitions.h`.
+/// Used by `scenario_location_from_point @ 0x18017BFE0` to convert
+/// camera position → `s_cluster_reference`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BspLeaf {
+    /// `cluster*` — block index into `StructureBsp::clusters` (i8,
+    /// -1 = leaf is outside any cluster, e.g. solid space).
+    pub cluster: i8,
+}
+
+impl BspLeaf {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            cluster: s.read_int_any("cluster").unwrap_or(-1) as i8,
+        }
+    }
+}
+
 /// One cluster — a spatial partition of the BSP. Each cluster has one
 /// opaque mesh in the BSP's render_geometry (indexed by `mesh_index`).
 #[derive(Debug, Clone, Default)]
@@ -428,25 +664,55 @@ impl BspInstance {
     }
 }
 
-/// One cluster-portal — connectivity between two clusters.
+/// One cluster-portal — connectivity between two clusters. Schema
+/// `structure_bsp_cluster_portal_block` (40B). Polygon vertices live
+/// in the inline `vertices*` sub-block (each entry is one
+/// `real_point_3d`, 12B). Engine reads the polygon for portal-frustum
+/// clipping in `visibility_build_region_from_projections @ 0x180508520`
+/// → `transform_portal @ 0x180508FB0`.
 #[derive(Debug, Clone, Default)]
 pub struct BspClusterPortal {
-    pub front_cluster: i16,
+    /// `back cluster*` — block index into `StructureBsp::clusters`.
     pub back_cluster: i16,
-    /// Plane normal + offset (pre-classified plane).
+    /// `front cluster*` — block index into `StructureBsp::clusters`.
+    pub front_cluster: i16,
+    /// `plane index*` — index into the BSP's planes block (sign bit
+    /// indicates plane direction, like Halo's `plane_designator`).
     pub plane_index: i32,
+    /// `centroid*` — average of vertex positions; used for portal
+    /// activation distance + initial cull tests.
+    pub centroid: RealPoint3d,
+    /// `bounding radius*` — max distance from centroid to any vertex;
+    /// fast pre-cull bound for portal visibility.
+    pub bounding_radius: f32,
     pub flags: u32,
-    pub vertex_count: i16,
+    /// Portal polygon (3-or-more vertices, 5 max in practice). Order
+    /// is wound CCW when viewed from the front cluster.
+    pub vertices: Vec<RealPoint3d>,
 }
 
 impl BspClusterPortal {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            front_cluster: s.read_block_index("front cluster"),
             back_cluster: s.read_block_index("back cluster"),
+            front_cluster: s.read_block_index("front cluster"),
             plane_index: s.read_int_any("plane index").unwrap_or(-1) as i32,
+            centroid: s.read_point3d("centroid"),
+            bounding_radius: s.read_real("bounding radius").unwrap_or(0.0),
             flags: s.read_int_any("flags").unwrap_or(0) as u32,
-            vertex_count: s.read_int_any("vertex count").unwrap_or(0) as i16,
+            vertices: s
+                .field("vertices")
+                .and_then(|f| f.as_block())
+                .map(|b| {
+                    let mut out = Vec::with_capacity(b.len());
+                    for i in 0..b.len() {
+                        if let Some(e) = b.element(i) {
+                            out.push(e.read_point3d("point"));
+                        }
+                    }
+                    out
+                })
+                .unwrap_or_default(),
         }
     }
 }

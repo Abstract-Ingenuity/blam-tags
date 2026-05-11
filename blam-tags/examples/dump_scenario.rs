@@ -77,7 +77,10 @@ fn main() {
 
     println!("cubemaps: [{}]", scnr.cubemaps.len());
     for (i, cm) in scnr.cubemaps.iter().enumerate() {
-        println!("  [{i}] {}", short(&cm.cubemap_bitmap));
+        println!(
+            "  [{i}] pos=({:.2}, {:.2}, {:.2}) res={}",
+            cm.position.x, cm.position.y, cm.position.z, cm.resolution_pixels,
+        );
     }
     println!();
 
