@@ -44,9 +44,9 @@ mod types;
 mod walker;
 
 pub use cbuffer::{
-    compile_real_constant, compile_real_constant_at_time, pack_pixel_cbuffer_at_time,
-    pack_vertex_cbuffer_at_time, rebuild_cbuffer_bytes_at_time, resolve_pixel_user_cbuffer,
-    resolve_pixel_user_cbuffer_at_time, CbufferSlot, ResolvedCbuffer,
+    compile_real_constant, compile_real_constant_at_time, is_cbuffer_animated,
+    pack_pixel_cbuffer_at_time, pack_vertex_cbuffer_at_time, rebuild_cbuffer_bytes_at_time,
+    resolve_pixel_user_cbuffer, resolve_pixel_user_cbuffer_at_time, CbufferSlot, ResolvedCbuffer,
 };
 pub use types::*;
 pub use walker::{

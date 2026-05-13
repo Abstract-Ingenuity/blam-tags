@@ -352,6 +352,34 @@ fn extract_first_color(f: &TagFunction) -> Option<[f32; 4]> {
 }
 
 // =============================================================================
+// Cbuffer animation detection (P6.2)
+// =============================================================================
+
+/// Returns `true` if any cbuffer slot's resolved vec4 differs between
+/// `eval_time = 0.0` and `eval_time = 1.0` — i.e., the cbuffer contains
+/// at least one time-bearing parameter (animated TagFunction).
+///
+/// Engine equivalent: `c_render_method::has_animated_parameters` (not
+/// directly named in dllcache; the engine drives per-frame
+/// `update_constants @ 0x180685300` calls only for materials that
+/// declared `m_overlays` non-empty). For protomorph, an empirical
+/// time-vs-time comparison is cheaper than parsing the overlay metadata
+/// and produces the same answer for any material whose evaluated value
+/// actually changes with time.
+///
+/// O(N) in cbuffer slot count, called once at material load. Result is
+/// cached on `MaterialData::is_animated` on the protomorph side.
+pub fn is_cbuffer_animated(
+    rmsh: &RenderMethod,
+    rmt2: &RenderMethodTemplate,
+    rmop_params: &[RenderMethodOptionParameter],
+) -> bool {
+    let cb0 = resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, 0.0);
+    let cb1 = resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, 1.0);
+    cb0.bytes != cb1.bytes
+}
+
+// =============================================================================
 // Engine-faithful cb13 packer (P6.1)
 //
 // Mirrors `submit_static_ps_parameters @ 0x180685860` (dllcache,
