@@ -44,8 +44,8 @@
 use crate::tag_function::TagFunction;
 
 use super::types::{
-    RenderMethod, RenderMethodAnimatedParameterType, RenderMethodOptionParameter,
-    RenderMethodParameter, RenderMethodParameterType, RenderMethodTemplate,
+    EntryPoint, RenderMethod, RenderMethodAnimatedParameterType, RenderMethodOptionParameter,
+    RenderMethodParameter, RenderMethodParameterType, RenderMethodTemplate, TagBlockIndex,
 };
 use crate::math::ArgbColor;
 
@@ -349,4 +349,176 @@ fn extract_first_color(f: &TagFunction) -> Option<[f32; 4]> {
         (v & 0xff) as f32 / 255.0,
         ((v >> 24) & 0xff) as f32 / 255.0,
     ])
+}
+
+// =============================================================================
+// Engine-faithful cb13 packer (P6.1)
+//
+// Mirrors `submit_static_ps_parameters @ 0x180685860` (dllcache,
+// audit-verified 2026-05-13). Differs from
+// `resolve_pixel_user_cbuffer_at_time` in two ways:
+//   1. Bytes are keyed by `destination_index & 0xFF` (the
+//      offline-DXBC-allocated register), NOT by source-index order.
+//   2. Buffer size comes from `pass.pixel_parameters_size * 16`
+//      (the engine's total cb13 size, not the source-name count).
+//
+// Engine cbuffer pool slots:
+//   0x6E (110) = _ParametersVS  (cb13 vertex)
+//   0x6F (111) = _ParametersPS  (cb13 pixel)
+//
+// Both ports below assert `(destination_index >> 8) == expected_pool_slot`
+// to catch schema-version drift and corrupted routing tables.
+// =============================================================================
+
+const PARAMETERS_PS_POOL: u8 = 0x6F;
+const PARAMETERS_VS_POOL: u8 = 0x6E;
+
+/// Engine-faithful pixel cb13 packer. Walks the entry-point's pass's
+/// `pixel_real_constants` routing range and lays out each source value
+/// at the byte offset its `destination_index` decodes to.
+///
+/// Returns `None` if the rmt2 doesn't support the requested entry point
+/// (the engine path equivalent is a no-op submit).
+pub fn pack_pixel_cbuffer_at_time(
+    rmsh: &RenderMethod,
+    rmt2: &RenderMethodTemplate,
+    rmop_params: &[RenderMethodOptionParameter],
+    entry_point: EntryPoint,
+    eval_time: f32,
+) -> Option<ResolvedCbuffer> {
+    pack_cbuffer_at_time(
+        rmsh,
+        rmt2,
+        rmop_params,
+        entry_point,
+        eval_time,
+        Stage::Pixel,
+    )
+}
+
+/// Engine-faithful vertex cb13 packer. Same shape as
+/// [`pack_pixel_cbuffer_at_time`] but routes the
+/// `vertex_real_constants` slot and asserts cbuffer pool 0x6E
+/// (_ParametersVS).
+pub fn pack_vertex_cbuffer_at_time(
+    rmsh: &RenderMethod,
+    rmt2: &RenderMethodTemplate,
+    rmop_params: &[RenderMethodOptionParameter],
+    entry_point: EntryPoint,
+    eval_time: f32,
+) -> Option<ResolvedCbuffer> {
+    pack_cbuffer_at_time(
+        rmsh,
+        rmt2,
+        rmop_params,
+        entry_point,
+        eval_time,
+        Stage::Vertex,
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Stage {
+    Pixel,
+    Vertex,
+}
+
+fn pack_cbuffer_at_time(
+    rmsh: &RenderMethod,
+    rmt2: &RenderMethodTemplate,
+    rmop_params: &[RenderMethodOptionParameter],
+    entry_point: EntryPoint,
+    eval_time: f32,
+    stage: Stage,
+) -> Option<ResolvedCbuffer> {
+    // Look up the entry_point → pass mapping. `entry_points[ep]` is a
+    // TagBlockIndex; `.start()` is the pass index. `.count() == 0` means
+    // the entry point isn't supported by this rmt2.
+    let entry_block = rmt2.entry_points.get(entry_point as usize)?;
+    if entry_block.count() == 0 {
+        return None;
+    }
+    let pass = rmt2.passes.get(entry_block.start() as usize)?;
+
+    let (routing_block, parameters_size, expected_pool): (TagBlockIndex, u16, u8) = match stage {
+        Stage::Pixel => (
+            pass.pixel_real_constants,
+            pass.pixel_parameters_size,
+            PARAMETERS_PS_POOL,
+        ),
+        Stage::Vertex => (
+            pass.vertex_real_constants,
+            pass.vertex_parameters_size,
+            PARAMETERS_VS_POOL,
+        ),
+    };
+
+    // wgpu requires uniform buffers ≥ 16 bytes — clamp empty cbuffers.
+    let total_bytes = (parameters_size as u32 * 16).max(16);
+    let mut bytes = vec![0u8; total_bytes as usize];
+    let mut slots = Vec::new();
+
+    let routing_range = routing_block.range();
+    let routing_entries = rmt2
+        .routing_info
+        .get(routing_range)
+        .unwrap_or(&[]);
+
+    for entry in routing_entries {
+        let dest_high = (entry.destination_index >> 8) as u8;
+        debug_assert_eq!(
+            dest_high, expected_pool,
+            "cb13 {:?} routing dest_high should be 0x{:02X} (pool {}), got 0x{:02X} \
+             (source {}, dest 0x{:04X}) — likely schema-version drift or corrupted routing",
+            stage,
+            expected_pool,
+            match stage {
+                Stage::Pixel => "_ParametersPS",
+                Stage::Vertex => "_ParametersVS",
+            },
+            dest_high,
+            entry.source_index,
+            entry.destination_index,
+        );
+
+        let entry_idx = (entry.destination_index & 0xFF) as u32;
+        let byte_offset = entry_idx * 16;
+        if byte_offset as usize + 16 > bytes.len() {
+            // Routing entry exceeds the declared parameters_size — this
+            // is malformed cache data; skip silently rather than
+            // out-of-bounds write. Engine would assert here.
+            continue;
+        }
+
+        let source_index = entry.source_index as usize;
+        let name = match rmt2.float_constants.get(source_index) {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+        let op_param = rmop_params.iter().find(|p| p.parameter_name == name);
+        let rmsh_param = rmsh.parameters.iter().find(|p| p.parameter_name == name);
+
+        let (value, is_xform) = match op_param {
+            Some(op) => compile_real_constant_at_time(op, rmsh_param, eval_time),
+            None => (default_for_unknown(&name), name_is_xform(&name)),
+        };
+
+        let off = byte_offset as usize;
+        for (c, v) in value.iter().enumerate() {
+            bytes[off + c * 4..off + c * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+
+        slots.push(CbufferSlot {
+            source_name: name,
+            is_xform,
+            byte_offset,
+            value,
+        });
+    }
+
+    Some(ResolvedCbuffer {
+        slots,
+        total_bytes,
+        bytes,
+    })
 }
