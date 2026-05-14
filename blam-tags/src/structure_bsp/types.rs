@@ -446,12 +446,15 @@ pub struct Bsp3d {
 /// collision tree. `bsp2d_reference_count` consecutive entries in
 /// `Bsp3d::bsp2d_references` (starting at `first_bsp2d_reference`)
 /// describe which surface trees this leaf intersects.
+///
+/// `flags` is `u16` to cover both schema variants: SMALL uses
+/// `byte_flags` (u8); LARGE uses `word_flags` (u16). Stored canonical
+/// at `u16` so a single walker reads it.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CollisionLeaf {
-    /// `flags*` (byte_flags `leaf_flags`). bit 0 = "contains double-
-    /// sided surfaces" per the engine `collision_bsp_test_vector_recursive`
-    /// contents logic.
-    pub flags: u8,
+    /// `flags*`. bit 0 = "contains double-sided surfaces" per the
+    /// engine `collision_bsp_test_vector_recursive` contents logic.
+    pub flags: u16,
     /// `bsp2d reference count*`.
     pub bsp2d_reference_count: i16,
     /// `first bsp2d reference*` — block index into
@@ -459,41 +462,64 @@ pub struct CollisionLeaf {
     pub first_bsp2d_reference: i32,
 }
 
-/// `bsp2d_references_block` (sizeof=4). Maps a leaf to a per-plane
-/// surface kd-tree root. The `plane` field uses the same sign-bit
-/// "designator" convention as BSP3D plane indices: bit 15 flips the
-/// half-space (negate the plane equation).
+/// `bsp2d_references_block` (sizeof=4 SMALL, sizeof=8 LARGE). Maps a
+/// leaf to a per-plane surface kd-tree root. Both fields are stored
+/// as `i32` regardless of source format — parser normalizes SMALL
+/// bit-15 high-bit flags to the canonical bit-31 form so a single
+/// walker reads either schema.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CollisionBsp2dReference {
-    /// `plane*` — plane_designator (i16). Low 15 bits index into
-    /// `Bsp3d::planes`; bit 15 = negate.
-    pub plane_designator: i16,
+    /// `plane*` — plane_designator. Low 31 bits index into
+    /// `Bsp3d::planes`; bit 31 = negate.
+    pub plane_designator: i32,
     /// `bsp2d node*` — root node index into `Bsp3d::bsp2d_nodes`.
-    /// Bit 15 set = leaf (surface index = value & 0x7FFF).
-    pub bsp2d_node: i16,
+    /// Bit 31 set = leaf (surface index = value & 0x7FFF_FFFF).
+    pub bsp2d_node: i32,
 }
 
 /// `bsp2d_nodes_block` (sizeof=16). A node in the per-leaf surface
-/// kd-tree. Left/right children use the same sign-bit-leaf convention
-/// as `CollisionBsp2dReference::bsp2d_node`.
+/// kd-tree. Left/right children carry a sign-bit-leaf encoding —
+/// negative = leaf (`child & 0x7FFF_FFFF` is the surface index),
+/// non-negative = interior-node index.
+///
+/// Children are stored as `i32` regardless of source format. The two
+/// schema variants disagree on field width:
+///   - SMALL `collision bsp` schema: `short integer` (i16). Engine
+///     uses bit 15 as the leaf flag; the parser remaps to the
+///     canonical bit-31 form so a single walker handles both.
+///   - LARGE `large collision bsp` schema: `long integer` (i32). Bit
+///     31 is the leaf flag natively.
+///
+/// **Why this matters.** Storing as `i16` and reading LARGE values
+/// with `as i16` TRUNCATES bit 31, turning a leaf encoded as
+/// `0x80003D56` into an out-of-bounds positive interior pointer
+/// (`0x3D56 = 15702`). On powerhouse (LARGE), that produced a tight
+/// 24k-iteration cycle in `bsp2d_test_point` — the exact CPU-pegging
+/// hang the previous-session watchdogs were masking.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CollisionBsp2dNode {
     pub plane: RealPlane2d,
-    pub left_child: i16,
-    pub right_child: i16,
+    pub left_child: i32,
+    pub right_child: i32,
 }
 
-/// `surfaces_block` (sizeof=12). One per collision polygon (the
-/// engine calls these "surfaces"; each is a planar face described as
-/// an edge ring).
+/// `surfaces_block` (sizeof=12 SMALL, sizeof=16 LARGE). One per
+/// collision polygon (the engine calls these "surfaces"; each is a
+/// planar face described as an edge ring).
+///
+/// `plane_designator` and `first_edge` are stored as `i32` regardless
+/// of source format — LARGE schema fields are natively i32, SMALL i16
+/// are sign-extended at parse time; `plane_designator`'s high-bit
+/// negate flag is normalized to bit 31.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CollisionSurface {
-    /// `plane*` — plane_designator (i16); bit 15 = negate.
-    pub plane_designator: i16,
+    /// `plane*` — plane_designator. Low 31 bits = plane index;
+    /// bit 31 = negate.
+    pub plane_designator: i32,
     /// `first edge*` — entry into `Bsp3d::edges` for the edge ring.
     /// Walk via `CollisionEdge::forward_edge` until you return to
     /// `first_edge`.
-    pub first_edge: i16,
+    pub first_edge: i32,
     /// `material*` — index into `StructureBsp::collision_materials`.
     pub material: i16,
     /// `breakable surface set*` — index into per-BSP breakable
@@ -509,18 +535,24 @@ pub struct CollisionSurface {
     pub best_plane_vertex_index: i8,
 }
 
-/// `edges_block` (sizeof=12). Each edge is shared by EXACTLY TWO
-/// surfaces (left + right). `forward_edge` follows the edge ring
-/// around `left_surface`; `reverse_edge` follows the ring around
-/// `right_surface` (with start/end vertices swapped semantically).
+/// `edges_block` (sizeof=12 SMALL, sizeof=24 LARGE). Each edge is
+/// shared by EXACTLY TWO surfaces (left + right). `forward_edge`
+/// follows the edge ring around `left_surface`; `reverse_edge`
+/// follows the ring around `right_surface` (with start/end vertices
+/// swapped semantically).
+///
+/// Fields stored as `i32` regardless of source format. LARGE schema
+/// is natively i32; SMALL i16 fields are sign-extended at parse time.
+/// Powerhouse has 33020 edges — outside i16 range — so the LARGE
+/// schema is mandatory for any map with >32k edges.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CollisionEdge {
-    pub start_vertex: i16,
-    pub end_vertex: i16,
-    pub forward_edge: i16,
-    pub reverse_edge: i16,
-    pub left_surface: i16,
-    pub right_surface: i16,
+    pub start_vertex: i32,
+    pub end_vertex: i32,
+    pub forward_edge: i32,
+    pub reverse_edge: i32,
+    pub left_surface: i32,
+    pub right_surface: i32,
 }
 
 /// `vertices_block` (sizeof=16). Collision vertex with a back-pointer
@@ -529,7 +561,7 @@ pub struct CollisionEdge {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CollisionVertex {
     pub point: RealPoint3d,
-    pub first_edge: i16,
+    pub first_edge: i32,
 }
 
 impl Bsp3d {
@@ -628,7 +660,7 @@ fn parse_small_bsp3d(entry: &TagStruct<'_>) -> Bsp3d {
         .unwrap_or_default();
     let planes = read_planes(entry);
     let mut out = Bsp3d { nodes, planes, ..Bsp3d::default() };
-    populate_collision_subblocks(entry, &mut out);
+    populate_collision_subblocks(entry, &mut out, true);
     out
 }
 
@@ -654,11 +686,33 @@ fn parse_large_bsp3d(entry: &TagStruct<'_>) -> Bsp3d {
         .unwrap_or_default();
     let planes = read_planes(entry);
     let mut out = Bsp3d { nodes, planes, ..Bsp3d::default() };
-    populate_collision_subblocks(entry, &mut out);
+    populate_collision_subblocks(entry, &mut out, false);
     out
 }
 
-fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d) {
+fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d, is_small_format: bool) {
+    // Normalize a high-bit-flag value (designator: bit-15-negate in
+    // SMALL, bit-31-negate in LARGE, OR child: bit-15-leaf / bit-31-
+    // leaf) into canonical bit-31 form. `0xFFFF` / `-1` are the
+    // engine miss sentinels and preserved as i32 `-1`. Fixes the
+    // i16-truncation hang that powered the s3d_powerhouse decal
+    // freeze — see `CollisionBsp2dNode` for context.
+    let to_canonical_31 = |raw: i64| -> i32 {
+        if is_small_format {
+            let v16 = raw as i16;
+            if v16 == -1 {
+                -1
+            } else if (v16 as u16) & 0x8000 != 0 {
+                let idx = (v16 as u16 & 0x7FFF) as u32;
+                (idx | 0x8000_0000) as i32
+            } else {
+                v16 as i32
+            }
+        } else {
+            raw as i32
+        }
+    };
+
     bsp.leaves = entry
         .field("leaves")
         .and_then(|f| f.as_block())
@@ -667,7 +721,7 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d) {
             for i in 0..b.len() {
                 if let Some(e) = b.element(i) {
                     out.push(CollisionLeaf {
-                        flags: e.read_int_any("flags").unwrap_or(0) as u8,
+                        flags: e.read_int_any("flags").unwrap_or(0) as u16,
                         bsp2d_reference_count: e
                             .read_int_any("bsp2d reference count")
                             .unwrap_or(0) as i16,
@@ -689,8 +743,12 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d) {
             for i in 0..b.len() {
                 if let Some(e) = b.element(i) {
                     out.push(CollisionBsp2dReference {
-                        plane_designator: e.read_int_any("plane").unwrap_or(0) as i16,
-                        bsp2d_node: e.read_int_any("bsp2d node").unwrap_or(0) as i16,
+                        plane_designator: to_canonical_31(
+                            e.read_int_any("plane").unwrap_or(0),
+                        ),
+                        bsp2d_node: to_canonical_31(
+                            e.read_int_any("bsp2d node").unwrap_or(0),
+                        ),
                     });
                 }
             }
@@ -711,8 +769,8 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d) {
                     };
                     out.push(CollisionBsp2dNode {
                         plane,
-                        left_child: e.read_int_any("left child").unwrap_or(0) as i16,
-                        right_child: e.read_int_any("right child").unwrap_or(0) as i16,
+                        left_child: to_canonical_31(e.read_int_any("left child").unwrap_or(0)),
+                        right_child: to_canonical_31(e.read_int_any("right child").unwrap_or(0)),
                     });
                 }
             }
@@ -728,8 +786,10 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d) {
             for i in 0..b.len() {
                 if let Some(e) = b.element(i) {
                     out.push(CollisionSurface {
-                        plane_designator: e.read_int_any("plane").unwrap_or(0) as i16,
-                        first_edge: e.read_int_any("first edge").unwrap_or(0) as i16,
+                        plane_designator: to_canonical_31(
+                            e.read_int_any("plane").unwrap_or(0),
+                        ),
+                        first_edge: e.read_int_any("first edge").unwrap_or(0) as i32,
                         material: e.read_int_any("material").unwrap_or(-1) as i16,
                         breakable_surface_set: e
                             .read_int_any("breakable surface set")
@@ -756,12 +816,12 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d) {
             for i in 0..b.len() {
                 if let Some(e) = b.element(i) {
                     out.push(CollisionEdge {
-                        start_vertex: e.read_int_any("start vertex").unwrap_or(0) as i16,
-                        end_vertex: e.read_int_any("end vertex").unwrap_or(0) as i16,
-                        forward_edge: e.read_int_any("forward edge").unwrap_or(0) as i16,
-                        reverse_edge: e.read_int_any("reverse edge").unwrap_or(0) as i16,
-                        left_surface: e.read_int_any("left surface").unwrap_or(-1) as i16,
-                        right_surface: e.read_int_any("right surface").unwrap_or(-1) as i16,
+                        start_vertex: e.read_int_any("start vertex").unwrap_or(0) as i32,
+                        end_vertex: e.read_int_any("end vertex").unwrap_or(0) as i32,
+                        forward_edge: e.read_int_any("forward edge").unwrap_or(0) as i32,
+                        reverse_edge: e.read_int_any("reverse edge").unwrap_or(0) as i32,
+                        left_surface: e.read_int_any("left surface").unwrap_or(-1) as i32,
+                        right_surface: e.read_int_any("right surface").unwrap_or(-1) as i32,
                     });
                 }
             }
@@ -779,7 +839,7 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d) {
                     let point = e.read_point3d("point");
                     out.push(CollisionVertex {
                         point,
-                        first_edge: e.read_int_any("first edge").unwrap_or(0) as i16,
+                        first_edge: e.read_int_any("first edge").unwrap_or(0) as i32,
                     });
                 }
             }
