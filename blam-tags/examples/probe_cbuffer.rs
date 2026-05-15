@@ -8,7 +8,8 @@ use std::path::PathBuf;
 
 use blam_tags::TagFile;
 use blam_tags::render_method::{
-    resolve_pixel_user_cbuffer, RenderMethod, RenderMethodTemplate,
+    build_rmop_param_list, resolve_pixel_user_cbuffer, RenderMethod, RenderMethodDefinition,
+    RenderMethodOption, RenderMethodTemplate,
 };
 
 fn main() {
@@ -92,8 +93,30 @@ fn main() {
         );
     }
 
+    // Build the flat rmop parameter list by walking rmdf categories +
+    // loading each chosen rmop. The cbuffer resolver needs this to
+    // apply Stage 1 rmop defaults before Stage 2 rmsh overrides.
+    let rmdf_normalized = rmsh.definition_path.replace('\\', "/");
+    let rmdf_path: PathBuf =
+        [&tags_root, &format!("{}.render_method_definition", rmdf_normalized)]
+            .iter()
+            .collect();
+    let rmdf_tag = TagFile::read(&rmdf_path).expect("read rmdf");
+    let rmdf = RenderMethodDefinition::from_tag(&rmdf_tag).expect("parse rmdf");
+
+    let tags_root_for_load = tags_root.clone();
+    let rmop_params = build_rmop_param_list(&rmsh, &rmdf, |path| {
+        let normalized = path.replace('\\', "/");
+        let rmop_path: PathBuf =
+            [&tags_root_for_load, &format!("{}.render_method_option", normalized)]
+                .iter()
+                .collect();
+        let tag = TagFile::read(&rmop_path).ok()?;
+        RenderMethodOption::from_tag(&tag).ok()
+    });
+
     println!();
-    let cb = resolve_pixel_user_cbuffer(&rmsh, &rmt2);
+    let cb = resolve_pixel_user_cbuffer(&rmsh, &rmt2, &rmop_params);
     println!("cbuffer:");
     println!("  total_bytes: {}", cb.total_bytes);
     println!("  slots:");

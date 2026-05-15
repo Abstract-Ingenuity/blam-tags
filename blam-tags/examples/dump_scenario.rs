@@ -71,7 +71,20 @@ fn main() {
 
     println!("decorators: [{}]", scnr.decorators.len());
     for (i, dec) in scnr.decorators.iter().enumerate() {
-        println!("  [{i}] {}", short(&dec.decorator_set));
+        println!(
+            "  [{i}] count={} bsp_count={} palettes={} sets={}",
+            dec.decorator_count,
+            dec.current_bsp_count,
+            dec.palettes.len(),
+            dec.sets.len(),
+        );
+        for (j, set) in dec.sets.iter().enumerate() {
+            println!(
+                "      set[{j}] {} placements={}",
+                short(&set.decorator_set),
+                set.placements.len(),
+            );
+        }
     }
     println!();
 
