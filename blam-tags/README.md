@@ -542,14 +542,51 @@ Plus four group-specific helper layers (all built on the `api` facade):
   Bungie Amalgam scene (version 7) from `scenario_structure_bsp` +
   `scenario_structure_lighting_info` pairs.
 
+Plus two H4-platform layers (read-side only — no roundtrip):
+
+- **[`monolithic`]** — Halo 4 development-build tag-cache reader.
+  `MonolithicCache::open(tag_cache_dir)` opens a `blob_index.dat`
+  + `tags_N` / `cache_N` partition set and resolves cache-relative
+  tag paths through the index → blok → tags-heap → page-range
+  chain. Exposes `TagFileIndex`, `TagFileEntry`, partition heaps,
+  the `tgxc` xsync state (`XSyncState`, `ControlFixup`,
+  `FixupAddress`, `FixupTier`), and `SessionGuid`. Tags read from
+  the cache go through the same `TagFile` parser as filesystem
+  tags. Read-only.
+- **[`render_geometry`]** — X360 vertex / index buffer hydration.
+  H4 X360 render_models keep their GPU-format vertex / index
+  buffers as xsync-resident resources rather than the
+  author-format `raw_vertex_block` / `raw indices` PC MCC tags
+  ship with. `hydrate(&mut tag, &cache_bytes)` decodes the
+  per-mesh vertex buffers (using `MeshVertexType` /
+  `MeshPrtVertexType` declarations resolved against the H4
+  rasterizer vertex-format table — UDec4N, DHEN3N, DEC3N,
+  UShort4N, UShort2N, UByte4, UByte4N, half2, Float3, Float4)
+  into `AuthorVertex` records and writes them back into the
+  same author-format fields, applies the `per_mesh_node_map`
+  local→global remap for Skinned meshes, and surfaces the index
+  buffers verbatim. After hydration the JMS / ASS extractors see
+  an X360-sourced render_model as indistinguishable from a PC
+  MCC one. Hydration runs automatically when a tag is loaded via
+  `MonolithicCache::read_tag` — direct library callers reading
+  cache bytes themselves can call `render_geometry::hydrate`
+  explicitly.
+
+  Validated against the H4 X360 development cache: a 9,140-tag
+  hydration sweep across `mode` / `sbsp` / `pmdf` / `impo` /
+  `iimz` / `Lbsp` / `rmla` groups runs without panic. See
+  [`examples/hydration_sweep.rs`](examples/hydration_sweep.rs).
+
 A small private [`geometry`] module carries the format-specific
 helpers shared between `jms` and `ass`: `CompressionBounds`
 (dequantize bounds-compressed positions / texcoords), restart-aware
-triangle-strip → list conversion, the Halo BSP edge-ring walker,
-and the world-units → centimeter `SCALE` constant. Not part of the
-public API. Generic vector / quaternion / point math lives on the
-[`math`] types directly (see below); typed field readers live as
-inherent methods on [`api::TagStruct`].
+triangle-strip → list conversion (u16 + u32 sentinel variants —
+the u32 path handles `raw indices32` blocks for >65k-vertex meshes
+like H4's monolithic placeholder geometry), the Halo BSP edge-ring
+walker, and the world-units → centimeter `SCALE` constant. Not part
+of the public API. Generic vector / quaternion / point math lives
+on the [`math`] types directly (see below); typed field readers
+live as inherent methods on [`api::TagStruct`].
 
 The [`math`] module carries the canonical Halo `real_*` types
 (`RealPoint3d`, `RealVector3d`, `RealQuaternion`, `RealPlane3d`,

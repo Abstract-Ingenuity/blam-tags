@@ -13,6 +13,7 @@
 //! operate on payload bytes rather than readers.
 
 use crate::data::TagSubChunkContent;
+use crate::io::Endian;
 use crate::layout::{TagFieldLayout, TagLayout};
 use crate::math;
 
@@ -200,15 +201,20 @@ pub struct TagReferenceData {
 }
 
 impl TagReferenceData {
-    /// Parse a `tgrf` payload (header already consumed). Bad UTF-8 in
-    /// the path is decoded lossily (U+FFFD replacement) — preserves
-    /// well-formed-input roundtrip while making the parser safe to
-    /// feed corrupt bytes.
-    pub fn from_bytes(payload: &[u8]) -> Self {
+    /// Parse a `tgrf` payload (header already consumed). The 4-byte
+    /// group tag prefix is read in the file's wire endian; the rest
+    /// is the UTF-8 path. Bad UTF-8 in the path is decoded lossily
+    /// (U+FFFD replacement) — preserves well-formed-input roundtrip
+    /// while making the parser safe to feed corrupt bytes.
+    pub fn from_bytes(payload: &[u8], endian: Endian) -> Self {
         if payload.len() < 4 {
             return Self { group_tag_and_name: None };
         }
-        let group_tag = u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
+        let b = [payload[0], payload[1], payload[2], payload[3]];
+        let group_tag = match endian {
+            Endian::Le => u32::from_le_bytes(b),
+            Endian::Be => u32::from_be_bytes(b),
+        };
         let name = String::from_utf8_lossy(&payload[4..]).into_owned();
         Self { group_tag_and_name: Some((group_tag, name)) }
     }
@@ -237,15 +243,19 @@ impl TagReferenceData {
 /// `raw` preserves the payload verbatim so non-12-byte variants
 /// (if any exist in other games) still roundtrip byte-exactly; the
 /// three named fields are convenience accessors over the common case.
+/// `endian` is the wire endian the payload was read in — needed to
+/// decode the `u32` accessors for X360 / BE tags.
 #[derive(Debug)]
 pub struct ApiInteropData {
     pub raw: Vec<u8>,
+    pub endian: Endian,
 }
 
 impl ApiInteropData {
-    /// Parse a `ti][` payload (header already consumed).
-    pub fn from_bytes(payload: &[u8]) -> Self {
-        Self { raw: payload.to_vec() }
+    /// Parse a `ti][` payload (header already consumed). `endian` is
+    /// the file's wire endian; the raw bytes are preserved verbatim.
+    pub fn from_bytes(payload: &[u8], endian: Endian) -> Self {
+        Self { raw: payload.to_vec(), endian }
     }
 
     /// Serialize back to a `ti][` payload (caller writes the header).
@@ -254,28 +264,28 @@ impl ApiInteropData {
     }
 
     /// Reset pattern BCS writes on save: `{ descriptor=0,
-    /// address=UINT_MAX, definition_address=0 }`. 12 bytes.
+    /// address=UINT_MAX, definition_address=0 }`. 12 bytes, LE.
     pub fn reset() -> Self {
         let mut raw = Vec::with_capacity(12);
         raw.extend_from_slice(&0u32.to_le_bytes());
         raw.extend_from_slice(&u32::MAX.to_le_bytes());
         raw.extend_from_slice(&0u32.to_le_bytes());
-        Self { raw }
+        Self { raw, endian: Endian::Le }
     }
 
-    /// `descriptor` field (u32 LE at offset 0), if the payload has the
+    /// `descriptor` field (u32 at offset 0), if the payload has the
     /// canonical 12-byte shape.
     pub fn descriptor(&self) -> Option<u32> {
         self.u32_at(0)
     }
 
-    /// `address` field (u32 LE at offset 4), if the payload has the
+    /// `address` field (u32 at offset 4), if the payload has the
     /// canonical 12-byte shape.
     pub fn address(&self) -> Option<u32> {
         self.u32_at(4)
     }
 
-    /// `definition_address` field (u32 LE at offset 8), if the payload
+    /// `definition_address` field (u32 at offset 8), if the payload
     /// has the canonical 12-byte shape.
     pub fn definition_address(&self) -> Option<u32> {
         self.u32_at(8)
@@ -285,12 +295,16 @@ impl ApiInteropData {
         if self.raw.len() < 12 {
             return None;
         }
-        Some(u32::from_le_bytes([
+        let b = [
             self.raw[off],
             self.raw[off + 1],
             self.raw[off + 2],
             self.raw[off + 3],
-        ]))
+        ];
+        Some(match self.endian {
+            Endian::Le => u32::from_le_bytes(b),
+            Endian::Be => u32::from_be_bytes(b),
+        })
     }
 }
 
@@ -485,31 +499,47 @@ impl TagFieldData {
 //================================================================================
 
 //================================================================================
-// Raw-data read/write helpers (LE).
+// Raw-data read/write helpers.
+//
+// Multi-byte primitives slice into `raw_data` and dispatch on `endian`
+// at read time so X360 (BE) tags work without an upfront byteswap of
+// raw_data. The 1-byte helpers don't take endian — endianness is
+// meaningless for a single byte.
+//
+// Writers always emit little-endian because we never serialize a BE
+// tag back to disk (Phase 1 set scope to read-only for X360). If that
+// ever changes, mirror the reader dispatch in the writer.
 //================================================================================
 
 #[inline] fn read_i8(raw: &[u8], o: usize) -> i8 { raw[o] as i8 }
 #[inline] fn read_u8(raw: &[u8], o: usize) -> u8 { raw[o] }
-#[inline] fn read_i16(raw: &[u8], o: usize) -> i16 {
-    i16::from_le_bytes([raw[o], raw[o + 1]])
+#[inline] fn read_i16(raw: &[u8], o: usize, e: Endian) -> i16 {
+    let b = [raw[o], raw[o + 1]];
+    match e { Endian::Le => i16::from_le_bytes(b), Endian::Be => i16::from_be_bytes(b) }
 }
-#[inline] fn read_u16(raw: &[u8], o: usize) -> u16 {
-    u16::from_le_bytes([raw[o], raw[o + 1]])
+#[inline] fn read_u16(raw: &[u8], o: usize, e: Endian) -> u16 {
+    let b = [raw[o], raw[o + 1]];
+    match e { Endian::Le => u16::from_le_bytes(b), Endian::Be => u16::from_be_bytes(b) }
 }
-#[inline] fn read_i32(raw: &[u8], o: usize) -> i32 {
-    i32::from_le_bytes(raw[o..o + 4].try_into().unwrap())
+#[inline] fn read_i32(raw: &[u8], o: usize, e: Endian) -> i32 {
+    let b: [u8; 4] = raw[o..o + 4].try_into().unwrap();
+    match e { Endian::Le => i32::from_le_bytes(b), Endian::Be => i32::from_be_bytes(b) }
 }
-#[inline] fn read_u32(raw: &[u8], o: usize) -> u32 {
-    u32::from_le_bytes(raw[o..o + 4].try_into().unwrap())
+#[inline] fn read_u32(raw: &[u8], o: usize, e: Endian) -> u32 {
+    let b: [u8; 4] = raw[o..o + 4].try_into().unwrap();
+    match e { Endian::Le => u32::from_le_bytes(b), Endian::Be => u32::from_be_bytes(b) }
 }
-#[inline] fn read_i64(raw: &[u8], o: usize) -> i64 {
-    i64::from_le_bytes(raw[o..o + 8].try_into().unwrap())
+#[inline] fn read_i64(raw: &[u8], o: usize, e: Endian) -> i64 {
+    let b: [u8; 8] = raw[o..o + 8].try_into().unwrap();
+    match e { Endian::Le => i64::from_le_bytes(b), Endian::Be => i64::from_be_bytes(b) }
 }
-#[inline] fn read_u64(raw: &[u8], o: usize) -> u64 {
-    u64::from_le_bytes(raw[o..o + 8].try_into().unwrap())
+#[inline] fn read_u64(raw: &[u8], o: usize, e: Endian) -> u64 {
+    let b: [u8; 8] = raw[o..o + 8].try_into().unwrap();
+    match e { Endian::Le => u64::from_le_bytes(b), Endian::Be => u64::from_be_bytes(b) }
 }
-#[inline] fn read_f32(raw: &[u8], o: usize) -> f32 {
-    f32::from_le_bytes(raw[o..o + 4].try_into().unwrap())
+#[inline] fn read_f32(raw: &[u8], o: usize, e: Endian) -> f32 {
+    let b: [u8; 4] = raw[o..o + 4].try_into().unwrap();
+    match e { Endian::Le => f32::from_le_bytes(b), Endian::Be => f32::from_be_bytes(b) }
 }
 
 #[inline] fn write_i8(raw: &mut [u8], o: usize, v: i8) { raw[o] = v as u8 }
@@ -687,6 +717,7 @@ pub(crate) fn deserialize_field(
     field: &TagFieldLayout,
     raw_struct: &[u8],
     sub_chunk: Option<&TagSubChunkContent>,
+    endian: Endian,
 ) -> Option<TagFieldData> {
     let offset = field.offset as usize;
 
@@ -719,14 +750,14 @@ pub(crate) fn deserialize_field(
 
         // Integers.
         TagFieldType::CharInteger => Some(TagFieldData::CharInteger(read_i8(raw_struct, offset))),
-        TagFieldType::ShortInteger => Some(TagFieldData::ShortInteger(read_i16(raw_struct, offset))),
-        TagFieldType::LongInteger => Some(TagFieldData::LongInteger(read_i32(raw_struct, offset))),
-        TagFieldType::Int64Integer => Some(TagFieldData::Int64Integer(read_i64(raw_struct, offset))),
+        TagFieldType::ShortInteger => Some(TagFieldData::ShortInteger(read_i16(raw_struct, offset, endian))),
+        TagFieldType::LongInteger => Some(TagFieldData::LongInteger(read_i32(raw_struct, offset, endian))),
+        TagFieldType::Int64Integer => Some(TagFieldData::Int64Integer(read_i64(raw_struct, offset, endian))),
         TagFieldType::ByteInteger => Some(TagFieldData::ByteInteger(read_u8(raw_struct, offset))),
-        TagFieldType::WordInteger => Some(TagFieldData::WordInteger(read_u16(raw_struct, offset))),
-        TagFieldType::DwordInteger => Some(TagFieldData::DwordInteger(read_u32(raw_struct, offset))),
-        TagFieldType::QwordInteger => Some(TagFieldData::QwordInteger(read_u64(raw_struct, offset))),
-        TagFieldType::Tag => Some(TagFieldData::Tag(read_u32(raw_struct, offset))),
+        TagFieldType::WordInteger => Some(TagFieldData::WordInteger(read_u16(raw_struct, offset, endian))),
+        TagFieldType::DwordInteger => Some(TagFieldData::DwordInteger(read_u32(raw_struct, offset, endian))),
+        TagFieldType::QwordInteger => Some(TagFieldData::QwordInteger(read_u64(raw_struct, offset, endian))),
+        TagFieldType::Tag => Some(TagFieldData::Tag(read_u32(raw_struct, offset, endian))),
 
         // Enums.
         TagFieldType::CharEnum => {
@@ -734,11 +765,11 @@ pub(crate) fn deserialize_field(
             Some(TagFieldData::CharEnum { value, name: resolve_enum_name(layout, field, value as i64) })
         }
         TagFieldType::ShortEnum => {
-            let value = read_i16(raw_struct, offset);
+            let value = read_i16(raw_struct, offset, endian);
             Some(TagFieldData::ShortEnum { value, name: resolve_enum_name(layout, field, value as i64) })
         }
         TagFieldType::LongEnum => {
-            let value = read_i32(raw_struct, offset);
+            let value = read_i32(raw_struct, offset, endian);
             Some(TagFieldData::LongEnum { value, name: resolve_enum_name(layout, field, value as i64) })
         }
 
@@ -748,131 +779,131 @@ pub(crate) fn deserialize_field(
             Some(TagFieldData::ByteFlags { value, names: resolve_flag_names(layout, field, value as u64, 8) })
         }
         TagFieldType::WordFlags => {
-            let value = read_u16(raw_struct, offset);
+            let value = read_u16(raw_struct, offset, endian);
             Some(TagFieldData::WordFlags { value, names: resolve_flag_names(layout, field, value as u64, 16) })
         }
         TagFieldType::LongFlags => {
-            let value = read_i32(raw_struct, offset);
+            let value = read_i32(raw_struct, offset, endian);
             Some(TagFieldData::LongFlags { value, names: resolve_flag_names(layout, field, value as u32 as u64, 32) })
         }
 
         // Block flags — value only for now.
         TagFieldType::ByteBlockFlags => Some(TagFieldData::ByteBlockFlags(read_u8(raw_struct, offset))),
-        TagFieldType::WordBlockFlags => Some(TagFieldData::WordBlockFlags(read_u16(raw_struct, offset))),
-        TagFieldType::LongBlockFlags => Some(TagFieldData::LongBlockFlags(read_i32(raw_struct, offset))),
+        TagFieldType::WordBlockFlags => Some(TagFieldData::WordBlockFlags(read_u16(raw_struct, offset, endian))),
+        TagFieldType::LongBlockFlags => Some(TagFieldData::LongBlockFlags(read_i32(raw_struct, offset, endian))),
 
         // Block indices.
         TagFieldType::CharBlockIndex => Some(TagFieldData::CharBlockIndex(read_i8(raw_struct, offset))),
         TagFieldType::CustomCharBlockIndex => Some(TagFieldData::CustomCharBlockIndex(read_i8(raw_struct, offset))),
-        TagFieldType::ShortBlockIndex => Some(TagFieldData::ShortBlockIndex(read_i16(raw_struct, offset))),
-        TagFieldType::CustomShortBlockIndex => Some(TagFieldData::CustomShortBlockIndex(read_i16(raw_struct, offset))),
-        TagFieldType::LongBlockIndex => Some(TagFieldData::LongBlockIndex(read_i32(raw_struct, offset))),
-        TagFieldType::CustomLongBlockIndex => Some(TagFieldData::CustomLongBlockIndex(read_i32(raw_struct, offset))),
+        TagFieldType::ShortBlockIndex => Some(TagFieldData::ShortBlockIndex(read_i16(raw_struct, offset, endian))),
+        TagFieldType::CustomShortBlockIndex => Some(TagFieldData::CustomShortBlockIndex(read_i16(raw_struct, offset, endian))),
+        TagFieldType::LongBlockIndex => Some(TagFieldData::LongBlockIndex(read_i32(raw_struct, offset, endian))),
+        TagFieldType::CustomLongBlockIndex => Some(TagFieldData::CustomLongBlockIndex(read_i32(raw_struct, offset, endian))),
 
         // Floats.
-        TagFieldType::Angle => Some(TagFieldData::Angle(read_f32(raw_struct, offset))),
-        TagFieldType::Real => Some(TagFieldData::Real(read_f32(raw_struct, offset))),
-        TagFieldType::RealSlider => Some(TagFieldData::RealSlider(read_f32(raw_struct, offset))),
-        TagFieldType::RealFraction => Some(TagFieldData::RealFraction(read_f32(raw_struct, offset))),
+        TagFieldType::Angle => Some(TagFieldData::Angle(read_f32(raw_struct, offset, endian))),
+        TagFieldType::Real => Some(TagFieldData::Real(read_f32(raw_struct, offset, endian))),
+        TagFieldType::RealSlider => Some(TagFieldData::RealSlider(read_f32(raw_struct, offset, endian))),
+        TagFieldType::RealFraction => Some(TagFieldData::RealFraction(read_f32(raw_struct, offset, endian))),
 
         // Math composites.
         TagFieldType::Point2d => Some(TagFieldData::Point2d(math::Point2d {
-            x: read_i16(raw_struct, offset),
-            y: read_i16(raw_struct, offset + 2),
+            x: read_i16(raw_struct, offset, endian),
+            y: read_i16(raw_struct, offset + 2, endian),
         })),
         TagFieldType::Rectangle2d => Some(TagFieldData::Rectangle2d(math::Rectangle2d {
-            top: read_i16(raw_struct, offset),
-            left: read_i16(raw_struct, offset + 2),
-            bottom: read_i16(raw_struct, offset + 4),
-            right: read_i16(raw_struct, offset + 6),
+            top: read_i16(raw_struct, offset, endian),
+            left: read_i16(raw_struct, offset + 2, endian),
+            bottom: read_i16(raw_struct, offset + 4, endian),
+            right: read_i16(raw_struct, offset + 6, endian),
         })),
         TagFieldType::RealPoint2d => Some(TagFieldData::RealPoint2d(math::RealPoint2d {
-            x: read_f32(raw_struct, offset),
-            y: read_f32(raw_struct, offset + 4),
+            x: read_f32(raw_struct, offset, endian),
+            y: read_f32(raw_struct, offset + 4, endian),
         })),
         TagFieldType::RealPoint3d => Some(TagFieldData::RealPoint3d(math::RealPoint3d {
-            x: read_f32(raw_struct, offset),
-            y: read_f32(raw_struct, offset + 4),
-            z: read_f32(raw_struct, offset + 8),
+            x: read_f32(raw_struct, offset, endian),
+            y: read_f32(raw_struct, offset + 4, endian),
+            z: read_f32(raw_struct, offset + 8, endian),
         })),
         TagFieldType::RealVector2d => Some(TagFieldData::RealVector2d(math::RealVector2d {
-            i: read_f32(raw_struct, offset),
-            j: read_f32(raw_struct, offset + 4),
+            i: read_f32(raw_struct, offset, endian),
+            j: read_f32(raw_struct, offset + 4, endian),
         })),
         TagFieldType::RealVector3d => Some(TagFieldData::RealVector3d(math::RealVector3d {
-            i: read_f32(raw_struct, offset),
-            j: read_f32(raw_struct, offset + 4),
-            k: read_f32(raw_struct, offset + 8),
+            i: read_f32(raw_struct, offset, endian),
+            j: read_f32(raw_struct, offset + 4, endian),
+            k: read_f32(raw_struct, offset + 8, endian),
         })),
         TagFieldType::RealQuaternion => Some(TagFieldData::RealQuaternion(math::RealQuaternion {
-            i: read_f32(raw_struct, offset),
-            j: read_f32(raw_struct, offset + 4),
-            k: read_f32(raw_struct, offset + 8),
-            w: read_f32(raw_struct, offset + 12),
+            i: read_f32(raw_struct, offset, endian),
+            j: read_f32(raw_struct, offset + 4, endian),
+            k: read_f32(raw_struct, offset + 8, endian),
+            w: read_f32(raw_struct, offset + 12, endian),
         })),
         TagFieldType::RealEulerAngles2d => Some(TagFieldData::RealEulerAngles2d(math::RealEulerAngles2d {
-            yaw: read_f32(raw_struct, offset),
-            pitch: read_f32(raw_struct, offset + 4),
+            yaw: read_f32(raw_struct, offset, endian),
+            pitch: read_f32(raw_struct, offset + 4, endian),
         })),
         TagFieldType::RealEulerAngles3d => Some(TagFieldData::RealEulerAngles3d(math::RealEulerAngles3d {
-            yaw: read_f32(raw_struct, offset),
-            pitch: read_f32(raw_struct, offset + 4),
-            roll: read_f32(raw_struct, offset + 8),
+            yaw: read_f32(raw_struct, offset, endian),
+            pitch: read_f32(raw_struct, offset + 4, endian),
+            roll: read_f32(raw_struct, offset + 8, endian),
         })),
         TagFieldType::RealPlane2d => Some(TagFieldData::RealPlane2d(math::RealPlane2d {
-            i: read_f32(raw_struct, offset),
-            j: read_f32(raw_struct, offset + 4),
-            d: read_f32(raw_struct, offset + 8),
+            i: read_f32(raw_struct, offset, endian),
+            j: read_f32(raw_struct, offset + 4, endian),
+            d: read_f32(raw_struct, offset + 8, endian),
         })),
         TagFieldType::RealPlane3d => Some(TagFieldData::RealPlane3d(math::RealPlane3d {
-            i: read_f32(raw_struct, offset),
-            j: read_f32(raw_struct, offset + 4),
-            k: read_f32(raw_struct, offset + 8),
-            d: read_f32(raw_struct, offset + 12),
+            i: read_f32(raw_struct, offset, endian),
+            j: read_f32(raw_struct, offset + 4, endian),
+            k: read_f32(raw_struct, offset + 8, endian),
+            d: read_f32(raw_struct, offset + 12, endian),
         })),
 
         // Colors.
-        TagFieldType::RgbColor => Some(TagFieldData::RgbColor(math::RgbColor(read_u32(raw_struct, offset)))),
-        TagFieldType::ArgbColor => Some(TagFieldData::ArgbColor(math::ArgbColor(read_u32(raw_struct, offset)))),
+        TagFieldType::RgbColor => Some(TagFieldData::RgbColor(math::RgbColor(read_u32(raw_struct, offset, endian)))),
+        TagFieldType::ArgbColor => Some(TagFieldData::ArgbColor(math::ArgbColor(read_u32(raw_struct, offset, endian)))),
         TagFieldType::RealRgbColor => Some(TagFieldData::RealRgbColor(math::RealRgbColor {
-            red: read_f32(raw_struct, offset),
-            green: read_f32(raw_struct, offset + 4),
-            blue: read_f32(raw_struct, offset + 8),
+            red: read_f32(raw_struct, offset, endian),
+            green: read_f32(raw_struct, offset + 4, endian),
+            blue: read_f32(raw_struct, offset + 8, endian),
         })),
         TagFieldType::RealArgbColor => Some(TagFieldData::RealArgbColor(math::RealArgbColor {
-            alpha: read_f32(raw_struct, offset),
-            red: read_f32(raw_struct, offset + 4),
-            green: read_f32(raw_struct, offset + 8),
-            blue: read_f32(raw_struct, offset + 12),
+            alpha: read_f32(raw_struct, offset, endian),
+            red: read_f32(raw_struct, offset + 4, endian),
+            green: read_f32(raw_struct, offset + 8, endian),
+            blue: read_f32(raw_struct, offset + 12, endian),
         })),
         TagFieldType::RealHsvColor => Some(TagFieldData::RealHsvColor(math::RealHsvColor {
-            hue: read_f32(raw_struct, offset),
-            saturation: read_f32(raw_struct, offset + 4),
-            value: read_f32(raw_struct, offset + 8),
+            hue: read_f32(raw_struct, offset, endian),
+            saturation: read_f32(raw_struct, offset + 4, endian),
+            value: read_f32(raw_struct, offset + 8, endian),
         })),
         TagFieldType::RealAhsvColor => Some(TagFieldData::RealAhsvColor(math::RealAhsvColor {
-            alpha: read_f32(raw_struct, offset),
-            hue: read_f32(raw_struct, offset + 4),
-            saturation: read_f32(raw_struct, offset + 8),
-            value: read_f32(raw_struct, offset + 12),
+            alpha: read_f32(raw_struct, offset, endian),
+            hue: read_f32(raw_struct, offset + 4, endian),
+            saturation: read_f32(raw_struct, offset + 8, endian),
+            value: read_f32(raw_struct, offset + 12, endian),
         })),
 
         // Bounds.
         TagFieldType::ShortIntegerBounds => Some(TagFieldData::ShortIntegerBounds(math::ShortBounds {
-            lower: read_i16(raw_struct, offset),
-            upper: read_i16(raw_struct, offset + 2),
+            lower: read_i16(raw_struct, offset, endian),
+            upper: read_i16(raw_struct, offset + 2, endian),
         })),
         TagFieldType::AngleBounds => Some(TagFieldData::AngleBounds(math::AngleBounds {
-            lower: read_f32(raw_struct, offset),
-            upper: read_f32(raw_struct, offset + 4),
+            lower: read_f32(raw_struct, offset, endian),
+            upper: read_f32(raw_struct, offset + 4, endian),
         })),
         TagFieldType::RealBounds => Some(TagFieldData::RealBounds(math::RealBounds {
-            lower: read_f32(raw_struct, offset),
-            upper: read_f32(raw_struct, offset + 4),
+            lower: read_f32(raw_struct, offset, endian),
+            upper: read_f32(raw_struct, offset + 4, endian),
         })),
         TagFieldType::FractionBounds => Some(TagFieldData::FractionBounds(math::FractionBounds {
-            lower: read_f32(raw_struct, offset),
-            upper: read_f32(raw_struct, offset + 4),
+            lower: read_f32(raw_struct, offset, endian),
+            upper: read_f32(raw_struct, offset + 4, endian),
         })),
 
         // Custom: variable-size opaque bytes. Size comes from the
@@ -882,42 +913,40 @@ pub(crate) fn deserialize_field(
             Some(TagFieldData::Custom(raw_struct[offset..offset + size].to_vec()))
         }
 
-        // Sub-chunk leaves. The fall-through arms below are
-        // unreachable on any tree produced by `read_sub_chunks`: the
-        // read path emits a matching `TagSubChunkContent` variant for
-        // every sub-chunk-bearing field type, so reaching the `_` arm
-        // means the in-memory tree was constructed inconsistently
-        // (a programming bug, not a malformed input).
-        TagFieldType::StringId => Some(TagFieldData::StringId(StringIdData::from_bytes(
-            match sub_chunk {
-                Some(TagSubChunkContent::StringId(payload)) => payload,
-                _ => unreachable!("StringId field missing matching sub_chunk"),
-            },
-        ))),
-        TagFieldType::OldStringId => Some(TagFieldData::OldStringId(StringIdData::from_bytes(
-            match sub_chunk {
-                Some(TagSubChunkContent::OldStringId(payload)) => payload,
-                _ => unreachable!("OldStringId field missing matching sub_chunk"),
-            },
-        ))),
-        TagFieldType::TagReference => Some(TagFieldData::TagReference(TagReferenceData::from_bytes(
-            match sub_chunk {
-                Some(TagSubChunkContent::TagReference(payload)) => payload,
-                _ => unreachable!("TagReference field missing matching sub_chunk"),
-            },
-        ))),
-        TagFieldType::Data => Some(TagFieldData::Data(
-            match sub_chunk {
-                Some(TagSubChunkContent::Data(payload)) => payload.clone(),
-                _ => unreachable!("Data field missing matching sub_chunk"),
-            },
-        )),
-        TagFieldType::ApiInterop => Some(TagFieldData::ApiInterop(ApiInteropData::from_bytes(
-            match sub_chunk {
-                Some(TagSubChunkContent::ApiInterop(payload)) => payload,
-                _ => unreachable!("ApiInterop field missing matching sub_chunk"),
-            },
-        ))),
+        // Sub-chunk leaves. A missing sub-chunk returns `None` to
+        // match the graceful fall-back the container accessors
+        // (`as_block` / `as_array` / `as_struct`) already use —
+        // monolithic-hydrated resources have empty `sub_chunks`
+        // lists, and we'd rather have the walker show a blank value
+        // than abort the whole inspection.
+        TagFieldType::StringId => sub_chunk.and_then(|c| match c {
+            TagSubChunkContent::StringId(payload) => {
+                Some(TagFieldData::StringId(StringIdData::from_bytes(payload)))
+            }
+            _ => None,
+        }),
+        TagFieldType::OldStringId => sub_chunk.and_then(|c| match c {
+            TagSubChunkContent::OldStringId(payload) => {
+                Some(TagFieldData::OldStringId(StringIdData::from_bytes(payload)))
+            }
+            _ => None,
+        }),
+        TagFieldType::TagReference => sub_chunk.and_then(|c| match c {
+            TagSubChunkContent::TagReference(payload) => Some(TagFieldData::TagReference(
+                TagReferenceData::from_bytes(payload, endian),
+            )),
+            _ => None,
+        }),
+        TagFieldType::Data => sub_chunk.and_then(|c| match c {
+            TagSubChunkContent::Data(payload) => Some(TagFieldData::Data(payload.clone())),
+            _ => None,
+        }),
+        TagFieldType::ApiInterop => sub_chunk.and_then(|c| match c {
+            TagSubChunkContent::ApiInterop(payload) => Some(TagFieldData::ApiInterop(
+                ApiInteropData::from_bytes(payload, endian),
+            )),
+            _ => None,
+        }),
     }
 }
 

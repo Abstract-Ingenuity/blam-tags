@@ -307,10 +307,10 @@ fn resolve_bitmap(
         .unwrap_or(0);
 
     let filter_mode = rm_param
-        .and_then(|p| BitmapFilterMode::from_index(p.bitmap_filter_mode as i64))
+        .and_then(|p| BitmapFilterMode::from_index(p.bitmap_filter_mode as i128))
         .unwrap_or(op_param.default_filter_mode);
     let address_mode = rm_param
-        .and_then(|p| BitmapAddressMode::from_index(p.bitmap_address_mode as i64))
+        .and_then(|p| BitmapAddressMode::from_index(p.bitmap_address_mode as i128))
         .unwrap_or(op_param.default_address_mode);
     let extern_texture_mode = rm_param
         .map(|p| p.bitmap_extern_mode as u8)

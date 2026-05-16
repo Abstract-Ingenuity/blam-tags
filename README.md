@@ -9,7 +9,7 @@ No ManagedBlam, no .NET, no engine required. The parser reads each tag's embedde
 | Crate | Role |
 |---|---|
 | [<code>blam&#8209;tags</code>](./blam-tags/) | The library. Reads, writes, navigates, and edits tag files. Plus group-specific extractors: `bitmap` → TIFF / DDS, `model_animation_graph` → JMA-family, `render_model`/`collision_model`/`physics_model` → JMS, `scenario_structure_bsp` → ASS. |
-| [<code>blam&#8209;tag&#8209;shell</code>](./blam-tag-shell/) | Command-line front-end + interactive REPL. Subcommands for header metadata, directory listing / search / dependency walking, field tree inspection, get / set / flag / block edits, options enumeration, schema and value diffing, integrity checks, replay-script export, raw `tag_data` field dump, the four group-specific extractors (bitmap → TIFF/DDS, `.model` → JMS or ASS via `extract-geometry`'s content-based dispatch, `.scenario` → ASS per BSP, animation → JMA-family), and `extract-import-info` for unpacking the zlib-compressed source files Bungie's importer baked into the `info` stream. |
+| [<code>blam&#8209;tag&#8209;shell</code>](./blam-tag-shell/) | Command-line front-end + interactive REPL. Subcommands for header metadata, directory listing / search / dependency walking, field tree inspection, get / set / flag / block edits, options enumeration, schema and value diffing, integrity checks, replay-script export, raw `tag_data` field dump, the four group-specific extractors (bitmap → TIFF/DDS, `.model` → JMS or ASS via `extract-geometry`'s content-based dispatch, `.scenario` → ASS per BSP, animation → JMA-family), `extract-import-info` for unpacking the zlib-compressed source files Bungie's importer baked into the `info` stream, and `list-cache` plus the global `--cache <DIR>` flag for browsing / reading Halo 4 monolithic tag-cache builds. |
 
 Each crate has its own README with API shape / command reference.
 
@@ -30,6 +30,10 @@ Each crate has its own README with API shape / command reference.
 - **`.model` → JMS / ASS export with full coverage** of the H3 MCC corpus. Polymorphic over `render_model`/`collision_model`/`physics_model` — emits per-purpose source files in the H3EK source-tree layout (`render/`, `collision/`, `physics/`). **Render-side auto-dispatch**: ASS when the render_model carries `instance mesh index >= 0` + populated `instance placements[]` (the brute, decorators, level objects — 141/1869 H3 render_models); JMS otherwise. ASS round-trips back through Tool to recreate the per-placement structure on recompile; JMS bakes placements inline as triangles (lossy but universally supported). `--force jms`/`ass` overrides the dispatch. Collision path walks BSP edge rings, physics path emits Havok primitives + ragdoll/hinge constraints — both always JMS (ASS doesn't represent them). The skeleton from `render_model` provides world-space placement for `coll`/`phmo`. See [`blam-tag-shell extract-geometry`](./blam-tag-shell/README.md#extract-geometry--model-to-source-tree-jms--ass-files), the [`blam_tags::jms`](./blam-tags/src/jms.rs) module, and [`AssFile::from_render_model`](./blam-tags/src/ass.rs).
 
 - **`.scenario` → ASS export with full corpus coverage** (147 / 147 BSPs across 49 H3 scenarios). Emits one ASS file per `scenario.structure_bsps[]` entry, pairing each `scenario_structure_bsp` with its `scenario_structure_lighting_info`. Categories emitted: cluster MESHes, per-IGD-def MESHes + per-placement INSTANCEs, real `BM_LIGHTING_*` material metadata, cluster portals, weather polyhedra, structure collision BSP, sbsp markers (as SPHERE primitives), `environment_objects[]` xref placements, and SPOT/DIRECT/OMNI/AMBIENT generic lights. Output mirrors H3EK's `data/levels/<map>/structure/<bsp>.ASS` layout for re-import as artist source. See [`blam-tag-shell extract-geometry`](./blam-tag-shell/README.md#extract-geometry--tag-to-source-tree-jms--ass-files) (scnr/sbsp inputs) and the [`blam_tags::ass`](./blam-tags/src/ass.rs) module.
+
+- **Halo 4 monolithic tag-cache reads.** The H4 dev-build `tag_cache/` directory (one `blob_index.dat` + a handful of `tags_N` / `cache_N` partition blobs) opens as a read-only filesystem of tags addressable by cache-relative `group:name` paths. Every read-side verb (`inspect`, `get`, `extract-bitmap`, `extract-geometry`, `extract-animation`, `list-cache`, …) works against cache entries identically to filesystem tags. See [`blam-tag-shell --cache`](./blam-tag-shell/README.md#--cache---c-optional--for-halo-4-monolithic-builds) and the [`blam_tags::monolithic`](./blam-tags/src/monolithic/) module.
+
+- **X360 render-geometry hydration.** Render_models in H4 X360 monolithic caches carry GPU-format vertex / index buffers as xsync-resident resources rather than the author-format `raw_vertex_block` / `raw indices` PC MCC tags ship with. The [`blam_tags::render_geometry`](./blam-tags/src/render_geometry/) module decodes those buffers (UDec4N / DHEN3N / DEC3N / UShort4N / UShort2N / UByte4 / UByte4N / half2 / Float3 / Float4 — all binary-verified against the rasterizer vertex declaration table at runtime) into the same fields, so `extract-geometry` produces JMS / ASS from X360 source identically to PC MCC source. Skinned meshes get a `per_mesh_node_map` local→global skeleton-index remap on the way through; storm_elite and bigmuthafucka both extract cleanly into Blender via the patched HABT importer.
 
 ## Build
 
@@ -85,6 +89,16 @@ blam-tags/          — workspace root
 │   │                   definition
 │   │                 — group-specific extractors: bitmap, animation,
 │   │                   jms, ass (sharing the geometry helper module)
+│   │                 — Halo 4 platform support: monolithic (cache
+│   │                   reader + xsync), render_geometry (X360 vertex /
+│   │                   index buffer hydration into author-format)
+│   │                 — typed walkers for narrow groups: render_method,
+│   │                   render_model, scenario, scenario_lightmap,
+│   │                   structure_bsp, structure_lighting_info, light,
+│   │                   sky_atmosphere, wind, decal_system, decorator_set,
+│   │                   area_screen_effect, camera_fx_settings,
+│   │                   chocolate_mountain, rasterizer_globals,
+│   │                   tag_function
 │   └── tests/      — integration tests (corruption suite, etc)
 └── blam-tag-shell/ — CLI crate
     └── src/        — Clap entry point + per-command implementations

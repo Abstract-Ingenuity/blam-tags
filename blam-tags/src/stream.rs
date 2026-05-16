@@ -34,6 +34,7 @@ impl TagStream {
     pub(crate) fn read<R: Seek + Read>(
         chunk_signature: u32,
         reader: &mut std::io::BufReader<R>,
+        endian: Endian,
     ) -> Result<Self, TagReadError> {
         // Outer chunk: signature is dynamic (one of tag!/want/info/
         // assd), so we can't use the validating helper — inline the
@@ -41,7 +42,7 @@ impl TagStream {
         // the static name "tag stream" since we can't materialise the
         // dynamic name as a `&'static str`.
         let chunk_header_offset = reader.stream_position()?;
-        let chunk_header = read_chunk_header(reader)?;
+        let chunk_header = read_chunk_header(reader, endian)?;
         if chunk_header.signature != chunk_signature {
             return Err(TagReadError::BadChunkSignature {
                 offset: chunk_header_offset,
@@ -61,7 +62,7 @@ impl TagStream {
         // Now we're inside the chunk, read the 'blay' chunk
         //
 
-        let layout = TagLayout::read(reader)?;
+        let layout = TagLayout::read(reader, endian)?;
         let root_block_layout = &layout.block_layouts[layout.header.tag_group_block_index as usize];
 
         //
@@ -71,7 +72,7 @@ impl TagStream {
         //
 
         let bdat_offset = reader.stream_position()?;
-        let block_data_header = read_chunk_header(reader)?;
+        let block_data_header = read_chunk_header(reader, endian)?;
         if block_data_header.signature != u32::from_be_bytes(*b"bdat") {
             return Err(TagReadError::BadChunkSignature {
                 offset: bdat_offset,
@@ -87,7 +88,7 @@ impl TagStream {
         }
         let block_data_offset = reader.stream_position()?;
 
-        let tag_block_data = TagBlockData::read(&layout, root_block_layout, reader)?;
+        let tag_block_data = TagBlockData::read(&layout, root_block_layout, reader, endian)?;
 
         check_chunk_end(reader, "bdat", block_data_offset, block_data_header.size)?;
         check_chunk_end(reader, "tag stream", chunk_offset, chunk_header.size)?;

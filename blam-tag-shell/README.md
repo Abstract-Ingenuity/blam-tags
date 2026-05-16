@@ -20,12 +20,16 @@ blam-tag-shell --game <GAME> <COMMAND> [ARGS...] [FLAGS]
 
 Every tag-bound command takes a `<FILE>` argument as its first positional. In the [REPL](#repl--interactive-shell) that argument is filled in automatically from the currently-loaded tag, so you can type `get "jump velocity"` without repeating the path.
 
-### Required: `--game` / `-g`
+### Global flags
 
-Every invocation requires the global `--game <GAME>` flag (alias `-g`). The shell uses it for two things:
+#### `--game` / `-g` (optional for read commands, required for write commands)
 
-- **Schema lookup** — schemas are read from `definitions/<GAME>/<group>.json`. Required for `new`, the optional-stream attach commands, and any command that needs to know how to interpret a tag's contents.
-- **Tag-reference rendering** — group-tag → group-name resolution comes from `definitions/<GAME>/_meta.json`, which is loaded eagerly at startup. Bad/missing path errors out before any command runs.
+The shell uses `--game <GAME>` for two things:
+
+- **Schema lookup** — schemas are read from `definitions/<GAME>/<group>.json`. Required for `new`, the optional-stream attach commands, and any command that creates or rebuilds tag data.
+- **Tag-reference rendering** — group-tag → group-name resolution comes from `definitions/<GAME>/_meta.json`. Without `--game`, tag-references fall back to the raw 4-byte group tag form (`bipd:objects/…` instead of `objects/….biped`).
+
+**Read commands work without it** — `inspect`, `get`, `header`, `list`, `find`, `data-diff`, `extract-*`, `list-animations`, etc. fall back to each tag's embedded `blay` schema. **Write commands** (`new`, `set`, `flag`, `block`, `add-*`, `remove-*`, `rebuild-dependency-list`) need it because they emit schema-driven defaults.
 
 `<GAME>` is the directory name under `definitions/` — currently `halo3_mcc`, `halo3odst_mcc`, `haloreach_mcc`, `halo4_mcc`, and `halo2amp_mcc`. The flag is global, so it can appear anywhere on the command line:
 
@@ -33,9 +37,30 @@ Every invocation requires the global `--game <GAME>` flag (alias `-g`). The shel
 blam-tag-shell --game halo3_mcc header masterchief.biped
 blam-tag-shell -g haloreach_mcc list /path/to/reach/tags --group bipd
 blam-tag-shell get masterchief.biped "jump velocity" --game halo3_mcc
+
+# No --game — works for read commands; references render as `bipd:...`
+blam-tag-shell header masterchief.biped
 ```
 
-The example commands below elide `--game` for readability — add it to every invocation.
+#### `--cache` / `-c` (optional — for Halo 4 monolithic builds)
+
+Opens a Halo 4 monolithic tag cache directory — the `tag_cache/` folder shipped with H4 development builds, containing `blob_index.dat` plus `tags_N` / `cache_N` partition blobs. With `--cache` set, **tag-file positionals are interpreted as cache-relative paths with extension** (e.g. `objects/characters/elite/elite.biped`) instead of filesystem paths; the shell looks each one up in the index, decompresses the blob, and feeds the resulting bytes through the normal parser.
+
+Read-only — mutually exclusive with write commands (`set`, `flag`, `block`, etc.). Combine with `--game halo4_mcc` for schema-aware rendering. See [`list-cache`](#list-cache--enumerate-a-monolithic-cache) for enumerating entries.
+
+```sh
+# Inspect a tag inside a monolithic cache
+blam-tag-shell --game halo4_mcc --cache /path/to/halo4_xbox360/tag_cache \
+    inspect objects/characters/elite/elite.biped
+
+# Extract a render_model from cache; X360 vertex/index buffers are hydrated
+# into the same author-format fields MCC PC tags carry natively.
+blam-tag-shell --game halo4_mcc --cache /path/to/halo4_xbox360/tag_cache \
+    extract-geometry objects/characters/storm_elite/storm_elite.model \
+    --output ~/Downloads
+```
+
+The example commands below elide both flags for readability.
 
 ### Commands
 
@@ -63,6 +88,7 @@ The example commands below elide `--game` for readability — add it to every in
 | [`extract-import-info`](#extract-import-info--unzip-source-files-from-the-info-stream) | Decompress and write out the source files baked into a tag's `info` stream (zlib-compressed JMS / JMA / TIFF / ASS that the importer consumed) |
 | [`list-animations`](#list-animations--enumerate-jmad-animations) | List the animations in a `model_animation_graph` tag |
 | [`extract-animation`](#extract-animation--decode-and-export-an-animation) | Decode one or every jmad animation; write JMA-family text or JSON |
+| [`list-cache`](#list-cache--enumerate-a-monolithic-cache) | List every tag in a Halo 4 monolithic tag cache (requires `--cache`) |
 | [`add-dependency-list`](#optional-stream-commands) | Attach an empty dependency-list stream |
 | [`remove-dependency-list`](#optional-stream-commands) | Drop the dependency-list stream |
 | [`rebuild-dependency-list`](#optional-stream-commands) | Repopulate the dependency list from the tag's own tag_references |
@@ -399,7 +425,7 @@ References render as `<path>.<group_name>` (canonical filename form) when the gr
 `list` is path-only — it never opens a tag file. For standalone tag files the file extension *is* the group name, so a full corpus walk runs in well under a second.
 
 ```sh
-# Plain list of every biped under a tags root (long name or 4cc both work)
+# Plain list of every biped under a tags root (long name or group_tag both work)
 $ blam-tag-shell list /path/to/tags --group biped
 $ blam-tag-shell list /path/to/tags --group bipd
 
@@ -946,6 +972,41 @@ brute.idle.JMM: 31 frames (30+1) × 50 bones [JMM]  movement=None
 brute.melee.JMT: 38 frames (37+1) × 50 bones [JMT]  movement=DxDyDyaw
 ...
 ```
+
+---
+
+### `list-cache` — Enumerate a monolithic cache
+
+| Long | Description |
+|-|-|
+| `--cache <DIR>` | **Required.** Path to a Halo 4 monolithic `tag_cache/` directory (must contain `blob_index.dat` + `tags_N` / `cache_N` partition blobs). Also accepted as the global `-c` flag. |
+| `--group <TAG>` | Filter to entries whose group matches a 4-char group_tag (`bipd`, `mode`, `bitm`, …). Repeatable. |
+| `--filter <S>` | Filter to entries whose cache-relative name contains `S`. |
+| `--limit <N>` | Cap the number of rows printed (default 0 = unlimited). |
+
+Walks the cache's `blob_index.dat`, joins each `TagFileEntry` against its `tag_heap_entry_index`, and prints one row per tag: `<group>: <name>  size=<bytes>`. Useful for discovering what's in a cache before extracting; downstream verbs (`inspect`, `extract-geometry`, etc.) consume the same cache-relative names.
+
+```sh
+# Every tag in the cache
+$ blam-tag-shell --cache /path/to/halo4_xbox360/tag_cache list-cache
+
+# Just bipeds
+$ blam-tag-shell --cache /path/to/halo4_xbox360/tag_cache list-cache --group bipd
+bipd: objects/characters/elite/elite                              size=12824
+bipd: objects/characters/storm_elite/storm_elite                  size=14112
+...
+
+# Find a specific model by name fragment, then extract
+$ blam-tag-shell --cache /path/to/halo4_xbox360/tag_cache list-cache \
+    --group mode --filter mammoth
+mode: objects/vehicles/mammoth/storm_mammoth                      size=4823104
+
+$ blam-tag-shell --game halo4_mcc --cache /path/to/halo4_xbox360/tag_cache \
+    extract-geometry objects/vehicles/mammoth/storm_mammoth.model \
+    --output ~/Downloads
+```
+
+The monolithic reader is implemented by [`blam_tags::monolithic`](../blam-tags/src/monolithic/). For X360 render_models, the `extract-geometry` pipeline transparently hydrates the cache's xsync-resident vertex / index buffers into the same author-format fields PC MCC tags carry natively (via [`blam_tags::render_geometry`](../blam-tags/src/render_geometry/)) — same JMS / ASS output, no caller-visible difference.
 
 ---
 

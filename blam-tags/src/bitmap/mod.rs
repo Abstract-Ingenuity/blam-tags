@@ -37,10 +37,11 @@ pub mod decode;
 pub mod format;
 pub mod layout;
 pub mod tiff;
+pub mod xbox360;
 
 pub use format::{BitmapCurve, BitmapFormat};
 
-use dds::{decode_dxn_mono_alpha, write_dds, write_dds_dx10};
+use dds::{needs_decode_for_dds, write_dds, write_dds_dx10};
 
 /// Errors returned by the bitmap walkers and DDS writer.
 #[derive(Debug)]
@@ -89,31 +90,100 @@ impl From<std::io::Error> for BitmapError {
     fn from(value: std::io::Error) -> Self { Self::Io(value) }
 }
 
-/// High-level view of a `.bitmap` tag — the `bitmaps[]` block + the
-/// shared `processed pixel data` blob. Construct from a parsed
+/// High-level view of a `.bitmap` tag — the `bitmaps[]` block plus
+/// each image's resolved pixel bytes. Construct from a parsed
 /// [`TagFile`] via [`Bitmap::new`].
+///
+/// Pixel storage varies by build:
+///
+/// - **MCC (and other PC tags):** all images share a top-level
+///   `processed pixel data` blob; each image's `pixels offset`
+///   indexes into it.
+/// - **Xbox 360 monolithic builds:** each image's pixels live in
+///   its own per-image `texture resource` (a pageable resource
+///   whose contents are streamed from a `cache_N` partition and
+///   pre-hydrated by [`crate::monolithic::MonolithicCache::read_tag`]).
+///
+/// `Bitmap` normalizes both cases by owning a `Vec<u8>` per image
+/// — sliced from the shared blob for MCC, or copied from each
+/// resource's payload for X360. Per-image consumers
+/// ([`BitmapImage`]) get a borrowed `&[u8]` covering just their
+/// own data.
 pub struct Bitmap<'a> {
-    pixels: &'a [u8],
     bitmaps: TagBlock<'a>,
+    per_image_pixels: Vec<Vec<u8>>,
+    /// Per-image override of the mipmap level count. `None` means
+    /// trust the tag's `mipmap count` field. `Some(n)` is used when
+    /// we synthesize a different mip layout — currently only set
+    /// for X360 bitmaps where we deliver just the base mip after
+    /// detiling.
+    per_image_mip_override: Vec<Option<u32>>,
 }
 
 impl<'a> Bitmap<'a> {
     /// Wrap a parsed `.bitmap` tag. Errors with [`BitmapError::NotABitmapTag`]
-    /// if the tag doesn't expose `bitmaps[]` and `processed pixel data`.
+    /// if the tag doesn't expose a `bitmaps[]` (or `xenon bitmaps[]`)
+    /// block with usable pixel data.
+    ///
+    /// Halo 4 bitmap tags carry **two parallel image-metadata blocks**
+    /// — `bitmaps[]` (the PC-format mirror) and `xenon bitmaps[]`
+    /// (the Xbox-360-format mirror with tiling / byte-order flags)
+    /// — plus a third parallel `hardware textures[]` block that
+    /// carries each image's pageable `texture resource`. MCC tags
+    /// keep `bitmaps[]` populated and put pixels in
+    /// `processed pixel data`; monolithic X360 builds use
+    /// `xenon bitmaps[]` for metadata and per-image
+    /// `hardware textures[i]/texture resource` for pixel bytes.
     pub fn new(tag: &'a TagFile) -> Result<Self, BitmapError> {
         let root = tag.root();
 
-        let pixels = root
+        let pc_bitmaps = root.field_path("bitmaps").and_then(|f| f.as_block());
+        let xenon_bitmaps = root.field_path("xenon bitmaps").and_then(|f| f.as_block());
+        let hardware_textures = root.field_path("hardware textures").and_then(|f| f.as_block());
+
+        let shared_pc_pixels = root
             .field_path("processed pixel data")
             .and_then(|f| f.as_data())
-            .ok_or(BitmapError::NotABitmapTag)?;
+            .unwrap_or(&[]);
+        let shared_xenon_pixels = root
+            .field_path("xenon processed pixel data")
+            .and_then(|f| f.as_data())
+            .unwrap_or(&[]);
 
-        let bitmaps = root
-            .field_path("bitmaps")
-            .and_then(|f| f.as_block())
-            .ok_or(BitmapError::NotABitmapTag)?;
+        // Choose the metadata block (drives image count + format).
+        // X360 mode kicks in when PC pixel data is empty and the
+        // X360-specific blocks exist.
+        let use_x360 = shared_pc_pixels.is_empty() && xenon_bitmaps.is_some();
+        let (bitmaps, shared_pixels) = if use_x360 {
+            (xenon_bitmaps.unwrap(), shared_xenon_pixels)
+        } else if let Some(pb) = pc_bitmaps {
+            (pb, shared_pc_pixels)
+        } else if let Some(xb) = xenon_bitmaps {
+            (xb, shared_xenon_pixels)
+        } else {
+            return Err(BitmapError::NotABitmapTag);
+        };
 
-        Ok(Self { pixels, bitmaps })
+        let mut per_image_pixels: Vec<Vec<u8>> = Vec::with_capacity(bitmaps.len());
+        let mut per_image_mip_override: Vec<Option<u32>> = Vec::with_capacity(bitmaps.len());
+        for (i, elem) in bitmaps.iter().enumerate() {
+            let hw_elem = if use_x360 {
+                hardware_textures.as_ref().and_then(|b| b.element(i))
+            } else {
+                None
+            };
+            let (pixels, mip_override) = resolve_image_pixels(elem, hw_elem, shared_pixels)?;
+            per_image_pixels.push(pixels);
+            per_image_mip_override.push(mip_override);
+        }
+
+        // If neither source produced data for any image, this isn't
+        // a usable bitmap.
+        if per_image_pixels.iter().all(|p| p.is_empty()) {
+            return Err(BitmapError::NotABitmapTag);
+        }
+
+        Ok(Self { bitmaps, per_image_pixels, per_image_mip_override })
     }
 
     /// Number of images in the tag's `bitmaps[]` block.
@@ -123,24 +193,150 @@ impl<'a> Bitmap<'a> {
     pub fn is_empty(&self) -> bool { self.bitmaps.is_empty() }
 
     /// Get the image at `index`, or `None` if out of range.
-    pub fn image(&self, index: usize) -> Option<BitmapImage<'a>> {
+    pub fn image(&self, index: usize) -> Option<BitmapImage<'_>> {
         let elem = self.bitmaps.element(index)?;
-        Some(BitmapImage { elem, pixels: self.pixels })
+        let pixels = self.per_image_pixels.get(index)?.as_slice();
+        let mip_override = self.per_image_mip_override.get(index).copied().flatten();
+        Some(BitmapImage { elem, pixels, mip_override })
     }
 
     /// Iterate every image in declaration order.
-    pub fn iter(&self) -> impl Iterator<Item = BitmapImage<'a>> + '_ {
-        let pixels = self.pixels;
-        self.bitmaps.iter().map(move |elem| BitmapImage { elem, pixels })
+    pub fn iter(&self) -> impl Iterator<Item = BitmapImage<'_>> + '_ {
+        let per_image = &self.per_image_pixels;
+        let overrides = &self.per_image_mip_override;
+        self.bitmaps.iter().enumerate().map(move |(i, elem)| BitmapImage {
+            elem,
+            pixels: per_image[i].as_slice(),
+            mip_override: overrides[i],
+        })
     }
 }
 
-/// One element of `bitmaps[]` — metadata plus the slice of
-/// `processed pixel data` it owns.
+/// Resolve one image's pixel byte slice plus an optional mip-count
+/// override. On X360 builds the bytes come from
+/// `hardware textures[i]/texture resource`, get detiled +
+/// byte-swapped, and the returned override pins the chain to a
+/// single base mip. On PC/MCC they're sliced from the shared
+/// `processed pixel data` blob at this image's `pixels offset` and
+/// no override is set.
+fn resolve_image_pixels<'a>(
+    elem: TagStruct<'a>,
+    hw_elem: Option<TagStruct<'a>>,
+    shared_pixels: &'a [u8],
+) -> Result<(Vec<u8>, Option<u32>), BitmapError> {
+    if let Some(hw) = hw_elem
+        && let Some(payload) = hw
+            .field("texture resource")
+            .and_then(|f| f.as_resource())
+            .and_then(|r| r.exploded_payload())
+    {
+        return convert_x360_image(elem, payload);
+    }
+
+    if !shared_pixels.is_empty() {
+        let offset = elem.read_int_any("pixels offset").unwrap_or(0).max(0) as usize;
+        if offset <= shared_pixels.len() {
+            return Ok((shared_pixels[offset..].to_vec(), None));
+        }
+    }
+
+    Ok((Vec::new(), None))
+}
+
+/// Convert an Xbox-360 per-image cache payload into a PC-shaped
+/// pixel buffer.
+///
+/// The payload is the concatenation of the resource's secondary
+/// buffer bytes (the high-res mip 0) followed by its primary buffer
+/// bytes (the smaller mip chain). See
+/// [`crate::monolithic::XSyncStateHeader`] for the (counterintuitive)
+/// byte-range pairing the hydrator uses to slice these out of the
+/// cache block. Both halves are in Xenos 32×32-tile swizzled order
+/// and big-endian byte order within each compressed block.
+///
+/// Scope: this implementation detiles **only mip 0** (from the
+/// optional half) and returns it with a mip-count override of 1.
+/// The smaller mip chain has its own packed layout (each level
+/// 4KB-aligned, sub-16-pixel mips share tiles) that we don't yet
+/// reproduce; consumers that need full mip chains for X360
+/// bitmaps would need a per-level offset table à la TagTool's
+/// `GetXboxBitmapLevelOffset`.
+fn convert_x360_image<'a>(
+    elem: TagStruct<'a>,
+    payload: &[u8],
+) -> Result<(Vec<u8>, Option<u32>), BitmapError> {
+    let width = elem.read_int_any("width").unwrap_or(0).max(0) as u32;
+    let height = elem.read_int_any("height").unwrap_or(0).max(0) as u32;
+
+    // Format → block dimensions + bytes-per-block. Bail out on any
+    // format we don't know how to detile yet.
+    let format_name = elem
+        .read_enum_name("format")
+        .ok_or(BitmapError::NotABitmapTag)?;
+    let format = BitmapFormat::from_schema_name(&format_name)
+        .ok_or_else(|| BitmapError::FormatNotSupported(format_name.clone()))?;
+    let (block_w, block_h, bytes_per_block) = format
+        .block_dims_and_size()
+        .ok_or_else(|| BitmapError::FormatNotSupported(format_name))?;
+
+    // Mip 0 in block units. Each tile is 32×32 blocks; the tiled
+    // surface rounds up to a tile-aligned grid.
+    let mip0_w_blocks = width.div_ceil(block_w);
+    let mip0_h_blocks = height.div_ceil(block_h);
+    let aligned_w = (mip0_w_blocks + 31) & !31;
+    let aligned_h = (mip0_h_blocks + 31) & !31;
+    let tiled_size = (aligned_w as usize) * (aligned_h as usize) * (bytes_per_block as usize);
+
+    if payload.len() < tiled_size {
+        return Err(BitmapError::PixelSliceOutOfBounds {
+            offset: 0,
+            size: tiled_size as u64,
+            available: payload.len() as u64,
+        });
+    }
+
+    let mut linear = xbox360::detile_blocks(
+        &payload[..tiled_size],
+        aligned_w,
+        aligned_h,
+        bytes_per_block,
+    );
+
+    // Strip down to the texture's actual block grid (drop the
+    // tile-alignment padding rows / columns).
+    let actual_block_count = (mip0_w_blocks as usize) * (mip0_h_blocks as usize);
+    let actual_bytes = actual_block_count * bytes_per_block as usize;
+    if mip0_w_blocks != aligned_w || mip0_h_blocks != aligned_h {
+        let mut compact = vec![0u8; actual_bytes];
+        let bpb = bytes_per_block as usize;
+        for y in 0..mip0_h_blocks as usize {
+            let src = y * aligned_w as usize * bpb;
+            let dst = y * mip0_w_blocks as usize * bpb;
+            let row = mip0_w_blocks as usize * bpb;
+            compact[dst..dst + row].copy_from_slice(&linear[src..src + row]);
+        }
+        linear = compact;
+    } else {
+        linear.truncate(actual_bytes);
+    }
+
+    xbox360::swap_byte_pairs(&mut linear);
+
+    Ok((linear, Some(1)))
+}
+
+/// One element of `bitmaps[]` — metadata plus the slice of pixel
+/// bytes this image owns. Pixel storage is normalized by
+/// [`Bitmap::new`]: the slice always starts at this image's first
+/// pixel byte, regardless of MCC vs X360 origin.
 #[derive(Clone, Copy)]
 pub struct BitmapImage<'a> {
     elem: TagStruct<'a>,
     pixels: &'a [u8],
+    /// `Some(n)` overrides the schema-derived mip count. Set only
+    /// when [`Bitmap::new`] synthesized a mip chain shorter than
+    /// what the tag declares (X360 single-mip case).
+    mip_override: Option<u32>,
 }
 
 impl<'a> BitmapImage<'a> {
@@ -154,8 +350,13 @@ impl<'a> BitmapImage<'a> {
     pub fn depth(&self) -> u32 { self.elem.read_int_any("depth").unwrap_or(1).max(1) as u32 }
 
     /// Total mipmap levels including the base level. The schema's
-    /// `mipmap count` excludes the base, so this is `that + 1`.
+    /// `mipmap count` excludes the base, so this is `that + 1` —
+    /// unless [`Bitmap::new`] overrode the count, which happens
+    /// when we synthesize a shorter chain (e.g. X360 single-mip).
     pub fn mipmap_levels(&self) -> u32 {
+        if let Some(n) = self.mip_override {
+            return n;
+        }
         self.elem.read_int_any("mipmap count").unwrap_or(0).max(0) as u32 + 1
     }
 
@@ -210,40 +411,41 @@ impl<'a> BitmapImage<'a> {
         }
     }
 
-    /// Byte slice into `processed pixel data` covering this image's
-    /// full mipmap chain across all faces / layers.
+    /// Byte slice covering this image's full mipmap chain across
+    /// all faces / layers.
     ///
-    /// `pixels offset` is taken from the tag — it's the authoritative
-    /// position for multi-image slicing. The slice *length* is
-    /// recomputed from format + dimensions + mipmap count + layer
-    /// count rather than `pixels size`, because the size field is
-    /// sometimes stale on MCC tags (e.g. inflated by 2× from an
-    /// original split-resource layout).
+    /// The slice length is computed from format + dimensions +
+    /// mipmap count + layer count rather than the tag's `pixels
+    /// size` field, because the size field is sometimes stale on
+    /// MCC tags (e.g. inflated by 2× from an original split-resource
+    /// layout). The slice starts at offset 0 of this image's
+    /// per-image pixel buffer; [`Bitmap::new`] has already resolved
+    /// the right base (either the shared `processed pixel data` at
+    /// the image's `pixels offset`, or the hydrated per-image
+    /// `texture resource`).
     pub fn pixel_bytes(&self) -> Result<&'a [u8], BitmapError> {
-        let offset = self.elem.read_int_any("pixels offset").unwrap_or(0).max(0) as usize;
         let format = self.format()?;
         let layers = self.layer_count() as u64;
         let expected = format.surface_bytes(self.width(), self.height(), self.mipmap_levels())
             .saturating_mul(layers) as usize;
 
-        let end = offset.saturating_add(expected);
-        if end > self.pixels.len() {
+        if expected > self.pixels.len() {
             return Err(BitmapError::PixelSliceOutOfBounds {
-                offset: offset as u64,
+                offset: 0,
                 size: expected as u64,
                 available: self.pixels.len() as u64,
             });
         }
-        Ok(&self.pixels[offset..end])
+        Ok(&self.pixels[..expected])
     }
 
     /// Write a DDS file representing this image. Picks the legacy
     /// DDS pixelformat when possible; falls back to the DXT10
     /// extension when the format or type requires it (texture
     /// arrays, or formats with no legacy fourcc / pixelformat).
-    /// Halo-specific decoder-only formats (`dxn_mono_alpha`) are
-    /// decompressed to A8R8G8B8 first, then routed through the
-    /// normal DDS writer.
+    /// Halo-specific decoder-only formats (`dxn_mono_alpha`, `ctx1`,
+    /// the `dxt3a*` family, `dxt5nm`, …) are CPU-decompressed to
+    /// A8R8G8B8 first, then routed through the normal DDS writer.
     pub fn write_dds(&self, out: &mut impl Write) -> Result<(), BitmapError> {
         let format = self.format()?;
         let type_name = self.type_name();
@@ -257,20 +459,57 @@ impl<'a> BitmapImage<'a> {
         }
         let bytes = self.pixel_bytes()?;
 
-        // Halo-specific BC5-shaped layout that needs CPU
-        // decompression to be readable. Decode to A8R8G8B8 and
-        // dispatch as that.
-        if format == BitmapFormat::DxnMonoAlpha {
-            let decoded = decode_dxn_mono_alpha(
-                bytes, self.width(), self.height(),
-                self.mipmap_levels(), self.layer_count(),
-            );
+        // Formats with no clean legacy DDS pixelformat get decoded
+        // to RGBA8 per mip-and-face, then written as A8R8G8B8.
+        if needs_decode_for_dds(format) {
+            let decoded = self.decode_all_to_rgba8(format, bytes)?;
             return self.write_dds_with_format(
                 out, BitmapFormat::A8r8g8b8, &decoded, is_cube, is_array,
             );
         }
 
         self.write_dds_with_format(out, format, bytes, is_cube, is_array)
+    }
+
+    /// Decode every mip of every face/layer to RGBA8, concatenated in
+    /// the same `[face0_mips ... faceN_mips]` order the original
+    /// bytes were laid out. Used to substitute A8R8G8B8 for formats
+    /// that have no native DDS pixelformat.
+    fn decode_all_to_rgba8(
+        &self,
+        format: BitmapFormat,
+        bytes: &[u8],
+    ) -> Result<Vec<u8>, BitmapError> {
+        let width = self.width();
+        let height = self.height();
+        let levels = self.mipmap_levels();
+        let layers = self.layer_count();
+        // Each face's mip chain is the surface-bytes count for the
+        // source format; the decoded chain (RGBA8) has the same mip
+        // count and dimensions but a different per-pixel byte count.
+        let face_src_bytes = format.surface_bytes(width, height, levels) as usize;
+        let mut out: Vec<u8> = Vec::new();
+        for face in 0..layers as usize {
+            let face_start = face * face_src_bytes;
+            let mut cursor = face_start;
+            for level in 0..levels {
+                let w = (width >> level).max(1);
+                let h = (height >> level).max(1);
+                let level_size = format.level_bytes(w, h) as usize;
+                if cursor + level_size > bytes.len() {
+                    return Err(BitmapError::PixelSliceOutOfBounds {
+                        offset: cursor as u64,
+                        size: level_size as u64,
+                        available: bytes.len() as u64,
+                    });
+                }
+                let decoded =
+                    decode::decode_to_rgba8(format, w, h, &bytes[cursor..cursor + level_size])?;
+                out.extend_from_slice(&decoded);
+                cursor += level_size;
+            }
+        }
+        Ok(out)
     }
 
     /// Write this image as a Tool-importable RGBA8 TIFF (Phase 2:

@@ -31,7 +31,7 @@ use anyhow::{Context, Result};
 use blam_tags::{AssFile, AssObjectPayload, JmsFile, TagFieldData, TagFile};
 
 use crate::context::CliContext;
-use blam_tags::paths::{derive_tags_root, resolve_tag_path, tag_ref_path, tag_stem};
+use blam_tags::paths::{tag_ref_path, tag_stem};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Kind { Render, Collision, Physics }
@@ -129,20 +129,20 @@ fn run_hlmt(
         }).collect()
     };
 
-    let tags_root = derive_tags_root(&loaded.path)
-        .context("failed to derive tags root from input path — input must live under a `tags/` directory")?;
     let stem = tag_stem(&loaded.path, "model");
     let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
-    let render_path = resolve_child_ref(&loaded.tag, Kind::Render, &tags_root);
-    let collision_path = resolve_child_ref(&loaded.tag, Kind::Collision, &tags_root);
-    let physics_path = resolve_child_ref(&loaded.tag, Kind::Physics, &tags_root);
+    let render_ref = tag_ref_path(&loaded.tag.root(), Kind::Render.model_field());
+    let collision_ref = tag_ref_path(&loaded.tag.root(), Kind::Collision.model_field());
+    let physics_ref = tag_ref_path(&loaded.tag.root(), Kind::Physics.model_field());
 
     // Always load the render_model first when ANY kind is selected:
     // render-side dispatch needs it, and coll/phmo need its skeleton.
-    let render_tag = match &render_path {
-        Some(p) => Some(TagFile::read(p)
-            .with_context(|| format!("read render_model {}", p.display()))?),
+    let render_tag = match &render_ref {
+        Some(r) => Some(
+            ctx.load_referenced_tag(r, Kind::Render.extension())
+                .with_context(|| format!("read render_model `{r}`"))?,
+        ),
         None => None,
     };
 
@@ -196,10 +196,11 @@ fn run_hlmt(
                     }
                 }
             }
-            Kind::Collision => match (&collision_path, skeleton) {
-                (Some(p), Some(skel)) => {
-                    let t = TagFile::read(p)
-                        .with_context(|| format!("read collision_model {}", p.display()))?;
+            Kind::Collision => match (&collision_ref, skeleton) {
+                (Some(r), Some(skel)) => {
+                    let t = ctx
+                        .load_referenced_tag(r, Kind::Collision.extension())
+                        .with_context(|| format!("read collision_model `{r}`"))?;
                     let jms = JmsFile::from_collision_model_with_skeleton(&t, skel)
                         .context("build collision_model JMS")?;
                     let path = output_path_for(&out_root, &stem, kind, flat, "jms");
@@ -209,10 +210,11 @@ fn run_hlmt(
                 (Some(_), None) => skipped.push((kind, "needs render_model for skeleton".to_owned())),
                 (None, _) => skipped.push((kind, "no collision_model reference".to_owned())),
             },
-            Kind::Physics => match (&physics_path, skeleton) {
-                (Some(p), Some(skel)) => {
-                    let t = TagFile::read(p)
-                        .with_context(|| format!("read physics_model {}", p.display()))?;
+            Kind::Physics => match (&physics_ref, skeleton) {
+                (Some(r), Some(skel)) => {
+                    let t = ctx
+                        .load_referenced_tag(r, Kind::Physics.extension())
+                        .with_context(|| format!("read physics_model `{r}`"))?;
                     let jms = JmsFile::from_physics_model_with_skeleton(&t, skel)
                         .context("build physics_model JMS")?;
                     let path = output_path_for(&out_root, &stem, kind, flat, "jms");
@@ -261,11 +263,6 @@ fn detect_render_format(tag: &TagFile) -> Option<Force> {
     } else {
         Some(Force::Jms)
     }
-}
-
-fn resolve_child_ref(tag: &TagFile, kind: Kind, tags_root: &Path) -> Option<PathBuf> {
-    let rel = tag_ref_path(&tag.root(), kind.model_field())?;
-    Some(resolve_tag_path(tags_root, &rel, kind.extension()))
 }
 
 fn output_path_for(out_root: &Path, stem: &str, kind: Kind, flat: bool, ext: &str) -> PathBuf {
@@ -323,8 +320,6 @@ fn ass_summary(ass: &AssFile) -> String {
 /// - `--flat`: `<DIR>/<scenario_stem>.<bsp_stem>.ass`
 fn run_scenario(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()> {
     let loaded = ctx.loaded("extract-geometry")?;
-    let tags_root = derive_tags_root(&loaded.path)
-        .context("failed to derive tags root from input path — input must live under a `tags/` directory")?;
     let scenario_stem = tag_stem(&loaded.path, "scenario");
     let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
@@ -346,35 +341,33 @@ fn run_scenario(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Resul
             warnings.push(format!("structure_bsps[{bi}]: no structure_bsp ref — skipped"));
             continue;
         };
-        let bsp_abs = resolve_tag_path(&tags_root, &bsp_rel, "scenario_structure_bsp");
-        let bsp_tag = match TagFile::read(&bsp_abs) {
+        let bsp_tag = match ctx.load_referenced_tag(&bsp_rel, "scenario_structure_bsp") {
             Ok(t) => t,
             Err(e) => {
-                warnings.push(format!("structure_bsps[{bi}]: read {} failed — {}", bsp_abs.display(), e));
+                warnings.push(format!("structure_bsps[{bi}]: read `{bsp_rel}` failed — {e}"));
                 continue;
             }
         };
 
         let mut ass = AssFile::from_scenario_structure_bsp(&bsp_tag)
-            .with_context(|| format!("structure_bsps[{bi}]: build ASS from {}", bsp_abs.display()))?;
+            .with_context(|| format!("structure_bsps[{bi}]: build ASS from `{bsp_rel}`"))?;
 
         if let Some(lighting_rel) = lighting_ref_path {
-            let lighting_abs = resolve_tag_path(&tags_root, &lighting_rel, "scenario_structure_lighting_info");
-            match TagFile::read(&lighting_abs) {
+            match ctx.load_referenced_tag(&lighting_rel, "scenario_structure_lighting_info") {
                 Ok(stli) => {
                     if let Err(e) = ass.add_lights_from_stli(&stli) {
                         warnings.push(format!("structure_bsps[{bi}]: lighting layer failed — {e}"));
                     }
                 }
                 Err(e) => warnings.push(format!(
-                    "structure_bsps[{bi}]: lighting tag {} unreadable — {e}", lighting_abs.display()
+                    "structure_bsps[{bi}]: lighting tag `{lighting_rel}` unreadable — {e}"
                 )),
             }
         } else {
             warnings.push(format!("structure_bsps[{bi}]: no lighting_info ref — emitting without lights"));
         }
 
-        let bsp_stem = bsp_abs.file_stem().and_then(|s| s.to_str()).unwrap_or("bsp").to_owned();
+        let bsp_stem = bsp_rel.rsplit('\\').next().unwrap_or("bsp").to_owned();
         let path = if flat {
             out_root.join(format!("{scenario_stem}.{bsp_stem}.ass"))
         } else {

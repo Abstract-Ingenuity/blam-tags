@@ -257,7 +257,7 @@ fn parse_api_interop(s: &str) -> Result<ApiInteropData, ParseError> {
     raw.extend_from_slice(&descriptor.to_le_bytes());
     raw.extend_from_slice(&address.to_le_bytes());
     raw.extend_from_slice(&definition_address.to_le_bytes());
-    Ok(ApiInteropData { raw })
+    Ok(ApiInteropData { raw, endian: blam_tags::Endian::Le })
 }
 
 fn parse_tag_reference(ctx: &CliContext, s: &str) -> Result<TagReferenceData, ParseError> {

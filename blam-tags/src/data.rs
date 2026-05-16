@@ -17,6 +17,7 @@ use crate::error::TagReadError;
 use crate::fields::{deserialize_field, serialize_field, TagFieldData, TagFieldType};
 use crate::io::*;
 use crate::layout::{TagBlockLayout, TagLayout, TagStructLayout};
+use crate::monolithic::XSyncState;
 
 /// A struct within a tag's data tree. Owns its `sub_chunks` (nested
 /// structures + leaf sub-chunks); its *bytes* live in the enclosing
@@ -106,17 +107,34 @@ pub(crate) enum TagResourceChunk {
     /// payload blob and the resource's own struct tree. The resource
     /// struct's raw bytes (typically 8 inline bytes) live in the
     /// enclosing block's `raw_data` at the resource field's offset.
+    ///
+    /// Also the post-hydration shape for monolithic-cache xsync
+    /// resources — see [`xsync_state`](Self::Exploded::xsync_state).
     Exploded {
         /// `tgdt` payload (content bytes only; header reconstructible
         /// on write).
         exploded: Vec<u8>,
         /// Nested resource struct tree (sub_chunks only).
         struct_data: TagStructData,
+        /// For resources synthesized by the monolithic-cache
+        /// hydration pass (`tgxc` → `Exploded`), the parsed xsync
+        /// state — control_data (with fixups already applied via
+        /// [`XSyncState::apply_control_fixups`] at hydration time is
+        /// up to the consumer), root_address, pageable/optional
+        /// fixups, and interop GUIDs. `None` for native MCC `tgrc`
+        /// resources whose definition lives directly in
+        /// `exploded[..struct_size]`. Not written back to disk —
+        /// hydrated form serializes back as plain `tgrc`.
+        xsync_state: Option<Box<XSyncState>>,
     },
-    /// `tgxc` — XSync resource. Opaque payload. Not seen in the
-    /// Halo 3 / Reach MCC corpus; kept here so future tags that use
-    /// it don't panic.
-    Xsync(Vec<u8>),
+    /// `tgxc` — XSync resource. Opaque payload from the tag stream
+    /// (the metadata that points at cache-resident data on
+    /// monolithic builds). MCC writes `version = 0`; the Halo 4
+    /// X360 dev build writes `version = 3` with a different
+    /// internal layout. The version is preserved here so the
+    /// monolithic-hydration pass in [`crate::monolithic`] can pick
+    /// the right xsync-state shape.
+    Xsync { version: u32, payload: Vec<u8> },
 }
 
 impl TagStructData {
@@ -129,9 +147,10 @@ impl TagStructData {
         layout: &TagLayout,
         definition: &TagStructLayout,
         reader: &mut std::io::BufReader<R>,
+        endian: Endian,
     ) -> Result<Self, TagReadError> {
         let tag_struct_header_offset = reader.stream_position()?;
-        let tag_struct_header = read_chunk_header(reader)?;
+        let tag_struct_header = read_chunk_header(reader, endian)?;
         let tag_struct_offset = reader.stream_position()?;
         if tag_struct_header.signature != u32::from_be_bytes(*b"tgst") {
             return Err(TagReadError::BadChunkSignature {
@@ -154,7 +173,7 @@ impl TagStructData {
 
         // tgst with size=0 is a null struct: no sub-chunks follow.
         let sub_chunks = if tag_struct_header.size != 0 {
-            let mut sub_chunks = read_sub_chunks(layout, definition, reader)?;
+            let mut sub_chunks = read_sub_chunks(layout, definition, reader, endian)?;
 
             // Trailing empty-tgst absorb: MCC's writer occasionally
             // emits size=0 tgst chunks at the end of a struct's
@@ -174,7 +193,7 @@ impl TagStructData {
                         break;
                     }
 
-                    let trailer = read_chunk_header(reader)?;
+                    let trailer = read_chunk_header(reader, endian)?;
 
                     if trailer.signature != u32::from_be_bytes(*b"tgst") || trailer.size != 0 {
                         non_empty_trailing_chunks = true;
@@ -246,6 +265,7 @@ impl TagStructData {
         layout: &TagLayout,
         struct_raw: &[u8],
         field_index: usize,
+        endian: Endian,
     ) -> Option<TagFieldData> {
         let field = &layout.fields[field_index];
         let sub_chunk = self
@@ -253,7 +273,7 @@ impl TagStructData {
             .iter()
             .find(|entry| entry.field_index == Some(field_index as u32))
             .map(|entry| &entry.content);
-        deserialize_field(layout, field, struct_raw, sub_chunk)
+        deserialize_field(layout, field, struct_raw, sub_chunk, endian)
     }
 
     /// Write `value` back to this struct.
@@ -306,6 +326,7 @@ impl TagStructData {
                         block_index: block_layout.index,
                         flags: 0,
                         raw_data: Vec::new(),
+                        endian: Endian::Le,
                         elements: Vec::new(),
                     }))
                 }
@@ -461,6 +482,7 @@ fn read_sub_chunks<R: Seek + Read>(
     layout: &TagLayout,
     definition: &TagStructLayout,
     reader: &mut std::io::BufReader<R>,
+    endian: Endian,
 ) -> Result<Vec<TagSubChunkEntry>, TagReadError> {
     let mut sub_chunks = Vec::new();
     let mut field_index = definition.first_field_index as usize;
@@ -481,7 +503,7 @@ fn read_sub_chunks<R: Seek + Read>(
                 if expected_children > 0 {
                     loop {
                         let header_offset = reader.stream_position()?;
-                        let header = read_chunk_header(reader)?;
+                        let header = read_chunk_header(reader, endian)?;
 
                         if header.signature != u32::from_be_bytes(*b"tgst") {
                             return Err(TagReadError::BadChunkSignature {
@@ -510,7 +532,7 @@ fn read_sub_chunks<R: Seek + Read>(
                     }
                 }
 
-                let nested = TagStructData::read(layout, nested_definition, reader)?;
+                let nested = TagStructData::read(layout, nested_definition, reader, endian)?;
 
                 sub_chunks.push(TagSubChunkEntry {
                     field_index: Some(field_index as u32),
@@ -525,7 +547,7 @@ fn read_sub_chunks<R: Seek + Read>(
                 let mut elements = Vec::with_capacity(array_layout.count as usize);
 
                 for _ in 0..array_layout.count as usize {
-                    let element_sub_chunks = read_sub_chunks(layout, element_definition, reader)?;
+                    let element_sub_chunks = read_sub_chunks(layout, element_definition, reader, endian)?;
 
                     elements.push(TagStructData {
                         struct_index: element_definition.index,
@@ -541,7 +563,7 @@ fn read_sub_chunks<R: Seek + Read>(
 
             TagFieldType::Block => {
                 let block_layout = &layout.block_layouts[field.definition as usize];
-                let block_data = TagBlockData::read(layout, block_layout, reader)?;
+                let block_data = TagBlockData::read(layout, block_layout, reader, endian)?;
 
                 sub_chunks.push(TagSubChunkEntry {
                     field_index: Some(field_index as u32),
@@ -550,7 +572,7 @@ fn read_sub_chunks<R: Seek + Read>(
             }
 
             TagFieldType::TagReference => {
-                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgrf"))?;
+                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgrf"), endian)?;
                 if version != 0 {
                     return Err(TagReadError::BadChunkVersion { chunk: "tgrf", version });
                 }
@@ -561,7 +583,7 @@ fn read_sub_chunks<R: Seek + Read>(
             }
 
             TagFieldType::StringId => {
-                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgsi"))?;
+                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgsi"), endian)?;
                 if version != 0 {
                     return Err(TagReadError::BadChunkVersion {
                         chunk: "tgsi (string_id)",
@@ -575,7 +597,7 @@ fn read_sub_chunks<R: Seek + Read>(
             }
 
             TagFieldType::OldStringId => {
-                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgsi"))?;
+                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgsi"), endian)?;
                 if version != 0 {
                     return Err(TagReadError::BadChunkVersion {
                         chunk: "tgsi (old_string_id)",
@@ -589,7 +611,7 @@ fn read_sub_chunks<R: Seek + Read>(
             }
 
             TagFieldType::Data => {
-                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgda"))?;
+                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"tgda"), endian)?;
                 if version != 0 {
                     return Err(TagReadError::BadChunkVersion { chunk: "tgda", version });
                 }
@@ -603,7 +625,7 @@ fn read_sub_chunks<R: Seek + Read>(
                 let resource_layout = &layout.resource_layouts[field.definition as usize];
                 let resource_struct_definition = &layout.struct_layouts[resource_layout.struct_index as usize];
 
-                let outer_header = read_chunk_header(reader)?;
+                let outer_header = read_chunk_header(reader, endian)?;
                 let outer_content_offset = reader.stream_position()?;
 
                 let resource = match &outer_header.signature.to_be_bytes() {
@@ -625,7 +647,7 @@ fn read_sub_chunks<R: Seek + Read>(
                             });
                         }
 
-                        let tgdt_header = read_validated_chunk_header(reader, *b"tgdt", "tgdt")?;
+                        let tgdt_header = read_validated_chunk_header(reader, *b"tgdt", "tgdt", endian)?;
 
                         let mut exploded = vec![0u8; tgdt_header.size as usize];
                         reader.read_exact(&mut exploded)?;
@@ -634,24 +656,26 @@ fn read_sub_chunks<R: Seek + Read>(
                             layout,
                             resource_struct_definition,
                             reader,
+                            endian,
                         )?;
 
-                        TagResourceChunk::Exploded { exploded, struct_data }
+                        TagResourceChunk::Exploded {
+                            exploded,
+                            struct_data,
+                            xsync_state: None,
+                        }
                     }
 
                     b"tgxc" => {
-                        // tgxc.version is always 0 — mirrors the
-                        // other resource variants; trips if an MCC
-                        // later game has a non-zero xsync version.
-                        if outer_header.version != 0 {
-                            return Err(TagReadError::BadChunkVersion {
-                                chunk: "tgxc",
-                                version: outer_header.version,
-                            });
-                        }
+                        // MCC writes tgxc v0; the Halo 4 X360 dev
+                        // build writes v3 with a different internal
+                        // payload format. We preserve both the
+                        // bytes and the version so the monolithic
+                        // hydration pass can pick the right xsync
+                        // state shape downstream.
                         let mut payload = vec![0u8; outer_header.size as usize];
                         reader.read_exact(&mut payload)?;
-                        TagResourceChunk::Xsync(payload)
+                        TagResourceChunk::Xsync { version: outer_header.version, payload }
                     }
 
                     signature => {
@@ -681,7 +705,7 @@ fn read_sub_chunks<R: Seek + Read>(
             }
 
             TagFieldType::ApiInterop => {
-                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"ti]["))?;
+                let (version, content) = read_tag_chunk_content(reader, u32::from_be_bytes(*b"ti]["), endian)?;
                 if version != 0 {
                     return Err(TagReadError::BadChunkVersion {
                         chunk: "ti][ (api_interop)",
@@ -767,15 +791,15 @@ fn write_sub_chunks<W: Write>(
                 write_tag_chunk_header(writer, u32::from_be_bytes(*b"tg\0c"), 0, 0)?;
             }
 
-            TagSubChunkContent::Resource(TagResourceChunk::Exploded { exploded, struct_data }) => {
+            TagSubChunkContent::Resource(TagResourceChunk::Exploded { exploded, struct_data, .. }) => {
                 let mut inner = Vec::new();
                 write_tag_chunk_content(&mut inner, u32::from_be_bytes(*b"tgdt"), 0, exploded)?;
                 struct_data.write(layout, &mut inner)?;
                 write_tag_chunk_content(writer, u32::from_be_bytes(*b"tgrc"), 0, &inner)?;
             }
 
-            TagSubChunkContent::Resource(TagResourceChunk::Xsync(payload)) => {
-                write_tag_chunk_content(writer, u32::from_be_bytes(*b"tgxc"), 0, payload)?;
+            TagSubChunkContent::Resource(TagResourceChunk::Xsync { version, payload }) => {
+                write_tag_chunk_content(writer, u32::from_be_bytes(*b"tgxc"), *version, payload)?;
             }
         }
     }
@@ -805,8 +829,15 @@ pub(crate) struct TagBlockData {
     pub(crate) flags: u32,
     /// Concatenated element bytes. Resized atomically by the block
     /// operations (`add_element`, `insert_at`, `duplicate_at`,
-    /// `delete_at`, `clear`).
+    /// `delete_at`, `clear`). Held in **source-wire order** — for an
+    /// Xbox 360 / BE-loaded tag the integers/floats within these
+    /// bytes are big-endian. Field readers in [`crate::fields`]
+    /// dispatch on [`Self::endian`] when slicing.
     pub(crate) raw_data: Vec<u8>,
+    /// Source byte order of [`Self::raw_data`]. Propagated from the
+    /// file's wire endian during [`Self::read`]; new blocks default
+    /// to [`Endian::Le`] since we only emit LE on write.
+    pub(crate) endian: Endian,
     /// Per-element struct trees. Each element's raw bytes live in
     /// `raw_data` at index `i * element_size`. Simple-block elements
     /// have empty `sub_chunks`.
@@ -820,12 +851,13 @@ impl TagBlockData {
         layout: &TagLayout,
         definition: &TagBlockLayout,
         reader: &mut std::io::BufReader<R>,
+        endian: Endian,
     ) -> Result<Self, TagReadError> {
-        let tag_block_header = read_validated_chunk_header(reader, *b"tgbl", "tgbl")?;
+        let tag_block_header = read_validated_chunk_header(reader, *b"tgbl", "tgbl", endian)?;
         let tag_block_offset = reader.stream_position()?;
 
-        let block_element_count = read_u32_le(reader)?;
-        let block_flags = read_u32_le(reader)?;
+        let block_element_count = read_u32(reader, endian)?;
+        let block_flags = read_u32(reader, endian)?;
 
         let struct_layout = &layout.struct_layouts[definition.struct_index as usize];
         let element_size = struct_layout.size;
@@ -838,7 +870,7 @@ impl TagBlockData {
         if (block_flags & 1) == 0 {
             // Complex block: per-element tgst sub-chunks.
             for _ in 0..block_element_count {
-                elements.push(TagStructData::read(layout, struct_layout, reader)?);
+                elements.push(TagStructData::read(layout, struct_layout, reader, endian)?);
             }
         } else {
             // Simple block: raw bytes only, no per-element tgst on disk.
@@ -861,6 +893,7 @@ impl TagBlockData {
             block_index: definition.index,
             flags: block_flags,
             raw_data,
+            endian,
             elements,
         })
     }
@@ -1016,6 +1049,7 @@ impl TagBlockData {
             block_index,
             flags: 0,
             raw_data: vec![0u8; element_size],
+            endian: Endian::Le,
             elements: vec![TagStructData::new_default(
                 layout,
                 block_layout.struct_index as usize,

@@ -79,7 +79,9 @@ pub mod animation;
 pub mod geometry;
 pub mod jms;
 pub mod ass;
+pub mod render_geometry;
 pub mod render_model;
+pub mod monolithic;
 pub mod tag_function;
 pub mod render_method;
 pub mod scenario;
@@ -113,6 +115,7 @@ pub use fields::{
 };
 pub use error::TagReadError;
 pub use file::TagFile;
+pub use io::Endian;
 pub use layout::TagLayout;
 pub use schema::{TagGroupMeta, TagSchemaError};
 pub use bitmap::{Bitmap, BitmapError, BitmapFormat, BitmapImage};

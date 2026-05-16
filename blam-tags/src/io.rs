@@ -4,62 +4,111 @@
 //! either a primitive, a fixed-width array, or a `TagChunkHeader` + payload,
 //! so callers never touch `read_exact` directly.
 //!
-//! **Byte order:** integers on the wire are little-endian; the `_le`
-//! helpers are the common case. The `_be` helpers exist for the handful
-//! of big-endian fields we may encounter in legacy/Xbox360 data.
+//! **Byte order:** integers can be either little-endian (PC / MCC, the
+//! common case) or big-endian (Xbox 360 / legacy builds). The
+//! [`Endian`] enum + dispatching readers ([`read_u16`], [`read_u32`],
+//! [`read_u64`], [`read_i32`]) pick the right byte order at runtime; the
+//! `_le` and `_be` variants are the internal implementations and only
+//! get called directly from the dispatchers + endian detection.
 //!
 //! **Chunk signatures** are 4 ASCII bytes packed into a `u32` as if
 //! read big-endian (e.g. `u32::from_be_bytes(*b"tgst")` is the canonical
 //! form), so matching a signature in source reads naturally as the tag
-//! it represents. On the wire the same bytes are written little-endian
-//! via `to_le_bytes`, which — since LE of a BE-packed u32 just reverses
-//! the memory order — re-emits the ASCII in source order.
+//! it represents. On disk the same bytes are written in the file's
+//! endian. For LE files, `to_le_bytes` of a BE-packed u32 reverses the
+//! memory order and re-emits the ASCII in source order; for BE files,
+//! `to_be_bytes` writes the ASCII bytes directly. Either way, reading
+//! with the matching endian recovers the same BE-packed u32 — so
+//! downstream signature comparisons work regardless of file endian.
 
 use std::io::{self, BufReader, Read, Seek, Write};
 
 use crate::error::TagReadError;
 
-/// Read a 2-byte big-endian `u16`.
+/// Wire byte order. Carried at the top of every read function so the
+/// dispatching primitive helpers ([`read_u16`], [`read_u32`], etc.)
+/// pick the right `from_le_bytes` / `from_be_bytes` path.
+///
+/// Detected once per file in [`crate::TagFile::read`] by peeking the
+/// fixed `BLAM` signature in both orientations, then threaded through
+/// the entire read tree. The value is also stored on the parsed
+/// [`crate::TagFile`] so writers (later) can round-trip the same
+/// endian.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Endian {
+    /// Little-endian (PC / MCC). The common case.
+    Le,
+    /// Big-endian (Xbox 360 / legacy debug builds).
+    Be,
+}
+
+/// Read a 2-byte big-endian `u16`. Prefer the dispatching [`read_u16`].
 pub fn read_u16_be<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u16> {
     let mut buffer = [0u8; size_of::<u16>()];
     reader.read_exact(&mut buffer)?;
     Ok(u16::from_be_bytes(buffer))
 }
 
-/// Read a 2-byte little-endian `u16`.
+/// Read a 2-byte little-endian `u16`. Prefer the dispatching [`read_u16`].
 pub fn read_u16_le<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u16> {
     let mut buffer = [0u8; size_of::<u16>()];
     reader.read_exact(&mut buffer)?;
     Ok(u16::from_le_bytes(buffer))
 }
 
-/// Read a 4-byte big-endian `u32`.
+/// Read a 4-byte big-endian `u32`. Prefer the dispatching [`read_u32`].
 pub fn read_u32_be<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u32> {
     let mut buffer = [0u8; size_of::<u32>()];
     reader.read_exact(&mut buffer)?;
     Ok(u32::from_be_bytes(buffer))
 }
 
-/// Read a 4-byte little-endian `u32`. The workhorse — most tag-file
-/// fields use this byte order.
+/// Read a 4-byte little-endian `u32`. Prefer the dispatching [`read_u32`].
 pub fn read_u32_le<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u32> {
     let mut buffer = [0u8; size_of::<u32>()];
     reader.read_exact(&mut buffer)?;
     Ok(u32::from_le_bytes(buffer))
 }
 
-/// Read an 8-byte big-endian `u64`.
+/// Read an 8-byte big-endian `u64`. Prefer the dispatching [`read_u64`].
 pub fn read_u64_be<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u64> {
     let mut buffer = [0u8; size_of::<u64>()];
     reader.read_exact(&mut buffer)?;
     Ok(u64::from_be_bytes(buffer))
 }
 
-/// Read an 8-byte little-endian `u64`.
+/// Read an 8-byte little-endian `u64`. Prefer the dispatching [`read_u64`].
 pub fn read_u64_le<R: Read>(reader: &mut std::io::BufReader<R>) -> io::Result<u64> {
     let mut buffer = [0u8; size_of::<u64>()];
     reader.read_exact(&mut buffer)?;
     Ok(u64::from_le_bytes(buffer))
+}
+
+/// Read a 2-byte `u16` in the file's wire endian.
+#[inline]
+pub fn read_u16<R: Read>(reader: &mut BufReader<R>, endian: Endian) -> io::Result<u16> {
+    match endian {
+        Endian::Le => read_u16_le(reader),
+        Endian::Be => read_u16_be(reader),
+    }
+}
+
+/// Read a 4-byte `u32` in the file's wire endian.
+#[inline]
+pub fn read_u32<R: Read>(reader: &mut BufReader<R>, endian: Endian) -> io::Result<u32> {
+    match endian {
+        Endian::Le => read_u32_le(reader),
+        Endian::Be => read_u32_be(reader),
+    }
+}
+
+/// Read an 8-byte `u64` in the file's wire endian.
+#[inline]
+pub fn read_u64<R: Read>(reader: &mut BufReader<R>, endian: Endian) -> io::Result<u64> {
+    match endian {
+        Endian::Le => read_u64_le(reader),
+        Endian::Be => read_u64_be(reader),
+    }
 }
 
 /// Read exactly `N` bytes into a fixed-size array. Used for
@@ -95,11 +144,12 @@ pub struct TagChunkHeader {
 /// Read a 12-byte chunk header. Pair with `write_tag_chunk_header`.
 pub fn read_tag_chunk_header<R: Read>(
     reader: &mut std::io::BufReader<R>,
+    endian: Endian,
 ) -> io::Result<TagChunkHeader> {
     Ok(TagChunkHeader {
-        signature: read_u32_le(reader)?,
-        version: read_u32_le(reader)?,
-        size: read_u32_le(reader)?,
+        signature: read_u32(reader, endian)?,
+        version: read_u32(reader, endian)?,
+        size: read_u32(reader, endian)?,
     })
 }
 
@@ -137,9 +187,10 @@ pub fn write_tag_chunk_content<W: Write>(
 pub(crate) fn read_tag_chunk_content<R: Read + Seek>(
     reader: &mut std::io::BufReader<R>,
     expected_signature: u32,
+    endian: Endian,
 ) -> Result<(u32, Vec<u8>), TagReadError> {
     let offset = reader.stream_position()?;
-    let header = read_tag_chunk_header(reader)?;
+    let header = read_tag_chunk_header(reader, endian)?;
 
     if header.signature != expected_signature {
         return Err(TagReadError::BadChunkSignature {
@@ -166,14 +217,23 @@ pub(crate) fn read_tag_chunk_content<R: Read + Seek>(
 /// that need to peek a chunk before deciding how to dispatch.
 pub(crate) fn read_chunk_header<R: Read>(
     reader: &mut BufReader<R>,
+    endian: Endian,
 ) -> Result<TagChunkHeader, TagReadError> {
     let mut buf = [0u8; 12];
     reader.read_exact(&mut buf)?;
-    Ok(TagChunkHeader {
-        signature: u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]),
-        version: u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]),
-        size: u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]),
-    })
+    let (sig, ver, sz) = match endian {
+        Endian::Le => (
+            u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]),
+            u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]),
+            u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]),
+        ),
+        Endian::Be => (
+            u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]),
+            u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]),
+            u32::from_be_bytes([buf[8], buf[9], buf[10], buf[11]]),
+        ),
+    };
+    Ok(TagChunkHeader { signature: sig, version: ver, size: sz })
 }
 
 /// Read a 12-byte chunk header, validate that its signature matches
@@ -188,9 +248,10 @@ pub(crate) fn read_validated_chunk_header<R: Read + Seek>(
     reader: &mut BufReader<R>,
     expected_sig: [u8; 4],
     chunk: &'static str,
+    endian: Endian,
 ) -> Result<TagChunkHeader, TagReadError> {
     let offset = reader.stream_position()?;
-    let header = read_chunk_header(reader)?;
+    let header = read_chunk_header(reader, endian)?;
     if header.signature != u32::from_be_bytes(expected_sig) {
         return Err(TagReadError::BadChunkSignature {
             offset,

@@ -456,7 +456,7 @@ fn read_packed_data_sizes(member: &TagStruct<'_>) -> Option<PackedDataSizes> {
     for f in s.fields() {
         let name = f.name().to_string();
         if let Some(v) = s.read_int_any(&name) {
-            fields.push((name, v));
+            fields.push((name, v as i64));
         }
     }
     Some(PackedDataSizes { fields })

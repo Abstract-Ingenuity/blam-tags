@@ -44,16 +44,19 @@ impl TagFileHeader {
     /// panicking) when the `BLAM` signature doesn't match, so callers
     /// walking directories full of non-tag files can filter them out
     /// cleanly.
-    pub fn read<R: Seek + Read>(reader: &mut std::io::BufReader<R>) -> Result<Self, TagReadError> {
+    pub fn read<R: Seek + Read>(
+        reader: &mut std::io::BufReader<R>,
+        endian: Endian,
+    ) -> Result<Self, TagReadError> {
         let pad = read_u8_array(reader)?;
-        let build_version = read_u32_le(reader)? as i32;
-        let build_number = read_u32_le(reader)? as i32;
-        let version = read_u32_le(reader)?;
-        let group_tag = read_u32_le(reader)?;
-        let group_version = read_u32_le(reader)?;
-        let checksum = read_u32_le(reader)?;
+        let build_version = read_u32(reader, endian)? as i32;
+        let build_number = read_u32(reader, endian)? as i32;
+        let version = read_u32(reader, endian)?;
+        let group_tag = read_u32(reader, endian)?;
+        let group_version = read_u32(reader, endian)?;
+        let checksum = read_u32(reader, endian)?;
         let signature_offset = reader.stream_position()?;
-        let signature = read_u32_le(reader)?;
+        let signature = read_u32(reader, endian)?;
         if signature != u32::from_be_bytes(*b"BLAM") {
             return Err(TagReadError::BadChunkSignature {
                 offset: signature_offset,
@@ -100,6 +103,10 @@ impl TagFileHeader {
 #[derive(Debug)]
 pub struct TagFile {
     pub header: TagFileHeader,
+    /// Wire byte order detected on read (LE for PC/MCC, BE for Xbox
+    /// 360 / legacy debug builds). Preserved so writers can round-trip
+    /// to the same endian the file was loaded from.
+    pub endian: Endian,
     /// The `tag!` stream — carries the tag's main payload. Access
     /// the root via [`TagFile::root`] / [`TagFile::root_mut`].
     pub(crate) tag_stream: TagStream,
@@ -149,6 +156,7 @@ impl TagFile {
         };
         Ok(Self {
             header,
+            endian: Endian::Le,
             tag_stream,
             dependency_list_stream: None,
             import_info_stream: None,
@@ -178,11 +186,15 @@ impl TagFile {
         let tag_file_size = reader.stream_position()?;
         reader.seek(SeekFrom::Start(0))?;
 
+        // Detect endian by reading the BLAM signature at offset 60 in
+        // both orientations. Mirrors TagTool's DetectEndianFormat.
+        let endian = detect_endian(&mut reader, tag_file_size)?;
+
         // Read the tag file header
-        let header = TagFileHeader::read(&mut reader)?;
+        let header = TagFileHeader::read(&mut reader, endian)?;
 
         // The 'tag!' chunk contains the tag stream
-        let tag_stream = TagStream::read(u32::from_be_bytes(*b"tag!"), &mut reader)?;
+        let tag_stream = TagStream::read(u32::from_be_bytes(*b"tag!"), &mut reader, endian)?;
 
         let mut dependency_list_stream = None;
         let mut import_info_stream = None;
@@ -191,7 +203,7 @@ impl TagFile {
         // Check if there are any 'want' / 'info' / 'assd' chunks
         while reader.stream_position()? != tag_file_size {
             let chunk_header_offset = reader.stream_position()?;
-            let chunk_signature = read_u32_le(&mut reader)?;
+            let chunk_signature = read_u32(&mut reader, endian)?;
             reader.seek(SeekFrom::Start(chunk_header_offset))?;
 
             match &chunk_signature.to_be_bytes() {
@@ -199,21 +211,21 @@ impl TagFile {
                     if dependency_list_stream.is_some() {
                         return Err(TagReadError::DuplicateOptionalStream { signature: *b"want" });
                     }
-                    dependency_list_stream = Some(TagStream::read(chunk_signature, &mut reader)?);
+                    dependency_list_stream = Some(TagStream::read(chunk_signature, &mut reader, endian)?);
                 }
 
                 b"info" => {
                     if import_info_stream.is_some() {
                         return Err(TagReadError::DuplicateOptionalStream { signature: *b"info" });
                     }
-                    import_info_stream = Some(TagStream::read(chunk_signature, &mut reader)?);
+                    import_info_stream = Some(TagStream::read(chunk_signature, &mut reader, endian)?);
                 }
 
                 b"assd" => {
                     if asset_depot_storage_stream.is_some() {
                         return Err(TagReadError::DuplicateOptionalStream { signature: *b"assd" });
                     }
-                    asset_depot_storage_stream = Some(TagStream::read(chunk_signature, &mut reader)?);
+                    asset_depot_storage_stream = Some(TagStream::read(chunk_signature, &mut reader, endian)?);
                 }
 
                 signature => {
@@ -236,6 +248,7 @@ impl TagFile {
 
         Ok(Self {
             header,
+            endian,
             tag_stream,
             dependency_list_stream,
             import_info_stream,
@@ -446,6 +459,46 @@ impl TagFile {
 fn collect_tag_references(st: &crate::TagStruct<'_>, out: &mut Vec<(u32, String)>) {
     for f in st.fields() {
         collect_from_field(&f, out);
+    }
+}
+
+/// Detect a tag file's wire byte order by inspecting the `BLAM` magic
+/// at offset 60 in the fixed 64-byte header. Mirrors TagTool's
+/// `MapFile::DetectEndianFormat` strategy. Leaves the reader cursor at
+/// offset 0 on success so the caller can re-read the header through
+/// the normal path. Errors with [`TagReadError::BadChunkSignature`] if
+/// neither orientation produces `BLAM`.
+fn detect_endian<R: Read + Seek>(
+    reader: &mut std::io::BufReader<R>,
+    tag_file_size: u64,
+) -> Result<Endian, TagReadError> {
+    const SIG_OFFSET: u64 = 60;
+    const HEADER_SIZE: u64 = 64;
+
+    if tag_file_size < HEADER_SIZE {
+        return Err(TagReadError::BadChunkSignature {
+            offset: 0,
+            expected: *b"BLAM",
+            got: [0; 4],
+        });
+    }
+
+    reader.seek(SeekFrom::Start(SIG_OFFSET))?;
+    let mut sig_bytes = [0u8; 4];
+    reader.read_exact(&mut sig_bytes)?;
+    reader.seek(SeekFrom::Start(0))?;
+
+    let want = u32::from_be_bytes(*b"BLAM");
+    if u32::from_le_bytes(sig_bytes) == want {
+        Ok(Endian::Le)
+    } else if u32::from_be_bytes(sig_bytes) == want {
+        Ok(Endian::Be)
+    } else {
+        Err(TagReadError::BadChunkSignature {
+            offset: SIG_OFFSET,
+            expected: *b"BLAM",
+            got: sig_bytes,
+        })
     }
 }
 

@@ -32,7 +32,8 @@ fn require_schema(game: &str, stem: &str, kind: &str) -> Result<PathBuf> {
 /// Attach an empty `want` (dependency-list) stream to the loaded
 /// tag. No-op if one is already present.
 pub fn add_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
-    let schema = require_schema(&ctx.game, "tag_dependency_list", "dependency-list")?;
+    let game = ctx.require_game("dependency-list")?;
+    let schema = require_schema(game, "tag_dependency_list", "dependency-list")?;
     let loaded = ctx.loaded_mut("add-dependency-list")?;
     loaded.tag
         .add_dependency_list(&schema)
@@ -63,7 +64,8 @@ pub fn remove_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Res
 /// `tag_reference`, and write one entry per ref into `want`.
 /// Creates the stream first if missing.
 pub fn rebuild_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
-    let schema = require_schema(&ctx.game, "tag_dependency_list", "dependency-list")?;
+    let game = ctx.require_game("dependency-list")?;
+    let schema = require_schema(game, "tag_dependency_list", "dependency-list")?;
     let loaded = ctx.loaded_mut("rebuild-dependency-list")?;
     loaded.tag
         .rebuild_dependency_list(&schema)
@@ -87,7 +89,8 @@ pub fn rebuild_dependency_list(ctx: &mut CliContext, output: Option<&str>) -> Re
 /// already present. Caller populates build / version / culprit /
 /// import-date / files / events fields via `set` afterward.
 pub fn add_import_info(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
-    let schema = require_schema(&ctx.game, "tag_import_information", "import-info")?;
+    let game = ctx.require_game("import-info")?;
+    let schema = require_schema(game, "tag_import_information", "import-info")?;
     let loaded = ctx.loaded_mut("add-import-info")?;
     loaded.tag
         .add_import_info(&schema)
@@ -118,7 +121,8 @@ pub fn remove_import_info(ctx: &mut CliContext, output: Option<&str>) -> Result<
 /// stream. Zero presence in the observed H3/Reach corpus, kept for
 /// completeness.
 pub fn add_asset_depot_storage(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
-    let schema = require_schema(&ctx.game, "asset_depot_storage", "asset-depot-storage")?;
+    let game = ctx.require_game("asset-depot-storage")?;
+    let schema = require_schema(game, "asset_depot_storage", "asset-depot-storage")?;
     let loaded = ctx.loaded_mut("add-asset-depot-storage")?;
     loaded.tag
         .add_asset_depot_storage(&schema)

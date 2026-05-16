@@ -78,8 +78,16 @@ pub(crate) fn lookup_from_struct<'a>(
                 let block_def = &layout.block_layouts[field.definition as usize];
                 let element_def = &layout.struct_layouts[block_def.struct_index as usize];
                 let element_index = index.unwrap_or(0) as usize;
+                // Bounds check: a block can legitimately be empty
+                // (X360 monolithic tags with pageable resources push
+                // their element data into the cache partition and
+                // leave the on-disk block at 0 elements).
                 let start = element_index * element_def.size;
-                current_raw = &block.raw_data[start..start + element_def.size];
+                let end = start + element_def.size;
+                if end > block.raw_data.len() {
+                    return None;
+                }
+                current_raw = &block.raw_data[start..end];
                 current_struct = block.elements.get(element_index)?;
             }
             TagFieldType::Array => {
@@ -87,7 +95,11 @@ pub(crate) fn lookup_from_struct<'a>(
                 let element_def = &layout.struct_layouts[array_def.struct_index as usize];
                 let element_index = index.unwrap_or(0) as usize;
                 let start = field.offset as usize + element_index * element_def.size;
-                current_raw = &current_raw[start..start + element_def.size];
+                let end = start + element_def.size;
+                if end > current_raw.len() {
+                    return None;
+                }
+                current_raw = &current_raw[start..end];
                 let elements = descend_array(current_struct, field_index)?;
                 current_struct = elements.get(element_index)?;
             }
@@ -142,8 +154,16 @@ pub(crate) fn descend_from_struct<'a>(
                 let block_def = &layout.block_layouts[field.definition as usize];
                 let element_def = &layout.struct_layouts[block_def.struct_index as usize];
                 let element_index = index.unwrap_or(0) as usize;
+                // Bounds check: a block can legitimately be empty
+                // (X360 monolithic tags with pageable resources push
+                // their element data into the cache partition and
+                // leave the on-disk block at 0 elements).
                 let start = element_index * element_def.size;
-                current_raw = &block.raw_data[start..start + element_def.size];
+                let end = start + element_def.size;
+                if end > block.raw_data.len() {
+                    return None;
+                }
+                current_raw = &block.raw_data[start..end];
                 current_struct = block.elements.get(element_index)?;
             }
             TagFieldType::Array => {
@@ -151,7 +171,11 @@ pub(crate) fn descend_from_struct<'a>(
                 let element_def = &layout.struct_layouts[array_def.struct_index as usize];
                 let element_index = index.unwrap_or(0) as usize;
                 let start = field.offset as usize + element_index * element_def.size;
-                current_raw = &current_raw[start..start + element_def.size];
+                let end = start + element_def.size;
+                if end > current_raw.len() {
+                    return None;
+                }
+                current_raw = &current_raw[start..end];
                 let elements = descend_array(current_struct, field_index)?;
                 current_struct = elements.get(element_index)?;
             }
@@ -205,8 +229,11 @@ pub(crate) fn lookup_mut_from_struct<'a>(
                 let element_index = index.unwrap_or(0) as usize;
                 let element_size = element_def.size;
                 let start = element_index * element_size;
-                // Split-borrow block into raw_data slice + element.
-                let new_raw = &mut block.raw_data[start..start + element_size];
+                let end = start + element_size;
+                if end > block.raw_data.len() {
+                    return None;
+                }
+                let new_raw = &mut block.raw_data[start..end];
                 let new_struct = block.elements.get_mut(element_index)?;
                 current_raw = new_raw;
                 current_struct = new_struct;
@@ -217,6 +244,9 @@ pub(crate) fn lookup_mut_from_struct<'a>(
                 let element_index = index.unwrap_or(0) as usize;
                 let offset = field.offset as usize + element_index * element_def.size;
                 let size = element_def.size;
+                if offset + size > current_raw.len() {
+                    return None;
+                }
                 let new_raw = &mut current_raw[offset..offset + size];
                 let elements = descend_array_mut(current_struct, field_index)?;
                 let new_struct = elements.get_mut(element_index)?;
@@ -380,7 +410,7 @@ fn descend_resource<'a>(
         .sub_chunks
         .iter()
         .find(|entry| entry.field_index == Some(field_index as u32))?;
-    let TagSubChunkContent::Resource(TagResourceChunk::Exploded { struct_data, exploded }) =
+    let TagSubChunkContent::Resource(TagResourceChunk::Exploded { struct_data, exploded, .. }) =
         &entry.content
     else {
         return None;
@@ -399,7 +429,7 @@ fn descend_resource_mut<'a>(
         .sub_chunks
         .iter_mut()
         .find(|entry| entry.field_index == Some(field_index as u32))?;
-    let TagSubChunkContent::Resource(TagResourceChunk::Exploded { struct_data, exploded }) =
+    let TagSubChunkContent::Resource(TagResourceChunk::Exploded { struct_data, exploded, .. }) =
         &mut entry.content
     else {
         return None;

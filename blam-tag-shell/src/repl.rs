@@ -289,8 +289,9 @@ fn print_pwd(ctx: &CliContext) {
 }
 
 fn prompt_for(ctx: &CliContext) -> String {
+    let game = ctx.game.as_deref().unwrap_or("blam");
     match &ctx.loaded {
-        None => format!("{game}> ", game = ctx.game),
+        None => format!("{game}> "),
         Some(loaded) => {
             let name = loaded
                 .path
@@ -299,9 +300,9 @@ fn prompt_for(ctx: &CliContext) -> String {
                 .unwrap_or("?");
             let dirty = if loaded.dirty { "*" } else { "" };
             if ctx.nav.is_empty() {
-                format!("{game} :: {name}{dirty}> ", game = ctx.game)
+                format!("{game} :: {name}{dirty}> ")
             } else {
-                format!("{game} :: {name}{dirty}/{nav}> ", game = ctx.game, nav = ctx.nav.join("/"))
+                format!("{game} :: {name}{dirty}/{nav}> ", nav = ctx.nav.join("/"))
             }
         }
     }

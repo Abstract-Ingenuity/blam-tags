@@ -156,6 +156,24 @@ pub fn strip_to_list(strip: &[u16]) -> Vec<(u16, u16, u16)> {
     out
 }
 
+/// u32 sibling of [`strip_to_list`] — restart sentinel is `0xFFFFFFFF`
+/// instead of `0xFFFF`. Needed for meshes that index >65k vertices via
+/// the `raw indices32` block (e.g. H4 X360 monolithic placeholders
+/// like `bigmuthafucka`). Same semantics: restart-aware, drops
+/// degenerate windows, flips winding parity per local position.
+pub fn strip_to_list_u32(strip: &[u32]) -> Vec<(u32, u32, u32)> {
+    let mut out = Vec::with_capacity(strip.len().saturating_sub(2));
+    for segment in strip.split(|&x| x == 0xFFFFFFFF) {
+        for i in 0..segment.len().saturating_sub(2) {
+            let (a, b, c) = (segment[i], segment[i + 1], segment[i + 2]);
+            if a == b || b == c || a == c { continue; }
+            if i % 2 == 0 { out.push((a, b, c)); }
+            else          { out.push((a, c, b)); }
+        }
+    }
+    out
+}
+
 //================================================================================
 // BSP edge-ring walker
 //================================================================================

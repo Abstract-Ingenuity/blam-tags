@@ -91,7 +91,15 @@ fn pixel_format(format: BitmapFormat) -> PixelFormat {
             flags: DDPF_LUMINANCE | DDPF_ALPHAPIXELS, fourcc: 0, rgb_bit_count: 16,
             r_mask: 0x00FF, g_mask: 0, b_mask: 0, a_mask: 0xFF00,
         },
-        A4r4g4b4 => PixelFormat {
+        R5g6b5 => PixelFormat {
+            flags: DDPF_RGB, fourcc: 0, rgb_bit_count: 16,
+            r_mask: 0xF800, g_mask: 0x07E0, b_mask: 0x001F, a_mask: 0,
+        },
+        A1r5g5b5 => PixelFormat {
+            flags: DDPF_RGB | DDPF_ALPHAPIXELS, fourcc: 0, rgb_bit_count: 16,
+            r_mask: 0x7C00, g_mask: 0x03E0, b_mask: 0x001F, a_mask: 0x8000,
+        },
+        A4r4g4b4 | A4r4g4b4Font => PixelFormat {
             flags: DDPF_RGB | DDPF_ALPHAPIXELS, fourcc: 0, rgb_bit_count: 16,
             r_mask: 0x0F00, g_mask: 0x00F0, b_mask: 0x000F, a_mask: 0xF000,
         },
@@ -103,6 +111,10 @@ fn pixel_format(format: BitmapFormat) -> PixelFormat {
             flags: DDPF_RGB | DDPF_ALPHAPIXELS, fourcc: 0, rgb_bit_count: 32,
             r_mask: 0x00FF0000, g_mask: 0x0000FF00, b_mask: 0x000000FF, a_mask: 0xFF000000,
         },
+        A2r10g10b10 => PixelFormat {
+            flags: DDPF_RGB | DDPF_ALPHAPIXELS, fourcc: 0, rgb_bit_count: 32,
+            r_mask: 0x3FF00000, g_mask: 0x000FFC00, b_mask: 0x000003FF, a_mask: 0xC0000000,
+        },
         V8u8 => PixelFormat {
             // Signed bumpmap — TagTool writes RG masks. Most viewers
             // display the bytes as RG; signedness interpretation is
@@ -111,15 +123,34 @@ fn pixel_format(format: BitmapFormat) -> PixelFormat {
             r_mask: 0xFF00, g_mask: 0x00FF, b_mask: 0, a_mask: 0,
         },
 
-        // DXT10-only and decoder-only formats are routed away from
-        // this function by the dispatch in `BitmapImage::write_dds`.
-        // Reaching this arm would mean the legacy DDS writer was
-        // called for a format that has no legacy expression — a
-        // programming bug.
-        Signedr16g16b16a16 | DxnMonoAlpha => unreachable!(
-            "`{format:?}` does not have a legacy DDS pixelformat — caller should have routed elsewhere"
+        // Every other format reaches this writer only after being
+        // decoded to RGBA8 (see [`needs_decode_for_dds`] and the
+        // dispatch in `BitmapImage::write_dds`). Reaching this arm
+        // for one of those means the dispatch missed it.
+        other => unreachable!(
+            "`{other:?}` does not have a legacy DDS pixelformat — caller should have decoded to A8R8G8B8 first"
         ),
     }
+}
+
+/// Whether the format must be CPU-decoded to RGBA8 before reaching
+/// the DDS writer. Mirrors TagTool's split: formats with a clean
+/// legacy DDS pixelformat (`R5g6b5`, `A4r4g4b4`, `Dxt1`, etc.) write
+/// bytes verbatim, everything else (Halo-specific BC variants,
+/// float-mono, packed normalmaps without a DDS expression, ...) gets
+/// decoded to A8R8G8B8 first.
+pub(crate) fn needs_decode_for_dds(format: BitmapFormat) -> bool {
+    use BitmapFormat::*;
+    !matches!(
+        format,
+        A8 | Y8 | R8 | Ay8 | A8y8
+        | R5g6b5 | A1r5g5b5 | A4r4g4b4 | A4r4g4b4Font
+        | X8r8g8b8 | A8r8g8b8 | A2r10g10b10
+        | V8u8 | Q8w8v8u8 | A16b16g16r16
+        | Abgrfp16 | Abgrfp32
+        | Dxt1 | Dxt3 | Dxt5 | Dxt5a | Dxn
+        | Signedr16g16b16a16
+    )
 }
 
 /// Write a DDS file: 4-byte magic + 124-byte header + raw pixel
@@ -237,7 +268,7 @@ fn dxgi_format(format: BitmapFormat) -> u32 {
         A8 => DXGI_FORMAT_A8_UNORM,
         Y8 | R8 | Ay8 => DXGI_FORMAT_R8_UNORM,
         A8y8 => DXGI_FORMAT_R8G8_UNORM,
-        A4r4g4b4 => DXGI_FORMAT_B4G4R4A4_UNORM,
+        A4r4g4b4 | A4r4g4b4Font => DXGI_FORMAT_B4G4R4A4_UNORM,
         X8r8g8b8 => DXGI_FORMAT_B8G8R8X8_UNORM,
         A8r8g8b8 => DXGI_FORMAT_B8G8R8A8_UNORM,
         Dxt1 => DXGI_FORMAT_BC1_UNORM,
@@ -251,8 +282,12 @@ fn dxgi_format(format: BitmapFormat) -> u32 {
         Abgrfp32 => DXGI_FORMAT_R32G32B32A32_FLOAT,
         A16b16g16r16 => DXGI_FORMAT_R16G16B16A16_UNORM,
         Signedr16g16b16a16 => DXGI_FORMAT_R16G16B16A16_SNORM,
-        // Decoder substitutes A8R8G8B8 before reaching this point.
-        DxnMonoAlpha => unreachable!("`DxnMonoAlpha` should be decoded to A8R8G8B8 before DXT10 dispatch"),
+        // Every other format is pre-decoded to RGBA8 before reaching
+        // the DXT10 writer (see `needs_decode_for_dds`). Reaching
+        // this arm for one of them indicates a missed dispatch.
+        other => unreachable!(
+            "`{other:?}` has no DXGI mapping — caller should have decoded to A8R8G8B8 first"
+        ),
     }
 }
 

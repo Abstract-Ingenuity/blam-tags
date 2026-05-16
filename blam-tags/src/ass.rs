@@ -38,7 +38,7 @@ use std::path::Path;
 
 use crate::api::TagStruct;
 use crate::file::TagFile;
-use crate::geometry::{read_compression_bounds_at, CompressionBounds, SCALE};
+use crate::geometry::{read_compression_bounds_at, strip_to_list_u32, CompressionBounds, SCALE};
 use crate::math::{RealPlane3d, RealPoint3d, RealQuaternion, RealRgbColor, RealVector3d};
 
 // SCALE constant lives in crate::geometry (re-exported above).
@@ -1326,17 +1326,27 @@ fn build_cluster_object(
 ) -> Result<AssObject, AssError> {
     let raw_v = mesh_pmt.field("raw vertices").and_then(|f| f.as_block());
     let raw_i = mesh_pmt.field("raw indices").and_then(|f| f.as_block());
+    let raw_i32 = mesh_pmt.field("raw indices32").and_then(|f| f.as_block());
     let parts = mesh.field("parts").and_then(|f| f.as_block());
     let subparts = mesh.field("subparts").and_then(|f| f.as_block());
-    let (raw_v, raw_i, parts) = match (raw_v, raw_i, parts) {
-        (Some(v), Some(i), Some(p)) => (v, i, p),
+    let (raw_v, parts) = match (raw_v, parts) {
+        (Some(v), Some(p)) => (v, p),
         _ => return Ok(empty_mesh()),
     };
 
-    let indices: Vec<u16> = (0..raw_i.len())
-        .filter_map(|k| raw_i.element(k))
-        .map(|e| e.read_int_any("word").unwrap_or(0) as u16)
-        .collect();
+    // Try u16 `raw indices` first; fall back to u32 `raw indices32` for
+    // meshes with >65k unique vertices (same pattern as JMS path).
+    let indices: Vec<u32> = match (raw_i, raw_i32) {
+        (Some(ri), _) if ri.len() > 0 => (0..ri.len())
+            .filter_map(|k| ri.element(k))
+            .map(|e| e.read_int_any("word").unwrap_or(0) as u32)
+            .collect(),
+        (_, Some(ri32)) if ri32.len() > 0 => (0..ri32.len())
+            .filter_map(|k| ri32.element(k))
+            .map(|e| e.read_int_any("dword").unwrap_or(0) as u32)
+            .collect(),
+        _ => return Ok(empty_mesh()),
+    };
 
     // H3 sbsp meshes are ALWAYS triangle lists — the schema's
     // `index buffer type` enum labels some meshes as "triangle strip"
@@ -1353,7 +1363,7 @@ fn build_cluster_object(
     // subparts (index_count == 0) drop out — preserves LOD grouping
     // without emitting zero-tri drawables. Plugin reference:
     // _mesh_decoder.py::_collect_parts.
-    let mut tri_pool: Vec<(i32, u16, u16, u16)> = Vec::new();
+    let mut tri_pool: Vec<(i32, u32, u32, u32)> = Vec::new();
     for pi in 0..parts.len() {
         let part = parts.element(pi).unwrap();
         let material_index = part.read_int_any("render method index").unwrap_or(0) as i32;
@@ -1364,9 +1374,15 @@ fn build_cluster_object(
         let part_start_i = part.read_int_any("index start").unwrap_or(0);
         let part_count_i = part.read_int_any("index count").unwrap_or(0);
 
-        let mut emit_range = |start_i: i64, count_i: i64| {
+        let mut emit_range = |start_i: i128, count_i: i128| {
             if count_i <= 0 { return; }
-            let start = (start_i as i16 as u16) as usize;
+            // H3: short_integer (i16, may wrap negative); H4:
+            // long_integer (i32, no wrap < 2^31).
+            let start = if start_i < 0 {
+                (start_i as i16 as u16) as usize
+            } else {
+                start_i as usize
+            };
             let count = count_i as usize;
             if start >= indices.len() { return; }
             let end = (start + count).min(indices.len());
@@ -1403,7 +1419,7 @@ fn build_cluster_object(
     // across the whole cluster mesh (unlike JMS where every triangle
     // owns its own three vertex copies). Walk the unique vertex
     // indices, build a remap table, then translate triangles.
-    let mut vertex_remap: HashMap<u16, u32> = HashMap::new();
+    let mut vertex_remap: HashMap<u32, u32> = HashMap::new();
     let mut vertices: Vec<AssVertex> = Vec::new();
     let mut triangles: Vec<AssTriangle> = Vec::with_capacity(tri_pool.len());
     for (mat, a, b, c) in tri_pool {
@@ -1421,10 +1437,10 @@ fn build_cluster_object(
 }
 
 fn remap_vertex(
-    map: &mut HashMap<u16, u32>,
+    map: &mut HashMap<u32, u32>,
     out: &mut Vec<AssVertex>,
     raw_v: &crate::api::TagBlock<'_>,
-    src_idx: u16,
+    src_idx: u32,
     bounds: &CompressionBounds,
 ) -> u32 {
     if let Some(&existing) = map.get(&src_idx) { return existing; }
@@ -1696,16 +1712,26 @@ fn build_render_model_object(
 ) -> Result<AssObject, AssError> {
     let raw_v = mesh_pmt.field("raw vertices").and_then(|f| f.as_block());
     let raw_i = mesh_pmt.field("raw indices").and_then(|f| f.as_block());
+    let raw_i32 = mesh_pmt.field("raw indices32").and_then(|f| f.as_block());
     let parts = mesh.field("parts").and_then(|f| f.as_block());
-    let (raw_v, raw_i, parts) = match (raw_v, raw_i, parts) {
-        (Some(v), Some(i), Some(p)) => (v, i, p),
+    let (raw_v, parts) = match (raw_v, parts) {
+        (Some(v), Some(p)) => (v, p),
         _ => return Ok(empty_mesh()),
     };
 
-    let indices: Vec<u16> = (0..raw_i.len())
-        .filter_map(|k| raw_i.element(k))
-        .map(|e| e.read_int_any("word").unwrap_or(0) as u16)
-        .collect();
+    // u16 `raw indices` first; fall back to u32 `raw indices32` for
+    // meshes with >65k unique vertices (mirror JMS path).
+    let indices: Vec<u32> = match (raw_i, raw_i32) {
+        (Some(ri), _) if ri.len() > 0 => (0..ri.len())
+            .filter_map(|k| ri.element(k))
+            .map(|e| e.read_int_any("word").unwrap_or(0) as u32)
+            .collect(),
+        (_, Some(ri32)) if ri32.len() > 0 => (0..ri32.len())
+            .filter_map(|k| ri32.element(k))
+            .map(|e| e.read_int_any("dword").unwrap_or(0) as u32)
+            .collect(),
+        _ => return Ok(empty_mesh()),
+    };
 
     // render_model meshes are TRIANGLE STRIPS (default for H3 MCC),
     // unlike sbsp which is always lists. The schema enum is
@@ -1715,7 +1741,7 @@ fn build_render_model_object(
         .map(|v| matches!(v, crate::TagFieldData::CharEnum { name: Some(n), .. } if n == "triangle strip"))
         .unwrap_or(true);
 
-    let mut vertex_remap: HashMap<u16, u32> = HashMap::new();
+    let mut vertex_remap: HashMap<u32, u32> = HashMap::new();
     let mut vertices: Vec<AssVertex> = Vec::new();
     let mut triangles: Vec<AssTriangle> = Vec::new();
 
@@ -1757,19 +1783,23 @@ fn build_render_model_object(
         let sub_count = part.read_int_any("subpart count").unwrap_or(0);
         let subparts = mesh.field("subparts").and_then(|f| f.as_block());
 
-        let emit_range = |start_i: i64, count_i: i64,
+        let emit_range = |start_i: i128, count_i: i128,
                            vertices: &mut Vec<AssVertex>,
                            triangles: &mut Vec<AssTriangle>,
-                           vertex_remap: &mut HashMap<u16, u32>| {
+                           vertex_remap: &mut HashMap<u32, u32>| {
             if count_i <= 0 { return; }
-            // `index start` is signed-i16 but functionally u16 — wrap.
-            let start = (start_i as i16 as u16) as usize;
+            // H3: short_integer (i16, wraps negative); H4: long_integer.
+            let start = if start_i < 0 {
+                (start_i as i16 as u16) as usize
+            } else {
+                start_i as usize
+            };
             let count = count_i as usize;
             if start >= indices.len() { return; }
             let end = (start + count).min(indices.len());
             let slice = &indices[start..end];
-            let tris: Vec<(u16, u16, u16)> = if is_strip {
-                crate::geometry::strip_to_list(slice)
+            let tris: Vec<(u32, u32, u32)> = if is_strip {
+                strip_to_list_u32(slice)
             } else {
                 slice.chunks_exact(3).map(|c| (c[0], c[1], c[2])).collect()
             };

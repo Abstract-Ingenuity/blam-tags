@@ -344,6 +344,7 @@ impl TagLayout {
     /// so the data-layer parsing can dispatch cheaply.
     pub fn read<R: Seek + Read>(
         reader: &mut std::io::BufReader<R>,
+        endian: Endian,
     ) -> Result<Self, TagReadError> {
         //================================================================================
         // Outer blay chunk header + 24-byte payload header.
@@ -356,7 +357,7 @@ impl TagLayout {
         //================================================================================
 
         let blay_header_offset = reader.stream_position()?;
-        let blay_header = read_chunk_header(reader)?;
+        let blay_header = read_chunk_header(reader, endian)?;
         if blay_header.signature != u32::from_be_bytes(*b"blay") {
             return Err(TagReadError::BadChunkSignature {
                 offset: blay_header_offset,
@@ -373,9 +374,9 @@ impl TagLayout {
 
         let blay_offset = reader.stream_position()?;
 
-        let root_data_size = read_u32_le(reader)?;
+        let root_data_size = read_u32(reader, endian)?;
         let guid = read_u8_array(reader)?;
-        let version = read_u32_le(reader)?;
+        let version = read_u32(reader, endian)?;
         let block_layout_version = version;
 
         if !matches!(block_layout_version, 1..=4) {
@@ -400,20 +401,20 @@ impl TagLayout {
         //================================================================================
 
         let header = TagLayoutHeader {
-            tag_group_block_index: if matches!(block_layout_version, 2..=4) { read_u32_le(reader)? } else { 0 },
-            string_data_size: read_u32_le(reader)?,
-            string_offset_count: read_u32_le(reader)?,
-            string_list_count: read_u32_le(reader)?,
-            custom_block_index_search_names_count: read_u32_le(reader)?,
-            data_definition_name_count: read_u32_le(reader)?,
-            array_layout_count: read_u32_le(reader)?,
-            field_type_count: read_u32_le(reader)?,
-            field_count: read_u32_le(reader)?,
-            aggregate_layout_count: if block_layout_version == 1 { read_u32_le(reader)? } else { 0 },
-            struct_layout_count: if matches!(block_layout_version, 2..=4) { read_u32_le(reader)? } else { 0 },
-            block_layout_count: if matches!(block_layout_version, 2..=4) { read_u32_le(reader)? } else { 0 },
-            resource_layout_count: if matches!(block_layout_version, 2..=4) { read_u32_le(reader)? } else { 0 },
-            interop_layout_count: if matches!(block_layout_version, 3 | 4) { read_u32_le(reader)? } else { 0 },
+            tag_group_block_index: if matches!(block_layout_version, 2..=4) { read_u32(reader, endian)? } else { 0 },
+            string_data_size: read_u32(reader, endian)?,
+            string_offset_count: read_u32(reader, endian)?,
+            string_list_count: read_u32(reader, endian)?,
+            custom_block_index_search_names_count: read_u32(reader, endian)?,
+            data_definition_name_count: read_u32(reader, endian)?,
+            array_layout_count: read_u32(reader, endian)?,
+            field_type_count: read_u32(reader, endian)?,
+            field_count: read_u32(reader, endian)?,
+            aggregate_layout_count: if block_layout_version == 1 { read_u32(reader, endian)? } else { 0 },
+            struct_layout_count: if matches!(block_layout_version, 2..=4) { read_u32(reader, endian)? } else { 0 },
+            block_layout_count: if matches!(block_layout_version, 2..=4) { read_u32(reader, endian)? } else { 0 },
+            resource_layout_count: if matches!(block_layout_version, 2..=4) { read_u32(reader, endian)? } else { 0 },
+            interop_layout_count: if matches!(block_layout_version, 3 | 4) { read_u32(reader, endian)? } else { 0 },
         };
 
         //================================================================================
@@ -425,7 +426,7 @@ impl TagLayout {
 
         let tag_layout_header_and_offset = if block_layout_version > 1 {
             let tgly_offset = reader.stream_position()?;
-            let tag_layout_header = read_chunk_header(reader)?;
+            let tag_layout_header = read_chunk_header(reader, endian)?;
             if tag_layout_header.signature != u32::from_be_bytes(*b"tgly") {
                 return Err(TagReadError::BadChunkSignature {
                     offset: tgly_offset,
@@ -449,7 +450,7 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let string_data_header = read_validated_chunk_header(reader, *b"str*", "str*")?;
+            let string_data_header = read_validated_chunk_header(reader, *b"str*", "str*", endian)?;
             if header.string_data_size != string_data_header.size {
                 return Err(TagReadError::CountMismatch {
                     chunk: "str*",
@@ -467,7 +468,7 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let string_offsets_header = read_validated_chunk_header(reader, *b"sz+x", "sz+x")?;
+            let string_offsets_header = read_validated_chunk_header(reader, *b"sz+x", "sz+x", endian)?;
             check_count_matches_size(
                 "sz+x",
                 header.string_offset_count,
@@ -479,7 +480,7 @@ impl TagLayout {
         string_offsets = vec![0; header.string_offset_count as usize];
 
         for slot in &mut string_offsets {
-            *slot = read_u32_le(reader)?;
+            *slot = read_u32(reader, endian)?;
         }
 
         //================================================================================
@@ -487,7 +488,7 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let string_lists_header = read_validated_chunk_header(reader, *b"sz[]", "sz[]")?;
+            let string_lists_header = read_validated_chunk_header(reader, *b"sz[]", "sz[]", endian)?;
             check_count_matches_size("sz[]", header.string_list_count, string_lists_header.size, 12)?;
         }
 
@@ -495,9 +496,9 @@ impl TagLayout {
 
         for _ in 0..header.string_list_count {
             string_lists.push(TagStringList {
-                offset: read_u32_le(reader)?,
-                count: read_u32_le(reader)?,
-                first: read_u32_le(reader)?,
+                offset: read_u32(reader, endian)?,
+                count: read_u32(reader, endian)?,
+                first: read_u32(reader, endian)?,
             });
         }
 
@@ -506,7 +507,7 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let csbn_header = read_validated_chunk_header(reader, *b"csbn", "csbn")?;
+            let csbn_header = read_validated_chunk_header(reader, *b"csbn", "csbn", endian)?;
             check_count_matches_size(
                 "csbn",
                 header.custom_block_index_search_names_count,
@@ -518,7 +519,7 @@ impl TagLayout {
         custom_block_index_search_names_offsets = Vec::with_capacity(header.custom_block_index_search_names_count as usize);
 
         for _ in 0..header.custom_block_index_search_names_count {
-            custom_block_index_search_names_offsets.push(read_u32_le(reader)?);
+            custom_block_index_search_names_offsets.push(read_u32(reader, endian)?);
         }
 
         //================================================================================
@@ -526,7 +527,7 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let dtnm_header = read_validated_chunk_header(reader, *b"dtnm", "dtnm")?;
+            let dtnm_header = read_validated_chunk_header(reader, *b"dtnm", "dtnm", endian)?;
             check_count_matches_size(
                 "dtnm",
                 header.data_definition_name_count,
@@ -538,7 +539,7 @@ impl TagLayout {
         data_definition_name_offsets = vec![0; header.data_definition_name_count as usize];
 
         for slot in &mut data_definition_name_offsets {
-            *slot = read_u32_le(reader)?;
+            *slot = read_u32(reader, endian)?;
         }
 
         //================================================================================
@@ -546,7 +547,7 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let arr_header = read_validated_chunk_header(reader, *b"arr!", "arr!")?;
+            let arr_header = read_validated_chunk_header(reader, *b"arr!", "arr!", endian)?;
             check_count_matches_size("arr!", header.array_layout_count, arr_header.size, 12)?;
         }
 
@@ -554,9 +555,9 @@ impl TagLayout {
 
         for _ in 0..header.array_layout_count {
             array_layouts.push(TagArrayLayout {
-                name_offset: read_u32_le(reader)?,
-                count: read_u32_le(reader)?,
-                struct_index: read_u32_le(reader)?,
+                name_offset: read_u32(reader, endian)?,
+                count: read_u32(reader, endian)?,
+                struct_index: read_u32(reader, endian)?,
             });
         }
 
@@ -565,7 +566,7 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let tgft_header = read_validated_chunk_header(reader, *b"tgft", "tgft")?;
+            let tgft_header = read_validated_chunk_header(reader, *b"tgft", "tgft", endian)?;
             check_count_matches_size("tgft", header.field_type_count, tgft_header.size, 12)?;
         }
 
@@ -573,9 +574,9 @@ impl TagLayout {
 
         for _ in 0..header.field_type_count {
             field_types.push(TagFieldTypeLayout {
-                name_offset: read_u32_le(reader)?,
-                size: read_u32_le(reader)?,
-                needs_sub_chunk: read_u32_le(reader)?,
+                name_offset: read_u32(reader, endian)?,
+                size: read_u32(reader, endian)?,
+                needs_sub_chunk: read_u32(reader, endian)?,
             });
         }
 
@@ -584,7 +585,7 @@ impl TagLayout {
         //================================================================================
 
         if block_layout_version > 1 {
-            let gras_header = read_validated_chunk_header(reader, *b"gras", "gras")?;
+            let gras_header = read_validated_chunk_header(reader, *b"gras", "gras", endian)?;
             check_count_matches_size("gras", header.field_count, gras_header.size, 12)?;
         }
 
@@ -592,9 +593,9 @@ impl TagLayout {
 
         for _ in 0..header.field_count {
             field_layouts.push(TagFieldLayout {
-                name_offset: read_u32_le(reader)?,
-                type_index: read_u32_le(reader)?,
-                definition: read_u32_le(reader)?,
+                name_offset: read_u32(reader, endian)?,
+                type_index: read_u32(reader, endian)?,
+                definition: read_u32(reader, endian)?,
                 field_type: TagFieldType::Unknown,
                 offset: 0,
             });
@@ -613,9 +614,9 @@ impl TagLayout {
                 // into stv2 (24 bytes: guid[16] + name_offset + first_field_index)
                 // and blv2 (12 bytes: name_offset + max_count + struct_index) format.
                 let guid = read_u8_array(reader)?;
-                let name_offset = read_u32_le(reader)?;
-                let max_count = read_u32_le(reader)?;
-                let first_field_index = read_u32_le(reader)?;
+                let name_offset = read_u32(reader, endian)?;
+                let max_count = read_u32(reader, endian)?;
+                let first_field_index = read_u32(reader, endian)?;
 
                 struct_layouts.push(TagStructLayout {
                     index: i,
@@ -642,7 +643,7 @@ impl TagLayout {
             // Read the block definitions
             //================================================================================
 
-            let block_layout_header = read_validated_chunk_header(reader, *b"blv2", "blv2")?;
+            let block_layout_header = read_validated_chunk_header(reader, *b"blv2", "blv2", endian)?;
             check_count_matches_size("blv2", header.block_layout_count, block_layout_header.size, 12)?;
 
             block_layouts = Vec::with_capacity(header.block_layout_count as usize);
@@ -650,9 +651,9 @@ impl TagLayout {
             for i in 0..header.block_layout_count {
                 block_layouts.push(TagBlockLayout {
                     index: i,
-                    name_offset: read_u32_le(reader)?,
-                    max_count: read_u32_le(reader)?,
-                    struct_index: read_u32_le(reader)?,
+                    name_offset: read_u32(reader, endian)?,
+                    max_count: read_u32(reader, endian)?,
+                    struct_index: read_u32(reader, endian)?,
                 });
             }
 
@@ -660,16 +661,16 @@ impl TagLayout {
             // Read the resource definitions
             //================================================================================
 
-            let rcv2_header = read_validated_chunk_header(reader, *b"rcv2", "rcv2")?;
+            let rcv2_header = read_validated_chunk_header(reader, *b"rcv2", "rcv2", endian)?;
             check_count_matches_size("rcv2", header.resource_layout_count, rcv2_header.size, 12)?;
 
             resource_layouts = Vec::with_capacity(header.resource_layout_count as usize);
 
             for _ in 0..header.resource_layout_count {
                 resource_layouts.push(TagResourceLayout {
-                    name_offset: read_u32_le(reader)?,
-                    unknown: read_u32_le(reader)?,
-                    struct_index: read_u32_le(reader)?,
+                    name_offset: read_u32(reader, endian)?,
+                    unknown: read_u32(reader, endian)?,
+                    struct_index: read_u32(reader, endian)?,
                 });
             }
 
@@ -680,15 +681,15 @@ impl TagLayout {
             interop_layouts = vec![];
 
             if matches!(block_layout_version, 3 | 4) {
-                let interop_header = read_validated_chunk_header(reader, *b"]==[", "]==[")?;
+                let interop_header = read_validated_chunk_header(reader, *b"]==[", "]==[", endian)?;
                 check_count_matches_size("]==[", header.interop_layout_count, interop_header.size, 24)?;
 
                 interop_layouts.reserve(header.interop_layout_count as usize);
 
                 for _ in 0..header.interop_layout_count {
                     interop_layouts.push(TagInteropLayout {
-                        name_offset: read_u32_le(reader)?,
-                        struct_index: read_u32_le(reader)?,
+                        name_offset: read_u32(reader, endian)?,
+                        struct_index: read_u32(reader, endian)?,
                         guid: read_u8_array(reader)?,
                     });
                 }
@@ -707,7 +708,7 @@ impl TagLayout {
             };
 
             let struct_layouts_header =
-                read_validated_chunk_header(reader, expected_struct_sig, struct_chunk_name)?;
+                read_validated_chunk_header(reader, expected_struct_sig, struct_chunk_name, endian)?;
             check_count_matches_size(
                 struct_chunk_name,
                 header.struct_layout_count,
@@ -719,9 +720,9 @@ impl TagLayout {
 
             for i in 0..header.struct_layout_count {
                 let guid = read_u8_array(reader)?;
-                let name_offset = read_u32_le(reader)?;
-                let first_field_index = read_u32_le(reader)?;
-                let version = if block_layout_version == 4 { read_u32_le(reader)? } else { 0 };
+                let name_offset = read_u32(reader, endian)?;
+                let first_field_index = read_u32(reader, endian)?;
+                let version = if block_layout_version == 4 { read_u32(reader, endian)? } else { 0 };
                 struct_layouts.push(TagStructLayout {
                     index: i,
                     guid,

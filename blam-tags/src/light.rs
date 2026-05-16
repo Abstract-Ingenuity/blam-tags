@@ -139,7 +139,7 @@ impl LightDefinition {
 
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         let flags = s.read_int_any("flags").unwrap_or(0) as u32;
-        let light_type = LightType::from_int(s.read_int_any("type").unwrap_or(0));
+        let light_type = LightType::from_int(s.read_int_any("type").unwrap_or(0) as i64);
         let maximum_distance = s.read_real("maximum distance").unwrap_or(0.0);
         let frustum_near_width = s.read_real("frustum near width").unwrap_or(0.0);
         let frustum_height_scale = s.read_real("frustum height scale").unwrap_or(1.0);

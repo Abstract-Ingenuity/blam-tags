@@ -15,12 +15,13 @@ use blam_tags::TagFile;
 use crate::context::CliContext;
 
 pub fn run(ctx: &CliContext, group: &str, output: Option<&str>) -> Result<()> {
-    let schema = PathBuf::from("definitions").join(&ctx.game).join(format!("{group}.json"));
+    let game = ctx.require_game("new")?;
+    let schema = PathBuf::from("definitions").join(game).join(format!("{group}.json"));
     if !schema.exists() {
         return Err(anyhow!(
             "schema not found: {} (is the group name right and `definitions/{}/` present?)",
             schema.display(),
-            ctx.game,
+            game,
         ));
     }
 

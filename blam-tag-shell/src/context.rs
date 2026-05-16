@@ -9,6 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use blam_tags::monolithic::MonolithicCache;
+use blam_tags::paths::{derive_tags_root, resolve_tag_path};
 use blam_tags::TagFile;
 
 use crate::tag_index::TagIndex;
@@ -27,12 +29,22 @@ pub struct CliContext {
     pub nav: Vec<String>,
     /// Game identifier (e.g. `"haloreach_mcc"`). Set once at startup
     /// from the global `--game` flag and used to scope schema lookups
-    /// and the [`TagIndex`].
-    pub game: String,
+    /// and the [`TagIndex`]. `None` when invoked without `--game` —
+    /// in that mode read commands work using each tag's embedded
+    /// `blay` schema and tag-reference rendering falls back to raw
+    /// 4-byte group tags; write/create commands that need an external
+    /// JSON schema (`new`, `add-want`, `add-info`, `add-assd`,
+    /// `rebuild-dependencies`) error out asking for `--game`.
+    pub game: Option<String>,
     /// group_tag ↔ group-name index loaded from
-    /// `definitions/<game>/_meta.json`. Used by every command that
-    /// renders or parses tag references.
+    /// `definitions/<game>/_meta.json`. Empty default when no
+    /// `--game` is provided — render paths show the raw group tag in
+    /// place of the friendly group name.
     pub tag_index: TagIndex,
+    /// Opened monolithic tag cache, when the global `--cache` flag
+    /// is set. Reads of tag-file arguments resolve through this
+    /// instead of opening files on disk.
+    pub cache: Option<MonolithicCache>,
 }
 
 /// A parsed tag plus the path it came from, with a dirty flag for
@@ -47,24 +59,130 @@ pub struct LoadedTag {
 }
 
 impl CliContext {
-    /// Build a context for the given game. Eagerly loads
-    /// `definitions/<game>/_meta.json` — errors if that file is
-    /// missing or malformed.
-    pub fn new(game: impl Into<String>) -> Result<Self> {
-        let game = game.into();
-        let tag_index = TagIndex::load(Path::new("definitions"), &game)?;
-        Ok(Self { loaded: None, nav: Vec::new(), game, tag_index })
+    /// Build a context for the given game. When `game` is `Some`,
+    /// eagerly loads `definitions/<game>/_meta.json` — errors if that
+    /// file is missing or malformed. When `game` is `None`,
+    /// initializes with an empty [`TagIndex`]; read commands keep
+    /// working (using each tag's embedded `blay`) while write
+    /// commands that need external schemas surface a typed error at
+    /// dispatch time.
+    pub fn new(game: Option<&str>, cache: Option<&str>) -> Result<Self> {
+        let (game, tag_index) = match game {
+            Some(g) => (Some(g.to_owned()), TagIndex::load(Path::new("definitions"), g)?),
+            None => (None, TagIndex::default()),
+        };
+        let cache = match cache {
+            Some(p) => Some(
+                MonolithicCache::open(p)
+                    .map_err(|e| anyhow::anyhow!("failed to open cache {p}: {e}"))?,
+            ),
+            None => None,
+        };
+        Ok(Self { loaded: None, nav: Vec::new(), game, tag_index, cache })
+    }
+
+    /// Return the game identifier, or an error referencing the
+    /// requested command. Used by write/create commands that need an
+    /// external JSON schema and can't fall back to embedded layouts.
+    pub fn require_game(&self, cmd: &str) -> Result<&str> {
+        self.game.as_deref().with_context(|| {
+            format!("`{cmd}` needs a `--game` (e.g. `--game halo3_mcc`) to locate its schema")
+        })
     }
 
     /// Load `path` into [`Self::loaded`] and reset [`Self::nav`] to
     /// the root. Replaces any currently-loaded tag without prompting
     /// — dirty-state handling is the caller's job.
+    ///
+    /// When [`Self::cache`] is set, the path is interpreted as a
+    /// cache-relative tag path with extension (e.g.
+    /// `objects/elite/elite.biped`). Otherwise it's a filesystem
+    /// path.
     pub fn load(&mut self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
-        let tag = TagFile::read(path).map_err(|e| anyhow::anyhow!("failed to load tag file: {e}"))?;
-        self.loaded = Some(LoadedTag { path: path.to_path_buf(), tag, dirty: false });
+        let (tag, source_path) = if let Some(cache) = &self.cache {
+            let (group_tag, name) = self.split_cache_tag_path(path)?;
+            let tag = cache
+                .read_tag_by_name(group_tag, &name)
+                .map_err(|e| anyhow::anyhow!("failed to load `{}` from cache: {e}", path.display()))?;
+            (tag, path.to_path_buf())
+        } else {
+            let tag = TagFile::read(path).map_err(|e| anyhow::anyhow!("failed to load tag file: {e}"))?;
+            (tag, path.to_path_buf())
+        };
+        self.loaded = Some(LoadedTag { path: source_path, tag, dirty: false });
         self.nav.clear();
         Ok(())
+    }
+
+    /// Split a `--cache`-mode tag path like
+    /// `objects/elite/elite.biped` into `(group_tag, cache_relative_name)`.
+    /// Tries the [`TagIndex`] first (matching `biped` → `bipd`) so
+    /// users can write the friendly extension when `--game` is set;
+    /// falls back to a literal 4-char ASCII group tag otherwise.
+    fn split_cache_tag_path(&self, path: &Path) -> Result<(u32, String)> {
+        let s = path
+            .to_str()
+            .with_context(|| format!("non-UTF-8 cache path {}", path.display()))?;
+        let (name, ext) = s
+            .rsplit_once('.')
+            .with_context(|| format!("cache path `{s}` missing group extension"))?;
+        let group_tag = self.tag_index.group_tag_for(ext).or_else(|| blam_tags::parse_group_tag(ext))
+            .with_context(|| {
+                format!(
+                    "cache path `{s}` has unrecognized group extension `.{ext}` \
+                     (pass `--game` to use the friendly name, or use the 4-char tag like `.bipd`)",
+                )
+            })?;
+        let name = name.replace('/', "\\");
+        Ok((group_tag, name))
+    }
+
+    /// Resolve a tag reference (a relative tag-path like
+    /// `objects\elite\elite` plus a group extension like
+    /// `"render_model"`) to a parsed [`TagFile`]. Dispatches on
+    /// cache-vs-filesystem mode:
+    ///
+    /// - **`--cache` set:** looks the tag up by `(group_tag, name)`
+    ///   in the monolithic cache. The group tag is resolved from
+    ///   `group_ext` via [`TagIndex`] (friendly name) first, then
+    ///   [`blam_tags::parse_group_tag`] (4-char ASCII) as a fallback.
+    /// - **filesystem mode:** derives a `tags/` root from the
+    ///   currently-loaded tag's path and reads
+    ///   `<tags_root>/<rel>.<ext>`.
+    ///
+    /// Used by `extract-geometry` / `extract-animation` / etc. to
+    /// resolve child references (`hlmt` → `mode`/`coll`/`phmo`,
+    /// `mode` → `jmad`/`bitm`, etc.).
+    pub fn load_referenced_tag(&self, rel_path: &str, group_ext: &str) -> Result<TagFile> {
+        if let Some(cache) = &self.cache {
+            let group_tag = self
+                .tag_index
+                .group_tag_for(group_ext)
+                .or_else(|| blam_tags::parse_group_tag(group_ext))
+                .with_context(|| {
+                    format!(
+                        "unknown group `{group_ext}` (pass `--game` to use the friendly name)",
+                    )
+                })?;
+            return cache.read_tag_by_name(group_tag, rel_path).map_err(|e| {
+                anyhow::anyhow!("failed to load {group_ext}:{rel_path} from cache: {e}")
+            });
+        }
+
+        let loaded = self.loaded("load_referenced_tag")?;
+        let tags_root = derive_tags_root(&loaded.path).context(
+            "failed to derive tags root from input path — input must live under a `tags/` directory \
+             (or pass `--cache` to read from a monolithic cache)",
+        )?;
+        let path = resolve_tag_path(&tags_root, rel_path, group_ext);
+        TagFile::read(&path).map_err(|e| anyhow::anyhow!("failed to read {}: {e}", path.display()))
+    }
+
+    /// True when this context resolves tag references through a
+    /// monolithic cache rather than the filesystem.
+    pub fn is_cache_mode(&self) -> bool {
+        self.cache.is_some()
     }
 
     /// Immutable borrow of the loaded tag. Context is the command
@@ -133,3 +251,4 @@ pub struct Commit {
     /// user passed `--output`).
     pub redirected: bool,
 }
+

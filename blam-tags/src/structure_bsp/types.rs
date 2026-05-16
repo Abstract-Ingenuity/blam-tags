@@ -697,7 +697,7 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d, is_small
     // engine miss sentinels and preserved as i32 `-1`. Fixes the
     // i16-truncation hang that powered the s3d_powerhouse decal
     // freeze — see `CollisionBsp2dNode` for context.
-    let to_canonical_31 = |raw: i64| -> i32 {
+    let to_canonical_31 = |raw: i128| -> i32 {
         if is_small_format {
             let v16 = raw as i16;
             if v16 == -1 {

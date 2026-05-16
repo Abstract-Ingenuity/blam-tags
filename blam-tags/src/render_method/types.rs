@@ -58,7 +58,7 @@ pub enum RenderMethodParameterType {
 }
 
 impl RenderMethodParameterType {
-    pub fn from_index(i: i64) -> Option<Self> {
+    pub fn from_index(i: i128) -> Option<Self> {
         Some(match i {
             0 => Self::Bitmap,
             1 => Self::Color,
@@ -104,7 +104,7 @@ pub enum RenderMethodAnimatedParameterType {
 }
 
 impl RenderMethodAnimatedParameterType {
-    pub fn from_index(i: i64) -> Option<Self> {
+    pub fn from_index(i: i128) -> Option<Self> {
         Some(match i {
             0 => Self::Value,
             1 => Self::Color,
@@ -193,8 +193,8 @@ impl RenderMethodExtern {
     /// Suitable for: enums you constructed in code, indexes from
     /// already-upgraded sources (rmt2 routing tables that the tools
     /// rebuild on save), test fixtures.
-    pub fn from_index(i: i64) -> Option<Self> {
-        if !(0..Self::COUNT as i64).contains(&i) {
+    pub fn from_index(i: i128) -> Option<Self> {
+        if !(0..Self::COUNT as i128).contains(&i) {
             return None;
         }
         // Safe: enum is `repr(u32)` with sequential 0..49 discriminants.
@@ -289,8 +289,8 @@ pub enum EntryPoint {
 impl EntryPoint {
     pub const COUNT: usize = 18;
 
-    pub fn from_index(i: i64) -> Option<Self> {
-        if !(0..Self::COUNT as i64).contains(&i) {
+    pub fn from_index(i: i128) -> Option<Self> {
+        if !(0..Self::COUNT as i128).contains(&i) {
             return None;
         }
         Some(unsafe { std::mem::transmute::<u32, Self>(i as u32) })
@@ -328,8 +328,8 @@ pub enum VertexType {
 impl VertexType {
     pub const COUNT: usize = 22;
 
-    pub fn from_index(i: i64) -> Option<Self> {
-        if !(0..Self::COUNT as i64).contains(&i) {
+    pub fn from_index(i: i128) -> Option<Self> {
+        if !(0..Self::COUNT as i128).contains(&i) {
             return None;
         }
         Some(unsafe { std::mem::transmute::<u32, Self>(i as u32) })
@@ -355,7 +355,7 @@ pub enum BitmapFilterMode {
 }
 
 impl BitmapFilterMode {
-    pub fn from_index(i: i64) -> Option<Self> {
+    pub fn from_index(i: i128) -> Option<Self> {
         Some(match i {
             0 => Self::Trilinear,
             1 => Self::Point,
@@ -384,7 +384,7 @@ pub enum BitmapAddressMode {
 }
 
 impl BitmapAddressMode {
-    pub fn from_index(i: i64) -> Option<Self> {
+    pub fn from_index(i: i128) -> Option<Self> {
         Some(match i {
             0 => Self::Wrap,
             1 => Self::Clamp,

@@ -35,10 +35,23 @@ mod walk;
 #[command(name = "blam-tag-shell", about = "Halo tag file inspector and editor")]
 struct Cli {
     /// Game whose schemas / `_meta.json` tag index this invocation
-    /// operates against. Resolves to `definitions/<GAME>/`. Required
-    /// — schemas and group-name resolution can't work without it.
+    /// operates against. Resolves to `definitions/<GAME>/`. Optional
+    /// — read commands work without it (using each tag's embedded
+    /// `blay` schema, tag-reference rendering falls back to raw 4-byte
+    /// group tags). Required for write/create commands like `new`,
+    /// `add-want`, `add-info`, `add-assd`, and `rebuild-dependencies`
+    /// that need an external JSON schema.
     #[arg(long, short = 'g', global = true)]
     game: Option<String>,
+
+    /// Open a Halo 4 monolithic tag cache (the `tag_cache/` directory
+    /// containing `blob_index.dat`). When set, tag-file arguments to
+    /// `inspect` / `get` / etc. are interpreted as cache-relative
+    /// paths with extension (`objects/elite/elite.biped`) instead of
+    /// filesystem paths. Mutually exclusive with operations that
+    /// write tags — the cache is read-only.
+    #[arg(long, short = 'c', global = true)]
+    cache: Option<String>,
 
     #[command(subcommand)]
     command: Commands,
@@ -491,16 +504,26 @@ enum Commands {
         #[arg(long)]
         output: Option<String>,
     },
+
+    /// List every tag in the monolithic cache (requires `--cache`).
+    /// Prints `<group>: <name>  size=<bytes>` per entry.
+    ListCache {
+        /// Filter to entries whose group name matches (4-char tag,
+        /// e.g. `bipd`). Repeatable.
+        #[arg(long = "group", short = 'G')]
+        groups: Vec<String>,
+        /// Filter to entries whose name contains this substring.
+        #[arg(long = "filter")]
+        filter: Option<String>,
+        /// Cap the number of rows printed.
+        #[arg(long, default_value_t = 0)]
+        limit: usize,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let game = cli.game.as_deref().ok_or_else(|| {
-        anyhow::anyhow!(
-            "missing required --game/-g flag (e.g. `--game haloreach_mcc`)",
-        )
-    })?;
-    let mut ctx = CliContext::new(game)?;
+    let mut ctx = CliContext::new(cli.game.as_deref(), cli.cache.as_deref())?;
 
     match cli.command {
         Commands::Repl { file } => repl::run(&mut ctx, file.as_deref()),
@@ -672,7 +695,56 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             ensure_loaded(ctx, &file, reload_tag)?;
             commands::streams::remove_asset_depot_storage(ctx, output.as_deref())
         }
+
+        Commands::ListCache { groups, filter, limit } => {
+            list_cache(ctx, &groups, filter.as_deref(), limit)
+        }
     }
+}
+
+fn list_cache(
+    ctx: &CliContext,
+    groups: &[String],
+    filter: Option<&str>,
+    limit: usize,
+) -> Result<()> {
+    let cache = ctx
+        .cache
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("`list-cache` requires `--cache <tag_cache_dir>`"))?;
+
+    let group_filters: Vec<u32> = groups
+        .iter()
+        .map(|g| {
+            blam_tags::parse_group_tag(g)
+                .ok_or_else(|| anyhow::anyhow!("invalid group tag `{g}` (must be 1-4 ASCII chars)"))
+        })
+        .collect::<Result<_>>()?;
+
+    let mut shown = 0usize;
+    for entry in cache.iter_tags() {
+        if !group_filters.is_empty() && !group_filters.contains(&entry.group_tag) {
+            continue;
+        }
+        if let Some(f) = filter
+            && !entry.name.contains(f) {
+                continue;
+        }
+        let group_bytes = entry.group_tag.to_be_bytes();
+        let group_full = String::from_utf8_lossy(&group_bytes);
+        let group = group_full.trim_end_matches(['\0', ' ']);
+        let size = cache
+            .resolve_tag_block(entry)
+            .map(|b| b.size)
+            .unwrap_or(0);
+        println!("{group}: {}  size={}", entry.name, size);
+
+        shown += 1;
+        if limit > 0 && shown >= limit {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// Load `file` into `ctx` (one-shot mode) or verify a tag is already

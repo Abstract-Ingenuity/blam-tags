@@ -208,7 +208,7 @@ impl DecalDefinition {
         let pass = DecalPass::from_index(
             s.read_int_any("runtime pass")
                 .or_else(|| s.read_int_any("runtime pass!"))
-                .unwrap_or(0),
+                .unwrap_or(0) as i64,
         );
         Ok(Self {
             name: s

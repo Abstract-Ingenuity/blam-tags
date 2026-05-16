@@ -43,6 +43,7 @@
 //! ```
 
 use crate::data::{TagBlockData, TagResourceChunk, TagStructData, TagSubChunkContent};
+use crate::io::Endian;
 use crate::fields::{
     field_option_names, find_flag_bit, TagFieldData, TagFieldType,
 };
@@ -110,14 +111,16 @@ impl TagFile {
 fn stream_root(stream: &crate::stream::TagStream) -> Option<TagStruct<'_>> {
     let layout = &stream.layout;
     let block = &stream.data;
+    let endian = block.endian;
     let struct_data = block.elements.first()?;
     let struct_raw = block.element_raw(layout, 0);
-    Some(TagStruct { layout, struct_data, struct_raw })
+    Some(TagStruct { layout, struct_data, struct_raw, endian })
 }
 
 fn stream_root_mut(stream: &mut crate::stream::TagStream) -> Option<TagStructMut<'_>> {
     let layout = &stream.layout;
     let block = &mut stream.data;
+    let endian = block.endian;
 
     // Inline the element-size math so we can disjoint-split `block`
     // into its `elements` and `raw_data` fields below.
@@ -126,7 +129,7 @@ fn stream_root_mut(stream: &mut crate::stream::TagStream) -> Option<TagStructMut
 
     let struct_data = block.elements.first_mut()?;
     let struct_raw = &mut block.raw_data[0..size];
-    Some(TagStructMut { layout, struct_data, struct_raw })
+    Some(TagStructMut { layout, struct_data, struct_raw, endian })
 }
 
 /// What kind of tag this is: the 4-byte group tag (e.g. `b"scnr"`)
@@ -156,6 +159,11 @@ pub struct TagStruct<'a> {
     layout: &'a TagLayout,
     struct_data: &'a TagStructData,
     struct_raw: &'a [u8],
+    /// Source byte order of `struct_raw` — propagated from the owning
+    /// [`TagBlockData::endian`] at construction. Forwarded to every
+    /// nested walker so primitive field reads dispatch correctly on
+    /// X360 (BE) tags.
+    endian: Endian,
 }
 
 impl<'a> TagStruct<'a> {
@@ -179,7 +187,7 @@ impl<'a> TagStruct<'a> {
     /// Walk the struct's fields in declaration order. Skips padding,
     /// explanations, terminators, and unknown types.
     pub fn fields(&self) -> impl Iterator<Item = TagField<'a>> + 'a {
-        let TagStruct { layout, struct_data, struct_raw } = *self;
+        let TagStruct { layout, struct_data, struct_raw, endian } = *self;
         let definition = &layout.struct_layouts[struct_data.struct_index as usize];
         let start = definition.first_field_index as usize;
         (start..)
@@ -189,7 +197,7 @@ impl<'a> TagStruct<'a> {
                 TagFieldType::Pad | TagFieldType::UselessPad | TagFieldType::Skip
                     | TagFieldType::Explanation | TagFieldType::Unknown,
             ))
-            .map(move |i| TagField { layout, struct_data, struct_raw, field_index: i })
+            .map(move |i| TagField { layout, struct_data, struct_raw, field_index: i, endian })
     }
 
     /// Walk every field, including padding / skip / explanation /
@@ -197,12 +205,12 @@ impl<'a> TagStruct<'a> {
     /// (e.g. `inspect --all`). Normal consumers should use
     /// [`TagStruct::fields`] which filters these out.
     pub fn fields_all(&self) -> impl Iterator<Item = TagField<'a>> + 'a {
-        let TagStruct { layout, struct_data, struct_raw } = *self;
+        let TagStruct { layout, struct_data, struct_raw, endian } = *self;
         let definition = &layout.struct_layouts[struct_data.struct_index as usize];
         let start = definition.first_field_index as usize;
         (start..)
             .take_while(move |&i| layout.fields[i].field_type != TagFieldType::Terminator)
-            .map(move |i| TagField { layout, struct_data, struct_raw, field_index: i })
+            .map(move |i| TagField { layout, struct_data, struct_raw, field_index: i, endian })
     }
 
     /// User-addressable field names in declaration order. Mirrors
@@ -222,6 +230,7 @@ impl<'a> TagStruct<'a> {
             struct_data: self.struct_data,
             struct_raw: self.struct_raw,
             field_index,
+            endian: self.endian,
         })
     }
 
@@ -239,7 +248,7 @@ impl<'a> TagStruct<'a> {
         let (struct_data, struct_raw) = crate::path::descend_from_struct(
             self.layout, self.struct_data, self.struct_raw, path,
         )?;
-        Some(TagStruct { layout: self.layout, struct_data, struct_raw })
+        Some(TagStruct { layout: self.layout, struct_data, struct_raw, endian: self.endian })
     }
 
     /// Resolve a `/`-separated field path. Accepts optional
@@ -254,6 +263,7 @@ impl<'a> TagStruct<'a> {
             struct_data: cursor.struct_data,
             struct_raw: cursor.struct_raw,
             field_index: cursor.field_index,
+            endian: self.endian,
         })
     }
 
@@ -263,31 +273,39 @@ impl<'a> TagStruct<'a> {
     // pattern-match its value to a typed shape" pattern. Walkers in
     // jms / ass / animation / bitmap reach for these constantly.
 
-    /// Read any integer-shaped field as `i64`. Accepts the 16
-    /// integer-like `TagFieldData` variants (regular ints, block
-    /// indices, custom block indices, enums, flags). Returns `None`
-    /// if the field is missing or not integer-shaped.
-    pub fn read_int_any(&self, name: &str) -> Option<i64> {
+    /// Read any integer-shaped field as `i128`. Accepts every
+    /// integer-like `TagFieldData` variant (signed/unsigned 8/16/32/
+    /// 64-bit integers, block indices, custom block indices, enums,
+    /// flags). Returns `None` if the field is missing or not
+    /// integer-shaped.
+    ///
+    /// `i128` is wide enough to losslessly hold every variant —
+    /// notably `QwordInteger(u64)` would wrap to negative under `i64`.
+    pub fn read_int_any(&self, name: &str) -> Option<i128> {
         match self.field(name)?.value()? {
-            TagFieldData::CharInteger(v) => Some(v as i64),
-            TagFieldData::ShortInteger(v) => Some(v as i64),
-            TagFieldData::LongInteger(v) => Some(v as i64),
-            TagFieldData::Int64Integer(v) => Some(v),
-            TagFieldData::CharBlockIndex(v) => Some(v as i64),
-            TagFieldData::ShortBlockIndex(v) => Some(v as i64),
-            TagFieldData::LongBlockIndex(v) => Some(v as i64),
-            TagFieldData::CustomCharBlockIndex(v) => Some(v as i64),
-            TagFieldData::CustomShortBlockIndex(v) => Some(v as i64),
-            TagFieldData::CustomLongBlockIndex(v) => Some(v as i64),
-            TagFieldData::CharEnum { value, .. } => Some(value as i64),
-            TagFieldData::ShortEnum { value, .. } => Some(value as i64),
-            TagFieldData::LongEnum { value, .. } => Some(value as i64),
-            TagFieldData::ByteFlags { value, .. } => Some(value as i64),
-            TagFieldData::WordFlags { value, .. } => Some(value as i64),
-            TagFieldData::LongFlags { value, .. } => Some(value as i64),
-            TagFieldData::ByteBlockFlags(v) => Some(v as i64),
-            TagFieldData::WordBlockFlags(v) => Some(v as i64),
-            TagFieldData::LongBlockFlags(v) => Some(v as i64),
+            TagFieldData::CharInteger(v) => Some(v as i128),
+            TagFieldData::ShortInteger(v) => Some(v as i128),
+            TagFieldData::LongInteger(v) => Some(v as i128),
+            TagFieldData::Int64Integer(v) => Some(v as i128),
+            TagFieldData::ByteInteger(v) => Some(v as i128),
+            TagFieldData::WordInteger(v) => Some(v as i128),
+            TagFieldData::DwordInteger(v) => Some(v as i128),
+            TagFieldData::QwordInteger(v) => Some(v as i128),
+            TagFieldData::CharBlockIndex(v) => Some(v as i128),
+            TagFieldData::ShortBlockIndex(v) => Some(v as i128),
+            TagFieldData::LongBlockIndex(v) => Some(v as i128),
+            TagFieldData::CustomCharBlockIndex(v) => Some(v as i128),
+            TagFieldData::CustomShortBlockIndex(v) => Some(v as i128),
+            TagFieldData::CustomLongBlockIndex(v) => Some(v as i128),
+            TagFieldData::CharEnum { value, .. } => Some(value as i128),
+            TagFieldData::ShortEnum { value, .. } => Some(value as i128),
+            TagFieldData::LongEnum { value, .. } => Some(value as i128),
+            TagFieldData::ByteFlags { value, .. } => Some(value as i128),
+            TagFieldData::WordFlags { value, .. } => Some(value as i128),
+            TagFieldData::LongFlags { value, .. } => Some(value as i128),
+            TagFieldData::ByteBlockFlags(v) => Some(v as i128),
+            TagFieldData::WordBlockFlags(v) => Some(v as i128),
+            TagFieldData::LongBlockFlags(v) => Some(v as i128),
             _ => None,
         }
     }
@@ -473,6 +491,7 @@ pub struct TagField<'a> {
     struct_data: &'a TagStructData,
     struct_raw: &'a [u8],
     field_index: usize,
+    endian: Endian,
 }
 
 impl<'a> TagField<'a> {
@@ -506,7 +525,7 @@ impl<'a> TagField<'a> {
     /// / [`TagField::as_array`] / [`TagField::as_resource`] to step
     /// into containers.
     pub fn value(&self) -> Option<TagFieldData> {
-        self.struct_data.parse_field(self.layout, self.struct_raw, self.field_index)
+        self.struct_data.parse_field(self.layout, self.struct_raw, self.field_index, self.endian)
     }
 
     /// Typed step-in accessors for container fields. Each returns
@@ -523,7 +542,7 @@ impl<'a> TagField<'a> {
         let (struct_data, struct_raw) = self
             .struct_data
             .nested_struct(self.layout, self.struct_raw, self.field_index)?;
-        Some(TagStruct { layout: self.layout, struct_data, struct_raw })
+        Some(TagStruct { layout: self.layout, struct_data, struct_raw, endian: self.endian })
     }
 
     /// Step into a block field. `None` if this isn't a block or if
@@ -560,6 +579,7 @@ impl<'a> TagField<'a> {
             array_layout_index,
             array_raw,
             elements,
+            endian: self.endian,
         })
     }
 
@@ -605,6 +625,7 @@ impl<'a> TagField<'a> {
             chunk,
             parent_raw: self.struct_raw,
             field_index: self.field_index,
+            endian: self.endian,
         })
     }
 
@@ -695,14 +716,15 @@ impl<'a> TagBlock<'a> {
         let size = block_element_size(self.layout, self.block_data);
         let start = index * size;
         let struct_raw = &self.block_data.raw_data[start..start + size];
-        Some(TagStruct { layout: self.layout, struct_data, struct_raw })
+        Some(TagStruct { layout: self.layout, struct_data, struct_raw, endian: self.block_data.endian })
     }
 
     /// Iterate every element in declaration order.
     pub fn iter(&self) -> impl Iterator<Item = TagStruct<'a>> + 'a {
         let TagBlock { layout, block_data } = *self;
+        let endian = block_data.endian;
         block_data.iter_elements(layout).map(move |(struct_raw, struct_data)| {
-            TagStruct { layout, struct_data, struct_raw }
+            TagStruct { layout, struct_data, struct_raw, endian }
         })
     }
 }
@@ -721,6 +743,7 @@ pub struct TagArray<'a> {
     array_layout_index: u32,
     array_raw: &'a [u8],
     elements: &'a [TagStructData],
+    endian: Endian,
 }
 
 impl<'a> TagArray<'a> {
@@ -743,12 +766,12 @@ impl<'a> TagArray<'a> {
         let size = self.layout.struct_layouts[self.element_struct_index() as usize].size;
         let start = index * size;
         let struct_raw = &self.array_raw[start..start + size];
-        Some(TagStruct { layout: self.layout, struct_data, struct_raw })
+        Some(TagStruct { layout: self.layout, struct_data, struct_raw, endian: self.endian })
     }
 
     /// Iterate every element in declaration order.
     pub fn iter(&self) -> impl Iterator<Item = TagStruct<'a>> + 'a {
-        let TagArray { layout, array_layout_index, array_raw, elements } = *self;
+        let TagArray { layout, array_layout_index, array_raw, elements, endian } = *self;
         let size = element_struct_size(layout, array_layout_index);
         elements.iter().enumerate().map(move |(i, struct_data)| {
             let start = i * size;
@@ -756,6 +779,7 @@ impl<'a> TagArray<'a> {
                 layout,
                 struct_data,
                 struct_raw: &array_raw[start..start + size],
+                endian,
             }
         })
     }
@@ -799,6 +823,7 @@ pub struct TagResource<'a> {
     /// inline bytes at this field's offset.
     parent_raw: &'a [u8],
     field_index: usize,
+    endian: Endian,
 }
 
 impl<'a> TagResource<'a> {
@@ -809,7 +834,7 @@ impl<'a> TagResource<'a> {
         match self.chunk {
             TagResourceChunk::Null => TagResourceKind::Null,
             TagResourceChunk::Exploded { .. } => TagResourceKind::Exploded,
-            TagResourceChunk::Xsync(_) => TagResourceKind::Xsync,
+            TagResourceChunk::Xsync { .. } => TagResourceKind::Xsync,
         }
     }
 
@@ -836,7 +861,7 @@ impl<'a> TagResource<'a> {
     /// live in the `tgdt` payload and its sub-chunk tree was parsed.
     /// Null and Xsync have no parsed struct to descend into.
     pub fn as_struct(&self) -> Option<TagStruct<'a>> {
-        let TagResourceChunk::Exploded { struct_data, exploded } = self.chunk else {
+        let TagResourceChunk::Exploded { struct_data, exploded, .. } = self.chunk else {
             return None;
         };
         let struct_size =
@@ -849,6 +874,7 @@ impl<'a> TagResource<'a> {
             layout: self.layout,
             struct_data,
             struct_raw,
+            endian: self.endian,
         })
     }
 
@@ -867,7 +893,20 @@ impl<'a> TagResource<'a> {
     /// MCC corpus; present so future tags don't panic.
     pub fn xsync_payload(&self) -> Option<&'a [u8]> {
         match self.chunk {
-            TagResourceChunk::Xsync(bytes) => Some(bytes.as_slice()),
+            TagResourceChunk::Xsync { payload, .. } => Some(payload.as_slice()),
+            _ => None,
+        }
+    }
+
+    /// For resources that were originally a `tgxc` xsync state and
+    /// have since been hydrated by [`crate::MonolithicCache::read_tag`]
+    /// into the [`TagResourceKind::Exploded`] shape, the parsed xsync
+    /// state — control_data, fixups, root address, interop GUIDs.
+    /// `None` for MCC-native `tgrc` resources and for any other
+    /// resource shape.
+    pub fn xsync_state(&self) -> Option<&'a crate::monolithic::XSyncState> {
+        match self.chunk {
+            TagResourceChunk::Exploded { xsync_state: Some(state), .. } => Some(state.as_ref()),
             _ => None,
         }
     }
@@ -935,6 +974,7 @@ pub struct TagStructMut<'a> {
     layout: &'a TagLayout,
     struct_data: &'a mut TagStructData,
     struct_raw: &'a mut [u8],
+    endian: Endian,
 }
 
 impl<'a> TagStructMut<'a> {
@@ -944,6 +984,7 @@ impl<'a> TagStructMut<'a> {
             layout: self.layout,
             struct_data: &*self.struct_data,
             struct_raw: &*self.struct_raw,
+            endian: self.endian,
         }
     }
 
@@ -956,6 +997,7 @@ impl<'a> TagStructMut<'a> {
             struct_data: &mut *self.struct_data,
             struct_raw: &mut *self.struct_raw,
             field_index,
+            endian: self.endian,
         })
     }
 
@@ -970,6 +1012,7 @@ impl<'a> TagStructMut<'a> {
             struct_data: cursor.struct_data,
             struct_raw: cursor.struct_raw,
             field_index: cursor.field_index,
+            endian: self.endian,
         })
     }
 
@@ -986,6 +1029,7 @@ impl<'a> TagStructMut<'a> {
         F: FnMut(TagFieldMut<'_>),
     {
         let layout = self.layout;
+        let endian = self.endian;
         let struct_index = self.struct_data.struct_index as usize;
         let start = layout.struct_layouts[struct_index].first_field_index as usize;
 
@@ -1006,6 +1050,7 @@ impl<'a> TagStructMut<'a> {
                     struct_data: &mut *self.struct_data,
                     struct_raw: &mut *self.struct_raw,
                     field_index: i,
+                    endian,
                 });
             }
             i += 1;
@@ -1019,6 +1064,7 @@ pub struct TagFieldMut<'a> {
     struct_data: &'a mut TagStructData,
     struct_raw: &'a mut [u8],
     field_index: usize,
+    endian: Endian,
 }
 
 impl<'a> TagFieldMut<'a> {
@@ -1029,6 +1075,7 @@ impl<'a> TagFieldMut<'a> {
             struct_data: &*self.struct_data,
             struct_raw: &*self.struct_raw,
             field_index: self.field_index,
+            endian: self.endian,
         }
     }
 
@@ -1061,6 +1108,7 @@ impl<'a> TagFieldMut<'a> {
                 struct_data: &mut *self.struct_data,
                 struct_raw: &mut *self.struct_raw,
                 field_index: self.field_index,
+                endian: self.endian,
             },
             bit,
         })
@@ -1074,10 +1122,11 @@ impl<'a> TagFieldMut<'a> {
             return None;
         }
         let field_index = self.field_index;
+        let endian = self.endian;
         let (struct_data, struct_raw) = self
             .struct_data
             .nested_struct_mut(self.layout, &mut *self.struct_raw, field_index)?;
-        Some(TagStructMut { layout: self.layout, struct_data, struct_raw })
+        Some(TagStructMut { layout: self.layout, struct_data, struct_raw, endian })
     }
 
     /// Same shape-vs-missing distinction as [`TagField::as_block`].
@@ -1126,6 +1175,7 @@ impl<'a> TagFieldMut<'a> {
             array_layout_index,
             array_raw,
             elements,
+            endian: self.endian,
         })
     }
 }
@@ -1158,9 +1208,10 @@ impl<'a> TagBlockMut<'a> {
         }
         let size = block_element_size(self.layout, &*self.block_data);
         let start = index * size;
+        let endian = self.block_data.endian;
         let struct_data = &mut self.block_data.elements[index];
         let struct_raw = &mut self.block_data.raw_data[start..start + size];
-        Some(TagStructMut { layout: self.layout, struct_data, struct_raw })
+        Some(TagStructMut { layout: self.layout, struct_data, struct_raw, endian })
     }
 
     /// Walk the block's elements in order, yielding a mutable handle
@@ -1172,12 +1223,13 @@ impl<'a> TagBlockMut<'a> {
     {
         let layout = self.layout;
         let size = block_element_size(layout, &*self.block_data);
+        let endian = self.block_data.endian;
         let count = self.block_data.elements.len();
         for i in 0..count {
             let start = i * size;
             let struct_data = &mut self.block_data.elements[i];
             let struct_raw = &mut self.block_data.raw_data[start..start + size];
-            f(TagStructMut { layout, struct_data, struct_raw });
+            f(TagStructMut { layout, struct_data, struct_raw, endian });
         }
     }
 
@@ -1257,6 +1309,7 @@ pub struct TagArrayMut<'a> {
     array_layout_index: u32,
     array_raw: &'a mut [u8],
     elements: &'a mut [TagStructData],
+    endian: Endian,
 }
 
 impl<'a> TagArrayMut<'a> {
@@ -1282,7 +1335,7 @@ impl<'a> TagArrayMut<'a> {
         let start = index * size;
         let struct_data = &mut self.elements[index];
         let struct_raw = &mut self.array_raw[start..start + size];
-        Some(TagStructMut { layout: self.layout, struct_data, struct_raw })
+        Some(TagStructMut { layout: self.layout, struct_data, struct_raw, endian: self.endian })
     }
 
     /// Swap elements at `i` and `j`. Arrays are fixed-count so
@@ -1319,12 +1372,13 @@ impl<'a> TagArrayMut<'a> {
     {
         let layout = self.layout;
         let size = element_struct_size(layout, self.array_layout_index);
+        let endian = self.endian;
         let count = self.elements.len();
         for i in 0..count {
             let start = i * size;
             let struct_data = &mut self.elements[i];
             let struct_raw = &mut self.array_raw[start..start + size];
-            f(TagStructMut { layout, struct_data, struct_raw });
+            f(TagStructMut { layout, struct_data, struct_raw, endian });
         }
     }
 }

@@ -95,8 +95,9 @@ fn read_tag_layout<P: AsRef<Path>>(path: P) -> Result<TagInfo, Box<dyn Error>> {
     let _tag_size = read_u32_le(&mut r)?;
 
     // Now positioned at the start of the blay chunk header — exactly
-    // what TagLayout::read expects.
-    let layout = TagLayout::read(&mut r)?;
+    // what TagLayout::read expects. This example only walks PC tags, so
+    // we pass Endian::Le directly rather than auto-detecting.
+    let layout = TagLayout::read(&mut r, blam_tags::Endian::Le)?;
 
     Ok(TagInfo { group_tag, layout })
 }
