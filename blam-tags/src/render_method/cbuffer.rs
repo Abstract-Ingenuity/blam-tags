@@ -106,7 +106,8 @@ pub fn resolve_pixel_user_cbuffer(
     rmt2: &RenderMethodTemplate,
     rmop_params: &[RenderMethodOptionParameter],
 ) -> ResolvedCbuffer {
-    resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, 0.0)
+    let ctx = DefaultEvalContext { eval_time: 0.0 };
+    resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, &ctx)
 }
 
 /// Time-aware variant — evaluates animated functions at `eval_time`
@@ -128,7 +129,7 @@ pub fn resolve_pixel_user_cbuffer_at_time(
     rmsh: &RenderMethod,
     rmt2: &RenderMethodTemplate,
     rmop_params: &[RenderMethodOptionParameter],
-    eval_time: f32,
+    ctx: &dyn RenderMethodEvalContext,
 ) -> ResolvedCbuffer {
     let names = &rmt2.float_constants;
     let n = names.len() as u32;
@@ -141,7 +142,7 @@ pub fn resolve_pixel_user_cbuffer_at_time(
         let rmsh_param = rmsh.parameters.iter().find(|p| p.parameter_name == *name);
 
         let (value, is_xform) = match op_param {
-            Some(op) => compile_real_constant_at_time(op, rmsh_param, eval_time),
+            Some(op) => compile_real_constant_at_time(op, rmsh_param, ctx),
             None => (default_for_unknown(name), name_is_xform(name)),
         };
 
@@ -169,9 +170,9 @@ pub fn rebuild_cbuffer_bytes_at_time(
     rmsh: &RenderMethod,
     rmt2: &RenderMethodTemplate,
     rmop_params: &[RenderMethodOptionParameter],
-    eval_time: f32,
+    ctx: &dyn RenderMethodEvalContext,
 ) -> Vec<u8> {
-    resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, eval_time).bytes
+    resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, ctx).bytes
 }
 
 /// Time-aware re-resolve that handles both load-time paths:
@@ -188,23 +189,22 @@ pub fn rebuild_cbuffer_bytes_with_optional_rmt2(
     rmsh: &RenderMethod,
     rmt2: Option<&RenderMethodTemplate>,
     rmop_params: &[RenderMethodOptionParameter],
-    eval_time: f32,
+    ctx: &dyn RenderMethodEvalContext,
 ) -> Vec<u8> {
     match rmt2 {
-        Some(rmt2) => resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, eval_time).bytes,
+        Some(rmt2) => resolve_pixel_user_cbuffer_at_time(rmsh, rmt2, rmop_params, ctx).bytes,
         None => {
             // Mirror of `loader.rs::shader_from_render_method` rmop
             // fallback (the `cbuffer_from_rmt2.unwrap_or_else(...)`
             // arm). Walks rmop_params source order, evaluates each
-            // animated function at `eval_time`.
+            // animated function via the supplied context.
             let mut bytes = vec![0u8; rmop_params.len() * 16];
             for (i, op) in rmop_params.iter().enumerate() {
                 let rmsh_param = rmsh
                     .parameters
                     .iter()
                     .find(|p| p.parameter_name == op.parameter_name);
-                let (value, _is_xform) =
-                    compile_real_constant_at_time(op, rmsh_param, eval_time);
+                let (value, _is_xform) = compile_real_constant_at_time(op, rmsh_param, ctx);
                 let off = i * 16;
                 for (c, v) in value.iter().enumerate() {
                     bytes[off + c * 4..off + c * 4 + 4].copy_from_slice(&v.to_le_bytes());
@@ -225,7 +225,8 @@ pub fn compile_real_constant(
     op_param: &RenderMethodOptionParameter,
     rmsh_param: Option<&RenderMethodParameter>,
 ) -> ([f32; 4], bool) {
-    compile_real_constant_at_time(op_param, rmsh_param, 0.0)
+    let ctx = DefaultEvalContext { eval_time: 0.0 };
+    compile_real_constant_at_time(op_param, rmsh_param, &ctx)
 }
 
 /// Time-aware variant — animated functions evaluate at `eval_time`
@@ -235,7 +236,7 @@ pub fn compile_real_constant(
 pub fn compile_real_constant_at_time(
     op_param: &RenderMethodOptionParameter,
     rmsh_param: Option<&RenderMethodParameter>,
-    eval_time: f32,
+    ctx: &dyn RenderMethodEvalContext,
 ) -> ([f32; 4], bool) {
     use RenderMethodAnimatedParameterType as A;
     use RenderMethodParameterType as P;
@@ -265,7 +266,7 @@ pub fn compile_real_constant_at_time(
             // Per-channel write based on each animated_parameter's type.
             for anim in &rm.animated_parameters {
                 let v = anim.function.as_ref()
-                    .map(|f| eval_value_at(f, anim.time_period_in_seconds, eval_time))
+                    .map(|f| eval_value_at(f, anim.time_period_in_seconds, &anim.input_name, &anim.range_name, ctx))
                     .unwrap_or(0.0);
                 match anim.parameter_type {
                     Some(A::ScaleUniform) => { slot[0] = v; slot[1] = v; }
@@ -284,7 +285,7 @@ pub fn compile_real_constant_at_time(
             for anim in &rm.animated_parameters {
                 if matches!(anim.parameter_type, Some(A::Value)) {
                     let v = anim.function.as_ref()
-                        .map(|f| eval_value_at(f, anim.time_period_in_seconds, eval_time))
+                        .map(|f| eval_value_at(f, anim.time_period_in_seconds, &anim.input_name, &anim.range_name, ctx))
                         .unwrap_or(0.0);
                     slot = [v; 4];
                 }
@@ -306,7 +307,7 @@ pub fn compile_real_constant_at_time(
                     }
                     Some(A::Alpha) => {
                         let v = anim.function.as_ref()
-                            .map(|f| eval_value_at(f, anim.time_period_in_seconds, eval_time))
+                            .map(|f| eval_value_at(f, anim.time_period_in_seconds, &anim.input_name, &anim.range_name, ctx))
                             .unwrap_or(0.0);
                         slot[3] = v;
                     }
@@ -367,13 +368,83 @@ fn eval_value(f: &TagFunction) -> f32 {
 /// normalized phase `(t mod period) / period` (cyclic). Otherwise the
 /// input is `eval_time` directly (engine path for non-cyclic
 /// time-driven params).
-fn eval_value_at(f: &TagFunction, time_period: f32, eval_time: f32) -> f32 {
-    let input = if time_period > 0.0 {
-        (eval_time.rem_euclid(time_period)) / time_period
-    } else {
-        eval_time
-    };
-    f.evaluate(input, 0.0)
+/// Per-call evaluation context for animated render-method curves.
+///
+/// Engine analog: `c_render_method_data::m_context_interface` (a
+/// function pointer set per object-render-context that resolves a
+/// string_id input name to a runtime float). Implementations route to
+/// the engine's `object_get_function_value` chain.
+///
+/// **blam-tags responsibility:** time-based inputs (`""` and `"time"`)
+/// are handled INTERNALLY by `eval_value_at` using
+/// `RenderMethodEvalContext::eval_time` — these only need the current
+/// game time, no game state. blam-tags is intentionally state-agnostic.
+///
+/// **Caller (e.g. protomorph) responsibility:** `resolve_named` is
+/// called for any non-time input. The caller routes it to its
+/// `object_get_function_value` implementation. Returning 0.0 for
+/// inputs that can't be resolved is engine-faithful — mirrors
+/// `object_compute_function_value`'s LABEL_82 path which logs a
+/// `c_event` and writes `value=0.0, active=false`.
+pub trait RenderMethodEvalContext {
+    /// Current game time in seconds, threaded into time-based inputs.
+    /// Engine source: `game_time_get_safe_in_seconds()` per
+    /// `evaluate_function @ 0x1806864D0`.
+    fn eval_time(&self) -> f32;
+
+    /// Resolve a named animation input (e.g. `"battery_empty"`) to
+    /// its runtime value. Return 0.0 when no resolver is wired or
+    /// when the engine's LABEL_82 fallback would apply (the same path
+    /// the engine logs `objects:function: object %s failed to find
+    /// function '%s'` and returns 0).
+    fn resolve_named(&self, input_name: &str) -> f32;
+}
+
+/// Default evaluation context — time-based only. Used when no caller-
+/// supplied context is available (load-time bake, blam-tag-shell
+/// `inspect`, tests). Named inputs return 0 — matches the engine's
+/// "no object" / LABEL_82 fallback semantics.
+pub struct DefaultEvalContext {
+    pub eval_time: f32,
+}
+
+impl RenderMethodEvalContext for DefaultEvalContext {
+    fn eval_time(&self) -> f32 { self.eval_time }
+    fn resolve_named(&self, _input_name: &str) -> f32 { 0.0 }
+}
+
+fn eval_value_at(
+    f: &TagFunction,
+    time_period: f32,
+    input_name: &str,
+    range_name: &str,
+    ctx: &dyn RenderMethodEvalContext,
+) -> f32 {
+    let input = resolve_one_input(input_name, time_period, ctx);
+    let range = resolve_one_input(range_name, time_period, ctx);
+    f.evaluate(input, range)
+}
+
+fn resolve_one_input(name: &str, time_period: f32, ctx: &dyn RenderMethodEvalContext) -> f32 {
+    match name {
+        // Engine `m_input_name == 0` (empty) AND string_id 492
+        // ("time"): time-based — divide by `time_period` and wrap mod
+        // 1.0. We collapse both cases (the engine's function-type
+        // early-out for non-cyclic outputs isn't ported yet —
+        // wrapping is the safe default).
+        "" | "time" => {
+            let eval_time = ctx.eval_time();
+            if time_period > 0.0 {
+                (eval_time.rem_euclid(time_period)) / time_period
+            } else {
+                eval_time
+            }
+        }
+        // Named input: delegate to the caller's resolver. Engine
+        // analog: `c_render_method_data::m_context_interface →
+        // object_get_function_value`.
+        other => ctx.resolve_named(other),
+    }
 }
 
 fn extract_first_color(f: &TagFunction) -> Option<[f32; 4]> {
@@ -468,14 +539,14 @@ pub fn pack_pixel_cbuffer_at_time(
     rmt2: &RenderMethodTemplate,
     rmop_params: &[RenderMethodOptionParameter],
     entry_point: EntryPoint,
-    eval_time: f32,
+    ctx: &dyn RenderMethodEvalContext,
 ) -> Option<ResolvedCbuffer> {
     pack_cbuffer_at_time(
         rmsh,
         rmt2,
         rmop_params,
         entry_point,
-        eval_time,
+        ctx,
         Stage::Pixel,
     )
 }
@@ -489,14 +560,14 @@ pub fn pack_vertex_cbuffer_at_time(
     rmt2: &RenderMethodTemplate,
     rmop_params: &[RenderMethodOptionParameter],
     entry_point: EntryPoint,
-    eval_time: f32,
+    ctx: &dyn RenderMethodEvalContext,
 ) -> Option<ResolvedCbuffer> {
     pack_cbuffer_at_time(
         rmsh,
         rmt2,
         rmop_params,
         entry_point,
-        eval_time,
+        ctx,
         Stage::Vertex,
     )
 }
@@ -512,7 +583,7 @@ fn pack_cbuffer_at_time(
     rmt2: &RenderMethodTemplate,
     rmop_params: &[RenderMethodOptionParameter],
     entry_point: EntryPoint,
-    eval_time: f32,
+    ctx: &dyn RenderMethodEvalContext,
     stage: Stage,
 ) -> Option<ResolvedCbuffer> {
     // Look up the entry_point → pass mapping. `entry_points[ep]` is a
@@ -583,7 +654,7 @@ fn pack_cbuffer_at_time(
         let rmsh_param = rmsh.parameters.iter().find(|p| p.parameter_name == name);
 
         let (value, is_xform) = match op_param {
-            Some(op) => compile_real_constant_at_time(op, rmsh_param, eval_time),
+            Some(op) => compile_real_constant_at_time(op, rmsh_param, ctx),
             None => (default_for_unknown(&name), name_is_xform(&name)),
         };
 
