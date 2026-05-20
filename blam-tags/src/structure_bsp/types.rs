@@ -116,6 +116,15 @@ pub struct StructureBsp {
     /// `c_atmosphere_fog_interface::get_atmosphere_setting @ 0x1803AFBA0`.
     pub atmosphere_palette: Vec<BspAtmospherePaletteEntry>,
 
+    /// `camera fx palette[i]` — per-BSP camera-fx palette. Each entry
+    /// is a `structure_camera_fx_palette_entry` (a cfxs tag-ref + per-
+    /// field overrides keyed on `flags`). `BspCluster::camera_fx_index`
+    /// indexes this table. Engine `c_camera_fx_values::update @
+    /// 0x180687CB0:47-101` resolves this each frame for the camera's
+    /// current cluster and applies the overrides to the inherited
+    /// scenario-level cfxs.
+    pub camera_fx_palette: Vec<BspCameraFxPaletteEntry>,
+
     /// `weather palette[i]` — per-BSP weather palette. Engine: weather
     /// is a normal particle effect with the `_effect_weather_bit` flag
     /// (see `effect_new_weather @ 0x18053D720` per the plan). The
@@ -183,6 +192,11 @@ impl StructureBsp {
                 "atmosphere palette",
                 BspAtmospherePaletteEntry::from_struct,
             ),
+            camera_fx_palette: read_block(
+                s,
+                "camera fx palette",
+                BspCameraFxPaletteEntry::from_struct,
+            ),
             weather_palette: read_block(
                 s,
                 "weather palette",
@@ -242,6 +256,57 @@ impl BspAtmospherePaletteEntry {
             atmosphere_setting_index: s
                 .read_int_any("Atmosphere Setting Index")
                 .unwrap_or(-1) as i16,
+        }
+    }
+}
+
+/// One BSP-side camera-fx palette entry. Schema
+/// `structure_bsp_camera_fx_palette_block`. Per-BSP indirection from
+/// `BspCluster::camera_fx_index`. Engine reads via
+/// `c_camera_fx_values::update @ 0x180687CB0:47-101` —
+/// `cluster_palette_entry` arg. When set, individual fields can
+/// override (per `flags` bits) the scenario-level cfxs:
+///   bit 0 → `forced_exposure` overrides exposure target (clears AUTO_BIT).
+///   bit 1 → `forced_auto_exposure_brightness` overrides AUTO target (sets AUTO_BIT).
+///   bit 2 → `exposure_min` / `exposure_max` override clamp range.
+///   bit 3 → `inherent_bloom` + `bloom_intensity` override bloom params.
+///
+/// Engine struct layout (`structure_camera_fx_palette_entry`, 48 B):
+///   `name` (i32 string_id, 4) + `camera_fx_tag` (TagRef, 16) +
+///   `flags` (u8) + 3B pad + 6×f32 values.
+#[derive(Debug, Clone, Default)]
+pub struct BspCameraFxPaletteEntry {
+    /// `name^` (string_id) — author-friendly name.
+    pub name: String,
+    /// `flags` byte (engine `structure_camera_fx_palette_entry.flags`).
+    pub flags: u8,
+    /// `forced exposure` (stops). Active when `flags & 0x01`.
+    pub forced_exposure: f32,
+    /// `forced auto exposure brightness` (stops). Active when `flags & 0x02`.
+    pub forced_auto_exposure_brightness: f32,
+    /// `exposure min` (stops). Active when `flags & 0x04`.
+    pub exposure_min: f32,
+    /// `exposure max` (stops). Active when `flags & 0x04`.
+    pub exposure_max: f32,
+    /// `inherent bloom`. Active when `flags & 0x08`.
+    pub inherent_bloom: f32,
+    /// `bloom intensity`. Active when `flags & 0x08`.
+    pub bloom_intensity: f32,
+}
+
+impl BspCameraFxPaletteEntry {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            name: s.read_string_id("name").unwrap_or_default(),
+            flags: s.read_int_any("camera_fx_palette_flags").unwrap_or(0) as u8,
+            forced_exposure: s.read_real("forced exposure").unwrap_or(0.0),
+            forced_auto_exposure_brightness: s
+                .read_real("forced auto exposure brightness")
+                .unwrap_or(0.0),
+            exposure_min: s.read_real("exposure min").unwrap_or(0.0),
+            exposure_max: s.read_real("exposure max").unwrap_or(0.0),
+            inherent_bloom: s.read_real("inherent bloom").unwrap_or(0.0),
+            bloom_intensity: s.read_real("bloom intensity").unwrap_or(0.0),
         }
     }
 }
