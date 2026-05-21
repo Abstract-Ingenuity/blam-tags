@@ -97,6 +97,7 @@ pub mod device;
 pub mod device_control;
 pub mod device_machine;
 pub mod device_terminal;
+pub mod effect;
 pub mod effect_scenery;
 pub mod equipment;
 pub mod giant;
