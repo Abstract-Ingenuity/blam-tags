@@ -465,10 +465,22 @@ impl ParticleDefinition {
         // (yes, with the `?`); the embedded layout name might differ —
         // we walk via the struct field iterator to find the first
         // child struct that's the render_method (typical position).
+        // Particles embed a `c_render_method` sub-struct without an outer
+        // tag-group declaration (the parent prt3 tag carries the context).
+        // `RenderMethod::from_struct` defaults `group_tag = 0` for that
+        // reason — patch it to `b"rmp "` here so the renderer's
+        // subclass dispatch (`render_methods::assemble`) routes through
+        // the particle WGSL path. Engine equivalent: the prt3's runtime
+        // c_render_method has its subclass field stamped to `rmp ` at
+        // tag-build time; we restore that semantic post-walk.
         let shader = s
             .field("actual shader?")
             .and_then(|f| f.as_struct())
             .and_then(|sub| RenderMethod::from_struct(&sub).ok())
+            .map(|mut rm| {
+                rm.group_tag = u32::from_be_bytes(*b"rmp ");
+                rm
+            })
             .map(Arc::new);
 
         let aspect_ratio = read_property_scalar(s, "aspect ratio");
