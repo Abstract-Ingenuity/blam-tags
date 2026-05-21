@@ -1,0 +1,205 @@
+//! `beam_system` (`beam`) tag walker — collection of beam definitions
+//! referenced by `effect_part_definition` with
+//! `runtime_tag_reference_base_class_tag = b"beam"`.
+//!
+//! Runtime: `c_beam_system::create @ 0x18049B110`, submit_all @
+//! 0x18049B650, render @ 0x18049CBF0. Shader is
+//! c_render_method_shader_beam (rmb stem). HLSL: beam_fx.hlsl + 3
+//! profile types (ribbon / cross / ngon).
+//!
+//! Schema: `definitions/halo3_mcc/beam_system.json`.
+
+use crate::api::TagStruct;
+use crate::effects_properties::EditableProperty;
+use crate::file::TagFile;
+use crate::math::RealVector2d;
+use crate::render_method::{RenderMethod, RenderMethodError};
+
+const BEAM_GROUP: [u8; 4] = *b"beam";
+
+#[derive(Debug)]
+pub enum BeamSystemError {
+    WrongGroup { expected: [u8; 4], actual: [u8; 4] },
+    RenderMethod(RenderMethodError),
+}
+
+impl std::fmt::Display for BeamSystemError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongGroup { expected, actual } => write!(
+                f,
+                "beam_system: wrong tag group (expected {:?}, got {:?})",
+                std::str::from_utf8(expected).unwrap_or("????"),
+                std::str::from_utf8(actual).unwrap_or("????"),
+            ),
+            Self::RenderMethod(e) => write!(f, "beam_system: actual shader: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for BeamSystemError {}
+
+impl From<RenderMethodError> for BeamSystemError {
+    fn from(e: RenderMethodError) -> Self {
+        Self::RenderMethod(e)
+    }
+}
+
+/// `profile shape` enum — 3 cross-section topologies (HLSL `_profile_*`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum BeamProfileShape {
+    #[default]
+    /// Billboard-based, camera-facing 2-tri ribbon (HLSL `_profile_ribbon`).
+    Ribbon = 0,
+    /// World-space + axis-aligned cross (4-tri cross).
+    Cross = 1,
+    /// N-sided polygon (n from `number_of_ngon_sides`).
+    Ngon = 2,
+}
+
+impl BeamProfileShape {
+    pub fn from_index(i: i64) -> Self {
+        match i {
+            1 => Self::Cross,
+            2 => Self::Ngon,
+            _ => Self::Ribbon,
+        }
+    }
+}
+
+/// One beam definition entry (520B `c_beam_definition`).
+#[derive(Debug, Clone, Default)]
+pub struct BeamDefinition {
+    pub name: String,
+    /// Embedded `c_render_method_shader_beam` — group stamped to `b"rmb "`.
+    pub shader: Option<RenderMethod>,
+    pub appearance_flags: u16,
+    pub profile_shape: BeamProfileShape,
+    /// n for n-gon profile shape (3..=N). Ignored for ribbon/cross.
+    pub ngon_sides: i8,
+    /// uv tiling — u along length (tiles/world unit), v across (absolute).
+    pub uv_tiling: RealVector2d,
+    /// uv scrolling — tiles per second (u, v).
+    pub uv_scrolling: RealVector2d,
+    /// Fade beyond `origin_fade_cutoff` world units from origin.
+    pub origin_fade_range: f32,
+    pub origin_fade_cutoff: f32,
+    /// Fade beyond `edge_fade_cutoff` degrees from edge-on view.
+    pub edge_fade_range_degrees: f32,
+    pub edge_fade_cutoff_degrees: f32,
+    // ---- 11 property curves ----
+    pub length: EditableProperty,
+    pub offset: EditableProperty,
+    pub profile_density: EditableProperty,
+    pub profile_offset: EditableProperty,
+    pub profile_rotation: EditableProperty,
+    pub profile_thickness: EditableProperty,
+    pub profile_color: EditableProperty,
+    pub profile_alpha: EditableProperty,
+    pub profile_black_point: EditableProperty,
+    pub profile_palette: EditableProperty,
+    pub profile_intensity: EditableProperty,
+    // ---- runtime-resolved ----
+    pub runtime_constant_per_profile_properties: i32,
+    pub runtime_used_states: i32,
+    pub runtime_max_profile_count: i32,
+}
+
+/// Walked `beam_system` tag.
+#[derive(Debug, Clone, Default)]
+pub struct BeamSystem {
+    /// Up to 16 beam definitions per system.
+    pub definitions: Vec<BeamDefinition>,
+}
+
+impl BeamSystem {
+    pub fn from_tag(tag: &TagFile) -> Result<Self, BeamSystemError> {
+        let actual = tag.group().tag.to_be_bytes();
+        if actual != BEAM_GROUP {
+            return Err(BeamSystemError::WrongGroup { expected: BEAM_GROUP, actual });
+        }
+        Self::from_struct(&tag.root())
+    }
+
+    pub fn from_struct(s: &TagStruct<'_>) -> Result<Self, BeamSystemError> {
+        let block = match s.field("beams").and_then(|f| f.as_block()) {
+            Some(b) => b,
+            None => return Ok(Self::default()),
+        };
+        let mut definitions = Vec::with_capacity(block.len());
+        for i in 0..block.len() {
+            if let Some(elem) = block.element(i) {
+                definitions.push(BeamDefinition::from_struct(&elem)?);
+            }
+        }
+        Ok(Self { definitions })
+    }
+}
+
+impl BeamDefinition {
+    pub fn from_struct(s: &TagStruct<'_>) -> Result<Self, BeamSystemError> {
+        let shader_struct = s.descend("actual shader").or_else(|| s.descend("actual shader?"));
+        let shader = match shader_struct {
+            Some(view) => {
+                let mut rm = RenderMethod::from_struct(&view)?;
+                rm.group_tag = u32::from_be_bytes(*b"rmb ");
+                Some(rm)
+            }
+            None => None,
+        };
+
+        Ok(Self {
+            name: s
+                .read_string_id("beam name")
+                .or_else(|| s.read_string_id("beam name^"))
+                .unwrap_or_default(),
+            shader,
+            appearance_flags: s.read_int_any("appearance flags").unwrap_or(0) as u16,
+            profile_shape: BeamProfileShape::from_index(
+                s.read_int_any("profile shape").unwrap_or(0) as i64,
+            ),
+            ngon_sides: s.read_int_any("number of n-gon sides").unwrap_or(0) as i8,
+            uv_tiling: s.read_vec2("uv tiling"),
+            uv_scrolling: s.read_vec2("uv scrolling"),
+            origin_fade_range: read_origin_fade_range(s),
+            origin_fade_cutoff: s.read_real("origin fade cutoff").unwrap_or(0.0),
+            edge_fade_range_degrees: s.read_real("edge fade range").unwrap_or(0.0),
+            edge_fade_cutoff_degrees: s.read_real("edge fade cutoff").unwrap_or(0.0),
+            length: read_property(s, "length"),
+            offset: read_property(s, "offset"),
+            profile_density: read_property(s, "profile_density"),
+            profile_offset: read_property(s, "profile_offset"),
+            profile_rotation: read_property(s, "profile_rotation"),
+            profile_thickness: read_property(s, "profile_thickness"),
+            profile_color: read_property(s, "profile_color"),
+            profile_alpha: read_property(s, "profile_alpha"),
+            profile_black_point: read_property(s, "profile_black_point"),
+            profile_palette: read_property(s, "profile_palette"),
+            profile_intensity: read_property(s, "profile_intensity"),
+            runtime_constant_per_profile_properties: s
+                .read_int_any("runtime m_constant_per_profile_properties")
+                .unwrap_or(0) as i32,
+            runtime_used_states: s.read_int_any("runtime m_used_states").unwrap_or(0) as i32,
+            runtime_max_profile_count: s
+                .read_int_any("runtime m_max_profile_count")
+                .unwrap_or(0) as i32,
+        })
+    }
+}
+
+/// Schema annotates this with `{origin fade distance}` alias; try
+/// both spellings since cached tags may use either.
+fn read_origin_fade_range(s: &TagStruct<'_>) -> f32 {
+    s.read_real("origin fade range")
+        .or_else(|| s.read_real("origin fade distance"))
+        .unwrap_or(0.0)
+}
+
+fn read_property(parent: &TagStruct<'_>, name: &str) -> EditableProperty {
+    parent
+        .field(name)
+        .and_then(|f| f.as_struct())
+        .map(|inner| EditableProperty::from_struct(&inner))
+        .unwrap_or_default()
+}
