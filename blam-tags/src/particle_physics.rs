@@ -32,9 +32,8 @@
 //! (`runtime m_constant_parameters!`, etc.) are tool.exe-resolved.
 
 use crate::api::TagStruct;
-use crate::fields::TagFieldType;
+use crate::effects_properties::EditableProperty;
 use crate::file::TagFile;
-use crate::tag_function::TagFunction;
 
 const PMOV_GROUP: [u8; 4] = *b"pmov";
 
@@ -92,37 +91,6 @@ impl ControllerType {
             _ => return None,
         })
     }
-}
-
-/// One `particle_property_scalar_struct_new` — the authoring shape of
-/// a `c_editable_property<...>` slot (mirrors the 32B runtime struct).
-/// Inputs name state-list slots; the mapping function bridges input
-/// to output value.
-#[derive(Debug, Clone, Default)]
-pub struct EditableProperty {
-    /// `Input Variable` (char_enum, range 0..27) — primary state-list
-    /// slot index driving evaluation. See `game_state_type_enum` in
-    /// the schema for the named slots.
-    pub input_index: u8,
-    /// `Range Variable` — secondary state-list slot, used by typed
-    /// properties (vec / color) and per-range evaluators.
-    pub range_input_index: u8,
-    /// `Output Modifier` (3-value enum: none / Plus / Times) — when
-    /// non-zero, blends the mapping output with another evaluation
-    /// at `output_modifier_input_index`.
-    pub output_modifier_type: u8,
-    /// `Output Modifier Input` — state-list slot driving the modifier.
-    pub output_modifier_input_index: u8,
-    /// Authored curve / function blob. `None` when the slot stores a
-    /// constant scalar in `constant_value` instead of a function.
-    pub function: Option<TagFunction>,
-    /// `runtime m_constant_value!` — tool.exe-resolved per-tag
-    /// constant for constant-time properties. Engine reads this when
-    /// `m_flags` indicates constant.
-    pub constant_value: f32,
-    /// `runtime m_flags!` (char) — engine flags for which evaluation
-    /// shortcut applies (is_constant / is_constant_over_time / etc.).
-    pub runtime_flags: u8,
 }
 
 /// One `particle_controller_parameters` entry — a parameter slot on
@@ -233,32 +201,3 @@ impl ControllerParameter {
     }
 }
 
-impl EditableProperty {
-    pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        // Mapping function lives inside the "Mapping" sub-struct
-        // (mapping_function), which wraps a `data` payload. Same
-        // indirection as area_screen_effect's falloff curves.
-        let function = read_mapping_function(s, "Mapping");
-        Self {
-            input_index: s.read_int_any("Input Variable").unwrap_or(0) as u8,
-            range_input_index: s.read_int_any("Range Variable").unwrap_or(0) as u8,
-            output_modifier_type: s.read_int_any("Output Modifier").unwrap_or(0) as u8,
-            output_modifier_input_index: s.read_int_any("Output Modifier Input").unwrap_or(0) as u8,
-            function,
-            constant_value: s.read_real("runtime m_constant_value").unwrap_or(0.0),
-            runtime_flags: s.read_int_any("runtime m_flags").unwrap_or(0) as u8,
-        }
-    }
-}
-
-/// Walk the schema's two-stage "Mapping" wrapper to reach the curve
-/// payload. The schema declares both a `custom` marker AND a `struct`
-/// with the same name `Mapping`; we find the struct by type, then
-/// pull the `data` field out of it.
-fn read_mapping_function(parent: &TagStruct<'_>, name: &str) -> Option<TagFunction> {
-    let outer = parent
-        .fields()
-        .find(|f| f.name() == name && f.field_type() == TagFieldType::Struct)?
-        .as_struct()?;
-    outer.field("data").and_then(|f| f.as_function())
-}
