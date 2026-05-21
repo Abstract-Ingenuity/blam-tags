@@ -123,6 +123,7 @@ pub mod material_effects;
 pub mod effects_properties;
 pub mod light_volume_system;
 pub mod beam_system;
+pub mod contrail_system;
 pub mod chocolate_mountain;
 pub mod rasterizer_globals;
 pub mod structure_bsp;
