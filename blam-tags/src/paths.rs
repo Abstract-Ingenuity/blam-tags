@@ -112,8 +112,19 @@ pub fn group_tag_to_extension(group: u32) -> Option<&'static str> {
         b"eqip" => "equipment",
         b"ssce" => "sound_scenery",
         b"scen" => "scenery",
+        // `.crate` extension uses two FOURCCs across Halo versions:
+        //   `bloc` — H3 MCC (verified via `definitions/halo3_mcc/crate.json:3`)
+        //   `crat` — Reach / older builds
+        // Keep both so either resolves to the right on-disk extension.
+        b"bloc" => "crate",
         b"crat" => "crate",
         b"mach" => "device_machine",
+        b"ctrl" => "device_control",
+        b"term" => "device_terminal",
+        b"proj" => "projectile",
+        b"crea" => "creature",
+        b"gint" => "giant",
+        b"efsc" => "effect_scenery",
         _ => return None,
     })
 }

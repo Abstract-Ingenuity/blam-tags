@@ -425,6 +425,16 @@ impl<'a> TagStruct<'a> {
         }
     }
 
+    /// Read a `real_vector_2d` field. Returns the default (zero) when
+    /// missing. **Panics** on type mismatch.
+    pub fn read_vec2(&self, name: &str) -> crate::math::RealVector2d {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealVector2d(v)) => v,
+            None => crate::math::RealVector2d::default(),
+            Some(other) => type_mismatch_panic(name, "RealVector2d", &other),
+        }
+    }
+
     /// Read a `real_plane_3d` field. Returns the default (zero
     /// normal, zero offset) when missing. **Panics** on type
     /// mismatch.
@@ -453,6 +463,61 @@ impl<'a> TagStruct<'a> {
             Some(TagFieldData::RealBounds(b)) => b,
             None => crate::math::RealBounds::default(),
             Some(other) => type_mismatch_panic(name, "RealBounds", &other),
+        }
+    }
+
+    /// Read a `short_integer_bounds` field. Returns the default
+    /// (`lower = 0`, `upper = 0`) when missing. **Panics** on type
+    /// mismatch.
+    pub fn read_short_bounds(&self, name: &str) -> crate::math::ShortBounds {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::ShortIntegerBounds(b)) => b,
+            None => crate::math::ShortBounds::default(),
+            Some(other) => type_mismatch_panic(name, "ShortBounds", &other),
+        }
+    }
+
+    /// Read a `fraction_bounds` field (two `[0,1]`-range floats).
+    /// Returns the default (zero bounds) when missing. **Panics** on
+    /// type mismatch.
+    pub fn read_fraction_bounds(&self, name: &str) -> crate::math::FractionBounds {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::FractionBounds(b)) => b,
+            None => crate::math::FractionBounds::default(),
+            Some(other) => type_mismatch_panic(name, "FractionBounds", &other),
+        }
+    }
+
+    /// Read an `angle_bounds` field (two radian-angle floats).
+    /// Returns the default (zero bounds) when missing. **Panics** on
+    /// type mismatch.
+    pub fn read_angle_bounds(&self, name: &str) -> crate::math::AngleBounds {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::AngleBounds(b)) => b,
+            None => crate::math::AngleBounds::default(),
+            Some(other) => type_mismatch_panic(name, "AngleBounds", &other),
+        }
+    }
+
+    /// Read a `real_euler_angles_3d` field (yaw/pitch/roll in radians
+    /// per Halo convention). Returns the default (all zeros) when
+    /// missing. **Panics** on type mismatch.
+    pub fn read_euler3d(&self, name: &str) -> crate::math::RealEulerAngles3d {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealEulerAngles3d(a)) => a,
+            None => crate::math::RealEulerAngles3d::default(),
+            Some(other) => type_mismatch_panic(name, "RealEulerAngles3d", &other),
+        }
+    }
+
+    /// Read a `real_euler_angles_2d` field (yaw/pitch in radians).
+    /// Returns the default (zeros) when missing. **Panics** on type
+    /// mismatch.
+    pub fn read_euler2d(&self, name: &str) -> crate::math::RealEulerAngles2d {
+        match self.field(name).and_then(|f| f.value()) {
+            Some(TagFieldData::RealEulerAngles2d(a)) => a,
+            None => crate::math::RealEulerAngles2d::default(),
+            Some(other) => type_mismatch_panic(name, "RealEulerAngles2d", &other),
         }
     }
 

@@ -88,6 +88,29 @@ pub struct AtmosphereSettings {
     /// World-space wind direction. PS-side accumulated into per-sheet
     /// UV offsets each frame.
     pub wind_direction: RealVector3d,
+
+    /// Schema "Weather effect" → engine `m_effect_tag` @ +0x08C.
+    /// Particle-system tag reference (raindrops, snowflakes) that
+    /// follows the camera and wraps seamlessly. Empty string when
+    /// unauthored. Not currently rendered — Phase 8 of the atmosphere
+    /// port plan.
+    pub weather_effect: String,
+
+    /// Runtime scratch field — engine `c_atmosphere_setting::m_weight`
+    /// @ +0x09C. Populated each frame by
+    /// `c_atmosphere_fog_interface::compute_cluster_weights` based on
+    /// the camera-to-cluster distance and `cluster_search_radius` /
+    /// `falloff_start_distance` / `distance_falloff_power`. Consumed
+    /// by `accumulate_atmosphere_settings` as the per-setting blend
+    /// weight. Zero-default from the parser; Phase 3 will mutate it
+    /// in-place per frame.
+    pub weight: f32,
+
+    /// Runtime scratch field — engine `c_atmosphere_setting::m_effect_weight`
+    /// @ +0x0A0. Per-setting weight for the weather-effect particle
+    /// system. Zero-default; populated by `compute_cluster_weights`
+    /// alongside `weight`.
+    pub effect_weight: f32,
 }
 
 impl AtmosphereSettings {
@@ -112,6 +135,11 @@ impl AtmosphereSettings {
             full_intensity_height: s.read_real("Full intensity height").unwrap_or(0.0),
             half_intensity_height: s.read_real("Half intensity height").unwrap_or(0.0),
             wind_direction: s.read_vec3("Wind direction"),
+            weather_effect: s.read_tag_ref_path("Weather effect").unwrap_or_default(),
+            // Runtime scratch — zero from the parser; Phase 3 of the
+            // atmosphere port plan populates these via compute_cluster_weights.
+            weight: 0.0,
+            effect_weight: 0.0,
         }
     }
 
@@ -124,14 +152,28 @@ impl AtmosphereSettings {
 
     /// Compute world-space sun direction (z-up) from pitch + heading.
     /// Returns the direction TO the sun.
+    ///
+    /// Engine `c_atmosphere_fog_interface::get_sun_parameters @ 0x1803AF990`
+    /// override branch:
+    /// ```c
+    /// sun_direction.x = cos(phi_rad) * sin(theta_rad);   // phi  = m_dominant_light_phi   = "Heading"
+    /// sun_direction.y = sin(phi_rad) * sin(theta_rad);   // theta = m_dominant_light_theta = "Pitch"
+    /// sun_direction.z = cos(theta_rad);
+    /// ```
+    /// Pitch is interpreted as a **polar angle from zenith** (astronomical
+    /// "zenith angle"), NOT elevation from horizon — pitch=0 puts the sun
+    /// straight up, pitch=90 puts it on the horizon. The schema label
+    /// "Pitch [0 to 90]" is misleading; engine field name is
+    /// `m_dominant_light_theta` (theta = polar). An earlier port treated
+    /// pitch as elevation, which inverted z and shifted x/y by 90°.
     pub fn sun_direction(&self) -> RealPoint3d {
-        let pitch_rad = self.sun_pitch.to_radians();
-        let heading_rad = self.sun_heading.to_radians();
-        let cos_p = pitch_rad.cos();
+        let phi_rad   = self.sun_heading.to_radians();
+        let theta_rad = self.sun_pitch.to_radians();
+        let sin_theta = theta_rad.sin();
         RealPoint3d {
-            x: heading_rad.sin() * cos_p,
-            y: heading_rad.cos() * cos_p,
-            z: pitch_rad.sin(),
+            x: phi_rad.cos() * sin_theta,
+            y: phi_rad.sin() * sin_theta,
+            z: theta_rad.cos(),
         }
     }
 
