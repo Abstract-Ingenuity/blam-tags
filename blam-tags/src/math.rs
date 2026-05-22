@@ -181,6 +181,42 @@ pub struct RealAhsvColor {
     pub value: f32,
 }
 
+/// Engine `real_orientation` (`math/real_math.h`, 32 bytes). A
+/// quaternion+point+scale triplet — the canonical "local TRS in one
+/// struct" used by the animation system. Stored verbatim in
+/// `render_model.runtime_node_orientations!` (one entry per node, the
+/// bind-pose snapshot tool.exe bakes at cache-compile time) and copied
+/// into per-object `node_orientations` buffers at spawn.
+///
+/// Layout (matches engine `real_orientation`):
+/// - `rotation` (quat) @ +0  (16 bytes)
+/// - `translation` (point) @ +0x10 (12 bytes)
+/// - `scale` (f32) @ +0x1C (4 bytes)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RealOrientation {
+    pub rotation: RealQuaternion,
+    pub translation: RealPoint3d,
+    pub scale: f32,
+}
+
+impl RealOrientation {
+    /// Identity TRS — zero translation, identity rotation, unit scale.
+    /// Mirrors engine `global_identity_orientation`.
+    pub const IDENTITY: Self = Self {
+        rotation: RealQuaternion::IDENTITY,
+        translation: RealPoint3d::ZERO,
+        scale: 1.0,
+    };
+}
+
+impl Default for RealOrientation {
+    /// Identity (`IDENTITY`) — engines treat a zero-quat orientation as
+    /// undefined, so the default must be a valid TRS.
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
 //================================================================================
 // RealVector2d / RealVector3d
 //================================================================================

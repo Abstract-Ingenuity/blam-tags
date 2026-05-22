@@ -32,7 +32,7 @@ use crate::api::{TagBlock, TagStruct};
 use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::geometry::{read_compression_bounds, strip_to_list, CompressionBounds};
-use crate::math::{RealPoint2d, RealPoint3d, RealQuaternion, RealVector3d};
+use crate::math::{RealOrientation, RealPoint2d, RealPoint3d, RealQuaternion, RealVector3d};
 
 /// Errors from runtime render_model extraction.
 #[derive(Debug)]
@@ -394,6 +394,19 @@ pub struct RenderMarker {
 #[derive(Debug, Clone, Default)]
 pub struct RenderModel {
     pub nodes: Vec<RenderNode>,
+    /// `runtime node orientations` block (engine
+    /// `render_model_definition.default_node_orientations` @ +0x1C0).
+    /// Tool.exe-baked bind-pose snapshot — one [`RealOrientation`] per
+    /// entry in [`Self::nodes`] (parent-relative TRS). Empty when the
+    /// extracted tag didn't carry the runtime block.
+    ///
+    /// Engine consumers `memcpy` this directly into per-object
+    /// `node_orientations` buffers at spawn time
+    /// (`model_get_node_orientations @ 0x1804e7fc0`). When this field is
+    /// empty (extracted tags strip runtime data), derive the same
+    /// orientation per node by reading `nodes[i].default_translation`
+    /// / `nodes[i].default_rotation` and using `scale = 1.0`.
+    pub default_node_orientations: Vec<RealOrientation>,
     pub materials: Vec<RenderMaterial>,
     pub regions: Vec<RenderRegion>,
     pub meshes: Vec<RenderMesh>,
@@ -454,6 +467,7 @@ impl RenderModel {
         let bounds = read_compression_bounds(&root);
         Ok(Self {
             nodes: read_nodes(&root)?,
+            default_node_orientations: read_default_node_orientations(&root),
             materials: read_materials(&root)?,
             regions: read_regions(&root)?,
             meshes: read_meshes(&root, &bounds)?,
@@ -462,6 +476,36 @@ impl RenderModel {
             sky_lights: read_sky_lights(&root),
             default_lightprobe: read_default_lightprobe(&root),
         })
+    }
+
+    /// Bind-pose [`RealOrientation`] per node — what engine
+    /// `model_get_node_orientations @ 0x1804e7fc0` copies into the
+    /// per-object `node_orientations` buffer at spawn.
+    ///
+    /// Source priority:
+    /// 1. If [`Self::default_node_orientations`] is populated (cache
+    ///    loads carry the tool.exe-baked block verbatim), return that.
+    /// 2. Otherwise derive one entry per node from
+    ///    `nodes[i].default_translation` + `default_rotation` with
+    ///    `scale = 1.0`. This produces the same data tool.exe writes
+    ///    into the runtime block — extracted tags drop the runtime
+    ///    block (it's marked `!` in the schema), so this fallback
+    ///    keeps runtime-consumer code agnostic of the cache vs.
+    ///    extracted source.
+    ///
+    /// Empty when the model has no nodes.
+    pub fn node_bind_pose(&self) -> Vec<RealOrientation> {
+        if !self.default_node_orientations.is_empty() {
+            return self.default_node_orientations.clone();
+        }
+        self.nodes
+            .iter()
+            .map(|n| RealOrientation {
+                rotation: n.default_rotation,
+                translation: n.default_translation,
+                scale: 1.0,
+            })
+            .collect()
     }
 }
 
@@ -717,6 +761,34 @@ fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<RenderNode>, RenderModelError>
         });
     }
     Ok(out)
+}
+
+/// Read the `runtime node orientations` block (engine
+/// `render_model_definition.default_node_orientations`, +0x1C0 in the
+/// runtime struct). Tool.exe bakes one [`RealOrientation`] per node;
+/// the engine `memcpy`s this directly into per-object orientation
+/// buffers via `model_get_node_orientations @ 0x1804e7fc0`.
+///
+/// Schema name has a `!` suffix in the H3 MCC definitions — that's
+/// the convention for tool.exe-resolved runtime data. The block can
+/// legitimately be empty in some extracted tag dumps; callers that
+/// need a bind pose for those should fall back to deriving each
+/// entry from [`RenderNode::default_translation`] /
+/// [`RenderNode::default_rotation`] with `scale = 1.0`.
+fn read_default_node_orientations(root: &TagStruct<'_>) -> Vec<RealOrientation> {
+    let Some(block) = root.field("runtime node orientations").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let Some(elem) = block.element(i) else { continue };
+        out.push(RealOrientation {
+            rotation: elem.read_quat("rotation"),
+            translation: elem.read_point3d("translation"),
+            scale: elem.read_real("scale").unwrap_or(1.0),
+        });
+    }
+    out
 }
 
 fn read_materials(root: &TagStruct<'_>) -> Result<Vec<RenderMaterial>, RenderModelError> {
@@ -1311,5 +1383,59 @@ fn read_vertex(
         node_weights,
         lightmap_texcoord,
         vert_color,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::math::{RealOrientation, RealPoint3d, RealQuaternion};
+
+    /// `node_bind_pose` returns the tag block verbatim when populated
+    /// (cache loads carry tool.exe's baked orientations).
+    #[test]
+    fn node_bind_pose_prefers_tag_block_when_present() {
+        let baked = RealOrientation {
+            rotation: RealQuaternion { i: 0.1, j: 0.2, k: 0.3, w: 0.4 },
+            translation: RealPoint3d { x: 1.0, y: 2.0, z: 3.0 },
+            scale: 0.5,
+        };
+        let rm = RenderModel {
+            nodes: vec![RenderNode {
+                name: "root".into(),
+                parent_index: -1,
+                default_translation: RealPoint3d::ZERO,
+                default_rotation: RealQuaternion::IDENTITY,
+            }],
+            default_node_orientations: vec![baked],
+            ..Default::default()
+        };
+        let pose = rm.node_bind_pose();
+        assert_eq!(pose.len(), 1);
+        assert_eq!(pose[0], baked, "tag-block entry must be preserved");
+    }
+
+    /// `node_bind_pose` derives one entry per node from
+    /// `default_translation/default_rotation` with `scale=1.0` when the
+    /// tag block is empty — the extracted-tag fallback.
+    #[test]
+    fn node_bind_pose_derives_from_nodes_when_tag_block_empty() {
+        let tx = RealPoint3d { x: 4.0, y: 5.0, z: 6.0 };
+        let rot = RealQuaternion { i: 0.1, j: 0.2, k: 0.3, w: 0.9 };
+        let rm = RenderModel {
+            nodes: vec![RenderNode {
+                name: "root".into(),
+                parent_index: -1,
+                default_translation: tx,
+                default_rotation: rot,
+            }],
+            default_node_orientations: Vec::new(),
+            ..Default::default()
+        };
+        let pose = rm.node_bind_pose();
+        assert_eq!(pose.len(), 1);
+        assert_eq!(pose[0].rotation, rot);
+        assert_eq!(pose[0].translation, tx);
+        assert_eq!(pose[0].scale, 1.0, "derived bind-pose scale defaults to 1.0");
     }
 }

@@ -32,6 +32,11 @@ fn main() {
         );
     }
     println!("totals: {} verts, {} tris", total_verts, total_tris);
+    println!(
+        "default_node_orientations: {} (tag block, empty for extracted tags)",
+        rm.default_node_orientations.len(),
+    );
+    println!("node_bind_pose: {} (derived if tag block empty)", rm.node_bind_pose().len());
     println!("markers: {}", rm.markers.len());
     if let Some(v) = rm.meshes.iter().flat_map(|m| m.vertices.iter()).next() {
         println!(
