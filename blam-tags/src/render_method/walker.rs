@@ -262,7 +262,7 @@ fn resolve_one(
     let parameter_type = op_param.parameter_type.map(|e| e.get()).unwrap_or(RenderMethodParameterType::Real);
 
     // 1. Extern wins.
-    if let Some(ext) = op_param.source_extern {
+    if let Some(ext) = op_param.source_extern.map(|e| e.get()) {
         if ext != RenderMethodExtern::None {
             return ResolvedParameter {
                 name: op_param.parameter_name.clone(),

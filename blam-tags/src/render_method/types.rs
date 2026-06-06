@@ -86,140 +86,80 @@ pub enum RenderMethodAnimatedParameterType {
 /// Engine-bound parameter source. Mirrors Ares `e_render_method_extern`
 /// — 49 H3 entries. ODST/Reach add more; use that game's enum there.
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 pub enum RenderMethodExtern {
-    None                                 = 0,
-    TextureGlobalTargetTexaccum          = 1,
-    TextureGlobalTargetNormal            = 2,
-    TextureGlobalTargetZ                 = 3,
-    TextureGlobalTargetShadowBuffer1     = 4,
-    TextureGlobalTargetShadowBuffer2     = 5,
-    TextureGlobalTargetShadowBuffer3     = 6,
-    TextureGlobalTargetShadowBuffer4     = 7,
-    TextureGlobalTargetTextureCamera     = 8,
-    TextureGlobalTargetReflection        = 9,
-    TextureGlobalTargetRefraction        = 10,
-    TextureLightprobeTexture             = 11,
-    TextureDominantLightIntensityMap     = 12,
-    TextureUnused1                       = 13,
-    TextureUnused2                       = 14,
-    ObjectChangeColorPrimary             = 15,
-    ObjectChangeColorSecondary           = 16,
-    ObjectChangeColorTertiary            = 17,
-    ObjectChangeColorQuaternary          = 18,
-    ObjectChangeColorQuinary             = 19,
-    ObjectEmblemColorPrimary             = 20,
-    ObjectEmblemColorSecondary           = 21,
-    TextureDynamicEnvironmentMap0        = 22,
-    TextureDynamicEnvironmentMap1        = 23,
-    TextureCookTorranceCc0236            = 24,
-    TextureCookTorranceDd0236            = 25,
-    TextureCookTorranceC78d78            = 26,
-    LightDir0                            = 27,
-    LightColor0                          = 28,
-    LightDir1                            = 29,
-    LightColor1                          = 30,
-    LightDir2                            = 31,
-    LightColor2                          = 32,
-    LightDir3                            = 33,
-    LightColor3                          = 34,
-    TextureUnused3                       = 35,
-    TextureUnused4                       = 36,
-    TextureUnused5                       = 37,
-    TextureDynamicLightGel0              = 38,
-    FlatEnvmapMatrixX                    = 39,
-    FlatEnvmapMatrixY                    = 40,
-    FlatEnvmapMatrixZ                    = 41,
-    DebugTint                            = 42,
-    ScreenConstants                      = 43,
-    ActiveCamoDistortionTexture          = 44,
-    SceneLdrTexture                      = 45,
-    SceneHdrTexture                      = 46,
-    WaterMemoryExportAddress             = 47,
-    TreeAnimationTimer                   = 48,
+    #[strum(serialize = "none")]                             None                                 = 0,
+    #[strum(serialize = "texaccum target")]                  TextureGlobalTargetTexaccum          = 1,
+    #[strum(serialize = "normal target")]                    TextureGlobalTargetNormal            = 2,
+    #[strum(serialize = "z target")]                         TextureGlobalTargetZ                 = 3,
+    #[strum(serialize = "shadow 1 target")]                  TextureGlobalTargetShadowBuffer1     = 4,
+    #[strum(serialize = "shadow 2 target")]                  TextureGlobalTargetShadowBuffer2     = 5,
+    #[strum(serialize = "shadow 3 target")]                  TextureGlobalTargetShadowBuffer3     = 6,
+    #[strum(serialize = "shadow 4 target")]                  TextureGlobalTargetShadowBuffer4     = 7,
+    #[strum(serialize = "texture camera target")]            TextureGlobalTargetTextureCamera     = 8,
+    #[strum(serialize = "reflection target")]                TextureGlobalTargetReflection        = 9,
+    #[strum(serialize = "refraction target")]                TextureGlobalTargetRefraction        = 10,
+    #[strum(serialize = "lightprobe texture")]               TextureLightprobeTexture             = 11,
+    #[strum(serialize = "dominant light intensity texture")] TextureDominantLightIntensityMap     = 12,
+    #[strum(serialize = "unused 1")]                         TextureUnused1                       = 13,
+    #[strum(serialize = "unused 2")]                         TextureUnused2                       = 14,
+    #[strum(serialize = "change color primary")]             ObjectChangeColorPrimary             = 15,
+    #[strum(serialize = "change color secondary")]           ObjectChangeColorSecondary           = 16,
+    #[strum(serialize = "change color tertiary")]            ObjectChangeColorTertiary            = 17,
+    #[strum(serialize = "change color quaternary")]          ObjectChangeColorQuaternary          = 18,
+    #[strum(serialize = "change color quinary")]             ObjectChangeColorQuinary             = 19,
+    #[strum(serialize = "emblem color background")]          ObjectEmblemColorBackground          = 20,
+    #[strum(serialize = "emblem color primary")]             ObjectEmblemColorPrimary             = 21,
+    #[strum(serialize = "emblem color secondary")]           ObjectEmblemColorSecondary           = 22,
+    #[strum(serialize = "dynamic environment map 1")]        TextureDynamicEnvironmentMap0        = 23,
+    #[strum(serialize = "dynamic environment map 2")]        TextureDynamicEnvironmentMap1        = 24,
+    #[strum(serialize = "cook torrance cc0236")]             TextureCookTorranceCc0236            = 25,
+    #[strum(serialize = "cook torrance dd0236")]             TextureCookTorranceDd0236            = 26,
+    #[strum(serialize = "cook torrance c78d78")]             TextureCookTorranceC78d78            = 27,
+    #[strum(serialize = "light dir 0")]                      LightDir0                            = 28,
+    #[strum(serialize = "light color 0")]                    LightColor0                          = 29,
+    #[strum(serialize = "light dir 1")]                      LightDir1                            = 30,
+    #[strum(serialize = "light color 1")]                    LightColor1                          = 31,
+    #[strum(serialize = "light dir 2")]                      LightDir2                            = 32,
+    #[strum(serialize = "light color 2")]                    LightColor2                          = 33,
+    #[strum(serialize = "light dir 3")]                      LightDir3                            = 34,
+    #[strum(serialize = "light color 3")]                    LightColor3                          = 35,
+    #[strum(serialize = "unused 3")]                         TextureUnused3                       = 36,
+    #[strum(serialize = "unused 4")]                         TextureUnused4                       = 37,
+    #[strum(serialize = "unused 5")]                         TextureUnused5                       = 38,
+    #[strum(serialize = "dynamic light gel 0")]              TextureDynamicLightGel0              = 39,
+    #[strum(serialize = "flat envmap matrix x")]             FlatEnvmapMatrixX                    = 40,
+    #[strum(serialize = "flat envmap matrix y")]             FlatEnvmapMatrixY                    = 41,
+    #[strum(serialize = "flat envmap matrix z")]             FlatEnvmapMatrixZ                    = 42,
+    #[strum(serialize = "debug tint")]                       DebugTint                            = 43,
+    #[strum(serialize = "screen constants")]                 ScreenConstants                      = 44,
+    #[strum(serialize = "active camo distortion texture")]   ActiveCamoDistortionTexture          = 45,
+    #[strum(serialize = "scene ldr texture")]                SceneLdrTexture                      = 46,
+    #[strum(serialize = "scene hdr texture")]                SceneHdrTexture                      = 47,
+    #[strum(serialize = "water memexport addr")]             WaterMemoryExportAddress             = 48,
+    #[strum(serialize = "tree animation timer")]             TreeAnimationTimer                   = 49,
 }
 
 impl RenderMethodExtern {
-    pub const COUNT: usize = 49;
+    pub const COUNT: usize = 50;
 
-    /// Map by index — discriminants follow the LATEST JSON schema.
-    ///
-    /// **Don't use this on raw on-disk values.** Halo tag schemas drift
-    /// across MCC builds, and the integer in a tag is the author-time
-    /// schema's index, not the latest one. For example, grunt_armor's
-    /// rmop has `source extern = 14` which the in-tag `blay` resolves
-    /// as "change color primary", but the latest JSON schema (and this
-    /// enum) put primary at 15. Use [`Self::from_name`] instead — names
-    /// are stable across schema versions and route through the tag's
-    /// own embedded string list.
-    ///
-    /// Suitable for: enums you constructed in code, indexes from
-    /// already-upgraded sources (rmt2 routing tables that the tools
-    /// rebuild on save), test fixtures.
+    /// Map by index. **Only for raw integer fields that carry no embedded
+    /// name** — the rmsh `bitmap extern RTT mode` / postprocess `extern
+    /// texture mode` are plain `short_integer`/`char_integer` (already-
+    /// upgraded runtime indices, rebuilt by the tools on save), so the
+    /// index is the current-schema index. The name-bearing rmop `source
+    /// extern` field is resolved by name instead (drift-immune) via the
+    /// typed [`Enum`] wrapper. Discriminants now match the JSON schema
+    /// (0..49, including `emblem color background` at 20).
     pub fn from_index(i: i128) -> Option<Self> {
         if !(0..Self::COUNT as i128).contains(&i) {
             return None;
         }
-        // Safe: enum is `repr(u32)` with sequential 0..49 discriminants.
+        // Safe: enum is `repr(u32)` with sequential 0..50 discriminants.
         Some(unsafe { std::mem::transmute::<u32, Self>(i as u32) })
-    }
-
-    /// Map from the canonical on-disk extern name (the string blam-tag
-    /// resolves from the tag's own `blay` chunk — e.g.,
-    /// `"change color primary"`, `"light dir 0"`).
-    pub fn from_name(s: &str) -> Option<Self> {
-        Some(match s {
-            "none"                              => Self::None,
-            "texaccum target"                   => Self::TextureGlobalTargetTexaccum,
-            "normal target"                     => Self::TextureGlobalTargetNormal,
-            "z target"                          => Self::TextureGlobalTargetZ,
-            "shadow 1 target"                   => Self::TextureGlobalTargetShadowBuffer1,
-            "shadow 2 target"                   => Self::TextureGlobalTargetShadowBuffer2,
-            "shadow 3 target"                   => Self::TextureGlobalTargetShadowBuffer3,
-            "shadow 4 target"                   => Self::TextureGlobalTargetShadowBuffer4,
-            "texture camera target"             => Self::TextureGlobalTargetTextureCamera,
-            "reflection target"                 => Self::TextureGlobalTargetReflection,
-            "refraction target"                 => Self::TextureGlobalTargetRefraction,
-            "lightprobe texture"                => Self::TextureLightprobeTexture,
-            "dominant light intensity texture"  => Self::TextureDominantLightIntensityMap,
-            "unused 1" | "unused 2"             => Self::TextureUnused1,
-            "change color primary"              => Self::ObjectChangeColorPrimary,
-            "change color secondary"            => Self::ObjectChangeColorSecondary,
-            "change color tertiary"             => Self::ObjectChangeColorTertiary,
-            "change color quaternary"           => Self::ObjectChangeColorQuaternary,
-            "change color quinary"              => Self::ObjectChangeColorQuinary,
-            "emblem color background"           => Self::ObjectEmblemColorPrimary,
-            "emblem color primary"              => Self::ObjectEmblemColorPrimary,
-            "emblem color secondary"            => Self::ObjectEmblemColorSecondary,
-            "dynamic environment map 1"         => Self::TextureDynamicEnvironmentMap0,
-            "dynamic environment map 2"         => Self::TextureDynamicEnvironmentMap1,
-            "cook torrance cc0236"              => Self::TextureCookTorranceCc0236,
-            "cook torrance dd0236"              => Self::TextureCookTorranceDd0236,
-            "cook torrance c78d78"              => Self::TextureCookTorranceC78d78,
-            "light dir 0"                       => Self::LightDir0,
-            "light color 0"                     => Self::LightColor0,
-            "light dir 1"                       => Self::LightDir1,
-            "light color 1"                     => Self::LightColor1,
-            "light dir 2"                       => Self::LightDir2,
-            "light color 2"                     => Self::LightColor2,
-            "light dir 3"                       => Self::LightDir3,
-            "light color 3"                     => Self::LightColor3,
-            "unused 3"                          => Self::TextureUnused3,
-            "unused 4"                          => Self::TextureUnused4,
-            "unused 5"                          => Self::TextureUnused5,
-            "dynamic light gel 0"               => Self::TextureDynamicLightGel0,
-            "flat envmap matrix x"              => Self::FlatEnvmapMatrixX,
-            "flat envmap matrix y"              => Self::FlatEnvmapMatrixY,
-            "flat envmap matrix z"              => Self::FlatEnvmapMatrixZ,
-            "debug tint"                        => Self::DebugTint,
-            "screen constants"                  => Self::ScreenConstants,
-            "active camo distortion texture"    => Self::ActiveCamoDistortionTexture,
-            "scene ldr texture"                 => Self::SceneLdrTexture,
-            "scene hdr texture"                 => Self::SceneHdrTexture,
-            "water memexport addr"              => Self::WaterMemoryExportAddress,
-            "tree animation timer"              => Self::TreeAnimationTimer,
-            _ => return None,
-        })
     }
 }
 
@@ -583,7 +523,7 @@ pub struct RenderMethodOptionParameter {
     pub parameter_type: Option<Enum<RenderMethodParameterType, i32>>,
     /// When non-`None`, this parameter is sourced from an engine extern
     /// rather than baked/animated values.
-    pub source_extern: Option<RenderMethodExtern>,
+    pub source_extern: Option<Enum<RenderMethodExtern, i32>>,
     pub default_bitmap_path: String,
     pub default_real_value: f32,
     pub default_int_bool_value: i32,
@@ -946,9 +886,7 @@ impl RenderMethodOptionParameter {
         Ok(Self {
             parameter_name: s.read_string_id("parameter name").unwrap_or_default(),
             parameter_type: s.try_read_enum("parameter type"),
-            source_extern: s.read_enum_name("source extern")
-                .as_deref()
-                .and_then(RenderMethodExtern::from_name),
+            source_extern: s.try_read_enum("source extern"),
             default_bitmap_path: s.read_tag_ref_path("default bitmap").unwrap_or_default(),
             default_real_value: s.read_real("default real value").unwrap_or(0.0),
             default_int_bool_value: s.read_int_any("default int/bool value").unwrap_or(0) as i32,

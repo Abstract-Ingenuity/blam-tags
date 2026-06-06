@@ -251,7 +251,7 @@ fn bake_texture_constant(
     };
     let extern_texture_mode = rm
         .and_then(|p| p.bitmap_extern_mode)
-        .or_else(|| op.source_extern.filter(|e| !matches!(e, RenderMethodExtern::None)));
+        .or_else(|| op.source_extern.map(|e| e.get()).filter(|e| !matches!(e, RenderMethodExtern::None)));
 
     // texture_transform_constant_index: linear search rmt2.float_constants
     // for an entry with this texture's name; matching index is the byte
