@@ -25,8 +25,24 @@
 
 use crate::api::TagStruct;
 use crate::file::TagFile;
+use crate::typed_enums::Enum;
 
 const FOOT_GROUP: [u8; 4] = *b"foot";
+
+/// `sweeneter_mode_enum` (schema def name carries the "sweeneter" typo).
+/// Per-row override of whether the impact "sweetener" sound/effect layer
+/// plays — consumed by impact-effect dispatch alongside the base row.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum SweetenerMode {
+    #[default]
+    #[strum(serialize = "sweetener default")] Default = 0,
+    #[strum(serialize = "sweetener enabled")] Enabled = 1,
+    #[strum(serialize = "sweetener disabled")] Disabled = 2,
+}
 
 #[derive(Debug)]
 pub enum MaterialEffectsError {
@@ -64,9 +80,9 @@ pub struct MaterialEntry {
     /// `runtime material index!` — tool.exe-resolved per-tag index
     /// into `c_global_material_type` (the cache-wide material table).
     pub runtime_material_index: i16,
-    /// `sweetener mode` (char_enum) — biped foot kind / pad size
-    /// modifier consumed by impact-effect dispatch.
-    pub sweetener_mode: i8,
+    /// `sweetener mode` (`sweeneter_mode_enum`) — per-row override of the
+    /// impact "sweetener" layer, consumed by impact-effect dispatch.
+    pub sweetener_mode: Enum<SweetenerMode, i8>,
 }
 
 /// Legacy H1/H2 row format kept for tool.exe back-compat. Modern
@@ -77,7 +93,7 @@ pub struct OldMaterialEntry {
     pub sound: Option<String>,
     pub material_name: String,
     pub runtime_material_index: i16,
-    pub sweetener_mode: i8,
+    pub sweetener_mode: Enum<SweetenerMode, i8>,
 }
 
 /// One `effects[]` entry — covers one impact-type / size-class block.
@@ -138,7 +154,7 @@ impl MaterialEntry {
             secondary: s.read_tag_ref_with_group("secondary tag (effect or sound)"),
             material_name: s.read_string_id("material name").unwrap_or_default(),
             runtime_material_index: s.read_int_any("runtime material index").unwrap_or(0) as i16,
-            sweetener_mode: s.read_int_any("sweetener mode").unwrap_or(0) as i8,
+            sweetener_mode: s.try_read_enum("sweetener mode").unwrap_or_default(),
         }
     }
 }
@@ -150,7 +166,7 @@ impl OldMaterialEntry {
             sound: s.read_tag_ref_path("sound"),
             material_name: s.read_string_id("material name").unwrap_or_default(),
             runtime_material_index: s.read_int_any("runtime material index").unwrap_or(0) as i16,
-            sweetener_mode: s.read_int_any("sweetener mode").unwrap_or(0) as i8,
+            sweetener_mode: s.try_read_enum("sweetener mode").unwrap_or_default(),
         }
     }
 }
