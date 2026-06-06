@@ -8,6 +8,34 @@
 use crate::api::{TagBlock, TagStruct};
 use crate::typed_enums::{Enum, Flags};
 
+/// `entry_points_flags` (long_flags, rmt2 `available entry points*`) —
+/// bitmask of which engine entry points the compiled shader supports.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum EntryPointFlags {
+    #[strum(serialize = "default")] Default = 0,
+    #[strum(serialize = "albedo")] Albedo = 1,
+    #[strum(serialize = "static_default")] StaticDefault = 2,
+    #[strum(serialize = "static_per_pixel")] StaticPerPixel = 3,
+    #[strum(serialize = "static_per_vertex")] StaticPerVertex = 4,
+    #[strum(serialize = "static_sh")] StaticSh = 5,
+    #[strum(serialize = "static_prt_ambient")] StaticPrtAmbient = 6,
+    #[strum(serialize = "static_prt_linear")] StaticPrtLinear = 7,
+    #[strum(serialize = "static_prt_quadratic")] StaticPrtQuadratic = 8,
+    #[strum(serialize = "dynamic_light")] DynamicLight = 9,
+    #[strum(serialize = "shadow_generate")] ShadowGenerate = 10,
+    #[strum(serialize = "shadow_apply")] ShadowApply = 11,
+    #[strum(serialize = "active_camo")] ActiveCamo = 12,
+    #[strum(serialize = "lightmap_debug_mode")] LightmapDebugMode = 13,
+    #[strum(serialize = "vertex color lighting")] VertexColorLighting = 14,
+    #[strum(serialize = "water tessellation")] WaterTessellation = 15,
+    #[strum(serialize = "water shading")] WaterShading = 16,
+    #[strum(serialize = "dynamic_light_cinematic")] DynamicLightCinematic = 17,
+}
+
 /// `global_render_method_flags_defintion` (word_flags, schema `shader
 /// flags*`). Readonly/tool-derived render-state hints.
 #[derive(Clone, Copy, PartialEq, Eq, Debug,
@@ -636,7 +664,7 @@ pub struct RenderMethodPostprocessDefinition {
 pub struct RenderMethodTemplate {
     pub vertex_shader_path: String,
     pub pixel_shader_path: String,
-    pub available_entry_points: u32,
+    pub available_entry_points: Flags<EntryPointFlags, u32>,
     /// One `TagBlockIndex` per available entry point, indexing into
     /// `passes`.
     pub entry_points: Vec<TagBlockIndex>,
@@ -990,11 +1018,11 @@ impl RenderMethodTemplate {
             pixel_shader_path: s.read_tag_ref_path("pixel shader")
                 .or_else(|| pc_platform.as_ref().and_then(|p| p.read_tag_ref_path("pixel shader")))
                 .unwrap_or_default(),
-            available_entry_points: s.read_int_any("available entry points")
-                .or_else(|| s.read_int_any("available entry points*"))
-                .or_else(|| pc_platform.as_ref().and_then(|p| p.read_int_any("available entry points")))
-                .or_else(|| pc_platform.as_ref().and_then(|p| p.read_int_any("available entry points*")))
-                .unwrap_or(0) as u32,
+            available_entry_points: s.try_read_flags("available entry points")
+                .or_else(|| s.try_read_flags("available entry points*"))
+                .or_else(|| pc_platform.as_ref().and_then(|p| p.try_read_flags("available entry points")))
+                .or_else(|| pc_platform.as_ref().and_then(|p| p.try_read_flags("available entry points*")))
+                .unwrap_or_default(),
             entry_points: pick_block("entry points")
                 .map(|b| read_tag_block_index_block(&b))
                 .unwrap_or_default(),
