@@ -507,7 +507,7 @@ fn filter_routing_pass(
         // Find this name in the rmop chain.
         let Some(&op_idx) = rmop_idx_by_name.get(param_name.as_str()) else { continue };
         let op = &rmop_chain[op_idx];
-        let Some(ptype) = op.parameter_type else { continue };
+        let Some(ptype) = op.parameter_type.map(|e| e.get()) else { continue };
         // Filter by parameter_type (engine encodes `a4` as a bitmask).
         if (type_filter & (1u32 << (ptype as u32))) == 0 {
             continue;

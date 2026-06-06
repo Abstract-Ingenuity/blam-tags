@@ -241,7 +241,7 @@ pub fn compile_real_constant_at_time(
     use RenderMethodAnimatedParameterType as A;
     use RenderMethodParameterType as P;
 
-    let pt = op_param.parameter_type;
+    let pt = op_param.parameter_type.map(|e| e.get());
     let is_xform = matches!(pt, Some(P::Bitmap));
 
     // ---- Stage 1: rmop default ----

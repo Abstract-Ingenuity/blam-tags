@@ -46,45 +46,21 @@ impl std::error::Error for RenderMethodError {}
 // Enums
 // =============================================================================
 
-/// Parameter data type. Mirrors Ares `e_render_method_parameter_type`.
+/// Parameter data type (`render_method_parameter_type_enum`). Mirrors
+/// Ares `e_render_method_parameter_type`. Resolved by embedded schema
+/// name; `value`/`switch` are cross-build aliases for `real`/`int`.
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 pub enum RenderMethodParameterType {
-    Bitmap    = 0,
-    Color     = 1,
-    Real      = 2,
-    Int       = 3,
-    Bool      = 4,
-    ArgbColor = 5,
-}
-
-impl RenderMethodParameterType {
-    pub fn from_index(i: i128) -> Option<Self> {
-        Some(match i {
-            0 => Self::Bitmap,
-            1 => Self::Color,
-            2 => Self::Real,
-            3 => Self::Int,
-            4 => Self::Bool,
-            5 => Self::ArgbColor,
-            _ => return None,
-        })
-    }
-
-    /// Schema-name lookup. Stable across MCC schema drifts where the
-    /// enum-index ordering shifts between builds — MCC tags carry the
-    /// author-time index but the schema-name string is invariant.
-    pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name {
-            "bitmap" => Self::Bitmap,
-            "value" | "real" => Self::Real,
-            "color" => Self::Color,
-            "switch" | "int" => Self::Int,
-            "bool" => Self::Bool,
-            "argb color" | "argb_color" => Self::ArgbColor,
-            _ => return None,
-        })
-    }
+    #[strum(serialize = "bitmap")]                       Bitmap    = 0,
+    #[strum(serialize = "color")]                        Color     = 1,
+    #[strum(serialize = "real", serialize = "value")]    Real      = 2,
+    #[strum(serialize = "int", serialize = "switch")]    Int       = 3,
+    #[strum(serialize = "bool")]                         Bool      = 4,
+    #[strum(serialize = "argb color")]                   ArgbColor = 5,
 }
 
 /// Per-channel target for an animated parameter's evaluated function
@@ -595,7 +571,7 @@ pub struct RenderMethodPostprocessTexture {
 #[derive(Debug, Clone)]
 pub struct RenderMethodParameter {
     pub parameter_name: String,
-    pub parameter_type: Option<RenderMethodParameterType>,
+    pub parameter_type: Option<Enum<RenderMethodParameterType, i32>>,
     pub bitmap_path: String,
     pub real_parameter: f32,
     pub int_parameter: i32,
@@ -618,7 +594,7 @@ pub struct RenderMethodParameter {
 #[derive(Debug, Clone)]
 pub struct RenderMethodOptionParameter {
     pub parameter_name: String,
-    pub parameter_type: Option<RenderMethodParameterType>,
+    pub parameter_type: Option<Enum<RenderMethodParameterType, i32>>,
     /// When non-`None`, this parameter is sourced from an engine extern
     /// rather than baked/animated values.
     pub source_extern: Option<RenderMethodExtern>,
@@ -983,13 +959,7 @@ impl RenderMethodOptionParameter {
         };
         Ok(Self {
             parameter_name: s.read_string_id("parameter name").unwrap_or_default(),
-            parameter_type: s.read_enum_name("parameter type")
-                .as_deref()
-                .and_then(RenderMethodParameterType::from_name)
-                .or_else(|| {
-                    s.read_int_any("parameter type")
-                        .and_then(RenderMethodParameterType::from_index)
-                }),
+            parameter_type: s.try_read_enum("parameter type"),
             source_extern: s.read_enum_name("source extern")
                 .as_deref()
                 .and_then(RenderMethodExtern::from_name),
@@ -1256,13 +1226,7 @@ impl RenderMethodParameter {
 
         Ok(Self {
             parameter_name: s.read_string_id("parameter name").unwrap_or_default(),
-            parameter_type: s.read_enum_name("parameter type")
-                .as_deref()
-                .and_then(RenderMethodParameterType::from_name)
-                .or_else(|| {
-                    s.read_int_any("parameter type")
-                        .and_then(RenderMethodParameterType::from_index)
-                }),
+            parameter_type: s.try_read_enum("parameter type"),
             bitmap_path: s.read_tag_ref_path("bitmap").unwrap_or_default(),
             real_parameter: s.read_real("real").unwrap_or(0.0),
             int_parameter: s.read_int_any("int/bool").unwrap_or(0) as i32,

@@ -259,7 +259,7 @@ fn resolve_one(
     op_param: &RenderMethodOptionParameter,
     time_seconds: f32,
 ) -> ResolvedParameter {
-    let parameter_type = op_param.parameter_type.unwrap_or(RenderMethodParameterType::Real);
+    let parameter_type = op_param.parameter_type.map(|e| e.get()).unwrap_or(RenderMethodParameterType::Real);
 
     // 1. Extern wins.
     if let Some(ext) = op_param.source_extern {
