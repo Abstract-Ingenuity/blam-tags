@@ -11,9 +11,61 @@ use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::math::{AngleBounds, Bounds};
 use crate::object::ObjectDefinition;
+use crate::typed_enums::{Enum, Flags};
 use std::sync::Arc;
 
 const PROJECTILE_GROUP: [u8; 4] = *b"proj";
+
+/// `projectile_material_response_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum ProjectileMaterialResponseFlags {
+    #[strum(serialize = "cannot be overpenetrated")] CannotBeOverpenetrated = 0,
+}
+
+/// `material_response` — what a projectile does when it hits a material.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum MaterialResponse {
+    #[default]
+    #[strum(serialize = "impact (detonate)")] Impact = 0,
+    #[strum(serialize = "fizzle")] Fizzle = 1,
+    #[strum(serialize = "overpenetrate")] Overpenetrate = 2,
+    #[strum(serialize = "attach")] Attach = 3,
+    #[strum(serialize = "bounce")] Bounce = 4,
+    #[strum(serialize = "bounce (dud)")] BounceDud = 5,
+    #[strum(serialize = "fizzle (ricochet)")] FizzleRicochet = 6,
+}
+
+/// `material_possible_response_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum MaterialPossibleResponseFlags {
+    #[strum(serialize = "only against units (except giants){only against units}")] OnlyAgainstUnits = 0,
+    #[strum(serialize = "never against units (except giants){never against units}")] NeverAgainstUnits = 1,
+    #[strum(serialize = "never against wuss players")] NeverAgainstWussPlayers = 2,
+}
+
+/// `effect_scale_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum EffectScale {
+    #[default]
+    #[strum(serialize = "damage")] Damage = 0,
+    #[strum(serialize = "angle")] Angle = 1,
+}
 
 #[derive(Debug)]
 pub enum ProjectileError {
@@ -83,21 +135,21 @@ impl ProjectileAngularVelocityLowerBound {
 /// material the projectile can hit.
 #[derive(Debug, Clone, Default)]
 pub struct ProjectileMaterialResponse {
-    pub flags: u16,
-    pub default_response: i16,
+    pub flags: Flags<ProjectileMaterialResponseFlags, u16>,
+    pub default_response: Enum<MaterialResponse, i16>,
     pub material_name: String,
     /// `runtime material index!` — index into global_material_data
     /// populated at load.
     pub runtime_material_index: i16,
-    pub potential_response: i16,
-    pub response_flags: u16,
+    pub potential_response: Enum<MaterialResponse, i16>,
+    pub response_flags: Flags<MaterialPossibleResponseFlags, u16>,
     /// `chance fraction:[0,1]`.
     pub chance_fraction: f32,
     /// `between:degrees` (angle_bounds).
     pub between: AngleBounds,
     /// `and:world units per second` (real_bounds).
     pub and: Bounds<f32>,
-    pub scale_effects_by: i16,
+    pub scale_effects_by: Enum<EffectScale, i16>,
     pub angular_noise: f32,
     pub velocity_noise: f32,
     pub initial_friction: f32,
@@ -109,16 +161,16 @@ pub struct ProjectileMaterialResponse {
 impl ProjectileMaterialResponse {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u16,
-            default_response: s.read_int_any("default response").unwrap_or(0) as i16,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
+            default_response: s.read_enum("default response"),
             material_name: s.read_string_id("material name").unwrap_or_default(),
             runtime_material_index: s.read_int_any("runtime material index").unwrap_or(0) as i16,
-            potential_response: s.read_int_any("potential response").unwrap_or(0) as i16,
-            response_flags: s.read_int_any("response flags").unwrap_or(0) as u16,
+            potential_response: s.read_enum("potential response"),
+            response_flags: s.try_read_flags("response flags").unwrap_or_default(),
             chance_fraction: s.read_real("chance fraction").unwrap_or(0.0),
             between: s.read_angle_bounds("between"),
             and: s.read_real_bounds("and"),
-            scale_effects_by: s.read_int_any("scale effects by").unwrap_or(0) as i16,
+            scale_effects_by: s.read_enum("scale effects by"),
             angular_noise: s.read_real("angular noise").unwrap_or(0.0),
             velocity_noise: s.read_real("velocity noise").unwrap_or(0.0),
             initial_friction: s.read_real("initial friction").unwrap_or(0.0),

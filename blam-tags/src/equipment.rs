@@ -22,9 +22,50 @@ use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::item::ItemDefinition;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::{Enum, Flags};
 use std::sync::Arc;
 
 const EQUIPMENT_GROUP: [u8; 4] = *b"eqip";
+
+/// `equipment_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum EquipmentFlags {
+    #[strum(serialize = "pathfinding obstacle")] PathfindingObstacle = 0,
+    #[strum(serialize = "gravity lift collision group")] GravityLiftCollisionGroup = 1,
+    #[strum(serialize = "equipment is dangerous to ai")] EquipmentIsDangerousToAi = 2,
+    #[strum(serialize = "protects parent from AOE")] ProtectsParentFromAoe = 3,
+    #[strum(serialize = "never dropped by ai")] NeverDroppedByAi = 4,
+}
+
+/// `equipment_spawner_spawn_type` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum EquipmentSpawnerSpawnType {
+    #[default]
+    #[strum(serialize = "along aiming vector")] AlongAimingVector = 0,
+    #[strum(serialize = "camera pos z plane")] CameraPosZPlane = 1,
+    #[strum(serialize = "foot pos z plane")] FootPosZPlane = 2,
+}
+
+/// `multiplayer_powerup_flavor` (long_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i32)]
+pub enum MultiplayerPowerupFlavor {
+    #[default]
+    #[strum(serialize = "red powerup")] Red = 0,
+    #[strum(serialize = "blue powerup")] Blue = 1,
+    #[strum(serialize = "yellow powerup")] Yellow = 2,
+}
 
 /// `equipment_type` discriminant — engine assert range is `[0, 8]`
 /// per `equipment_definition_has_type`. Block declaration order in
@@ -99,7 +140,7 @@ pub struct EquipmentDefinition {
     /// `charges` (short_integer). -1 = unlimited, 0 = fire on creation.
     pub charges: i16,
     /// `flags` (word_flags).
-    pub flags: u16,
+    pub flags: Flags<EquipmentFlags, u16>,
 
     /// `danger radius` (real).
     pub danger_radius: f32,
@@ -163,7 +204,7 @@ impl EquipmentDefinition {
                 .read_real("phantom volume activation time")
                 .unwrap_or(0.0),
             charges: root.read_int_any("charges").unwrap_or(0) as i16,
-            flags: root.read_int_any("flags").unwrap_or(0) as u16,
+            flags: root.try_read_flags("flags").unwrap_or_default(),
             danger_radius: root.read_real("danger radius").unwrap_or(0.0),
             min_deployment_distance: root.read_real("min deployment distance").unwrap_or(0.0),
             awareness_time: root.read_real("awareness time").unwrap_or(0.0),
@@ -240,13 +281,14 @@ impl EquipmentTypeSuperShield {
 /// `equipment_type_multiplayer_powerup_block` (4 bytes).
 #[derive(Debug, Clone, Default)]
 pub struct EquipmentTypeMultiplayerPowerup {
-    pub flags: u32,
+    /// `flavor` (long_enum) — which MP powerup color this spawns.
+    pub flavor: Enum<MultiplayerPowerupFlavor, i32>,
 }
 
 impl EquipmentTypeMultiplayerPowerup {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flavor: s.read_enum("flavor"),
         }
     }
 }
@@ -262,7 +304,7 @@ pub struct EquipmentTypeSpawner {
     /// `spawn velocity:WU/sec`.
     pub spawn_velocity: f32,
     /// `type` (short_enum `equipment_spawner_spawn_type`).
-    pub spawn_type: i16,
+    pub spawn_type: Enum<EquipmentSpawnerSpawnType, i16>,
 }
 
 impl EquipmentTypeSpawner {
@@ -274,7 +316,7 @@ impl EquipmentTypeSpawner {
             spawn_z_offset: s.read_real("spawn z offset").unwrap_or(0.0),
             spawn_area_radius: s.read_real("spawn area radius").unwrap_or(0.0),
             spawn_velocity: s.read_real("spawn velocity").unwrap_or(0.0),
-            spawn_type: s.read_int_any("type").unwrap_or(0) as i16,
+            spawn_type: s.read_enum("type"),
         }
     }
 }
