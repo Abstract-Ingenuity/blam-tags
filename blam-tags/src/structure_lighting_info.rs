@@ -15,6 +15,7 @@
 use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::math::{RealBounds, RealPoint3d, RealRgbColor, RealVector3d};
+use crate::typed_enums::{Enum, Flags};
 
 #[derive(Debug)]
 pub enum StructureLightingInfoError {
@@ -38,60 +39,61 @@ impl std::error::Error for StructureLightingInfoError {}
 
 const STRUCTURE_LIGHTING_INFO_GROUP: [u8; 4] = *b"stli";
 
-/// `structure_lighting_generic_light_type_enum` (schema `enums_flags`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
+/// `structure_lighting_generic_light_type_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
 pub enum GenericLightType {
     #[default]
-    Omni = 0,
-    Spot = 1,
-    Directional = 2,
-    Ambient = 3,
+    #[strum(serialize = "omni")] Omni = 0,
+    #[strum(serialize = "spot")] Spot = 1,
+    #[strum(serialize = "directional")] Directional = 2,
+    #[strum(serialize = "ambient")] Ambient = 3,
 }
 
-impl GenericLightType {
-    pub fn from_name(name: &str) -> Self {
-        match name {
-            "omni" => Self::Omni,
-            "spot" => Self::Spot,
-            "directional" => Self::Directional,
-            "ambient" => Self::Ambient,
-            _ => Self::Omni,
-        }
-    }
-}
-
-/// `structure_lighting_generic_light_shape_enum`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
+/// `structure_lighting_generic_light_shape_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
 pub enum GenericLightShape {
     #[default]
-    Rectangle = 0,
-    Circle = 1,
+    #[strum(serialize = "rectangle")] Rectangle = 0,
+    #[strum(serialize = "circle")] Circle = 1,
 }
 
-impl GenericLightShape {
-    pub fn from_name(name: &str) -> Self {
-        match name {
-            "circle" => Self::Circle,
-            _ => Self::Rectangle,
-        }
-    }
+/// `structure_lighting_generic_light_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum GenericLightFlags {
+    #[strum(serialize = "use near attenuation")] UseNearAttenuation = 0,
+    #[strum(serialize = "use far attenuation")] UseFarAttenuation = 1,
 }
 
-/// `structure_lighting_generic_light_flags` (word_flags). Bit 0 =
-/// use near attenuation; bit 1 = use far attenuation.
-pub mod generic_light_flags {
-    pub const USE_NEAR_ATTENUATION: u16 = 1 << 0;
-    pub const USE_FAR_ATTENUATION: u16 = 1 << 1;
+/// `structure_material_lighting_info_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum StructureMaterialLightingInfoFlags {
+    #[strum(serialize = "use attenuation")] UseAttenuation = 0,
+    #[strum(serialize = "power per unit area")] PowerPerUnitArea = 1,
+    #[strum(serialize = "use shader gel")] UseShaderGel = 2,
 }
 
 /// One entry of `generic light definitions[]`.
 #[derive(Debug, Clone, Default)]
 pub struct GenericLightDefinition {
-    pub light_type: GenericLightType,
-    pub flags: u16,
-    pub shape: GenericLightShape,
+    pub light_type: Enum<GenericLightType, i16>,
+    pub flags: Flags<GenericLightFlags, u16>,
+    pub shape: Enum<GenericLightShape, i16>,
     /// HDR color (linear, may exceed 1.0 with intensity).
     pub color: RealRgbColor,
     /// Multiplier on color (HDR knob).
@@ -116,18 +118,10 @@ pub struct GenericLightDefinition {
 
 impl GenericLightDefinition {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        let light_type = s
-            .read_enum_name("type")
-            .map(|n| GenericLightType::from_name(&n))
-            .unwrap_or_default();
-        let shape = s
-            .read_enum_name("shape")
-            .map(|n| GenericLightShape::from_name(&n))
-            .unwrap_or_default();
         Self {
-            light_type,
-            flags: s.read_int_any("flags").unwrap_or(0) as u16,
-            shape,
+            light_type: s.read_enum("type"),
+            flags: s.try_read_flags("flags").unwrap_or_default(),
+            shape: s.read_enum("shape"),
             color: s.read_rgb("color"),
             intensity: s.read_real("intensity").unwrap_or(0.0),
             hotspot_size: s.read_real("hotspot size").unwrap_or(0.0),
@@ -139,11 +133,11 @@ impl GenericLightDefinition {
     }
 
     pub fn uses_far_attenuation(&self) -> bool {
-        (self.flags & generic_light_flags::USE_FAR_ATTENUATION) != 0
+        self.flags.contains(GenericLightFlags::UseFarAttenuation)
     }
 
     pub fn uses_near_attenuation(&self) -> bool {
-        (self.flags & generic_light_flags::USE_NEAR_ATTENUATION) != 0
+        self.flags.contains(GenericLightFlags::UseNearAttenuation)
     }
 }
 
@@ -222,7 +216,7 @@ impl StructureLightingRegionTriangle {
 /// meanings come from the schema enum
 /// `structure_material_lighting_info_flags`. Values surfaced as the
 /// raw u32 — caller decides which bits matter.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct StructureMaterialLighting {
     /// Emissive radiated power (in Watts/m² in the editor's
     /// physically-based units).
@@ -233,8 +227,8 @@ pub struct StructureMaterialLighting {
     pub emissive_quality: f32,
     /// Forward-emission focus exponent (cos^N falloff). 0 = lambertian.
     pub emissive_focus: f32,
-    /// `structure_material_lighting_info_flags` raw bits.
-    pub flags: u32,
+    /// `structure_material_lighting_info_flags`.
+    pub flags: Flags<StructureMaterialLightingInfoFlags, u32>,
     /// Distance attenuation rolloff start.
     pub attenuation_falloff: f32,
     /// Distance at which the contribution reaches zero.
@@ -255,7 +249,7 @@ impl StructureMaterialLighting {
             emissive_color: s.read_rgb("emissive color"),
             emissive_quality: s.read_real("emissive quality").unwrap_or(0.0),
             emissive_focus: s.read_real("emissive focus").unwrap_or(0.0),
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             attenuation_falloff: s.read_real("attenuation falloff").unwrap_or(0.0),
             attenuation_cutoff: s.read_real("attenuation cutoff").unwrap_or(0.0),
             frustum_blend: s.read_real("frustum blend").unwrap_or(0.0),
