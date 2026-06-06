@@ -186,33 +186,28 @@ pub enum WaterDensityType {
 // object_function_flags
 // ---------------------------------------------------------------------------
 
-/// Bit 0 — invert the resolved `import_name` magnitude before evaluating
-/// the curve. Engine: `*magnitude = 1.0 - *magnitude;`.
-pub const FN_FLAG_INVERT: u32 = 1 << 0;
-
-/// Bit 1 — when SET the entry evaluates ONLY when the import-name
-/// resolution itself returned active. When CLEAR the entry always
-/// evaluates against the magnitude even if import resolution failed
-/// and reactivates when curve output > 0.
-pub const FN_FLAG_ADDITIVE: u32 = 1 << 1;
-
-/// Bit 2 — force `result = 1` regardless of curve output. Engine:
-/// `if ( (function->flags & 4) != 0 ) result = 1;`.
-pub const FN_FLAG_ALWAYS_ACTIVE: u32 = 1 << 2;
-
-/// Bit 3 — periodic-time evaluation adds a per-object random offset
-/// to the time input. Engine hashes `object_index` via
-/// `LCG: 1664525 * object_index + 1013904223`, takes the high 16
-/// bits, scales by `1/65535` and adds to game time.
-pub const FN_FLAG_RANDOM_TIME_OFFSET: u32 = 1 << 3;
-
-/// Bit 4 — emit the curve magnitude even when the entry is inactive.
-/// Without this bit, inactive entries return magnitude=0.0.
-pub const FN_FLAG_ALWAYS_EMIT_MAGNITUDE: u32 = 1 << 4;
-
-/// Bit 5 — the `turn_off_with` test additionally requires the source
-/// magnitude to be non-zero (not just active).
-pub const FN_FLAG_TURN_OFF_REQUIRES_NONZERO: u32 = 1 << 5;
+/// `object_function_flags` (long_flags). Variant docs note the engine
+/// behaviour the protomorph evaluator keys off each bit.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum ObjectFunctionFlags {
+    /// Bit 0 — invert the resolved magnitude (`*m = 1.0 - *m`).
+    #[strum(serialize = "invert")] Invert = 0,
+    /// Bit 1 — the curve mapping can make the function active/inactive
+    /// (protomorph treats CLEAR as "additive": always evaluate).
+    #[strum(serialize = "mapping does not controls active")] MappingDoesNotControlsActive = 1,
+    /// Bit 2 — force `result = 1` regardless of curve output.
+    #[strum(serialize = "always active")] AlwaysActive = 2,
+    /// Bit 3 — periodic eval adds a per-object random time offset.
+    #[strum(serialize = "random time offset")] RandomTimeOffset = 3,
+    /// Bit 4 — emit the curve magnitude even when the entry is inactive.
+    #[strum(serialize = "always exports value")] AlwaysExportsValue = 4,
+    /// Bit 5 — `turn_off_with` additionally requires non-zero magnitude.
+    #[strum(serialize = "turn off with uses magnitude")] TurnOffWithUsesMagnitude = 5,
+}
 
 // ---------------------------------------------------------------------------
 // ObjectFunctionDefinition
@@ -223,8 +218,8 @@ pub const FN_FLAG_TURN_OFF_REQUIRES_NONZERO: u32 = 1 << 5;
 /// `object_function_block` (`object.json:331-381`).
 #[derive(Debug, Clone, Default)]
 pub struct ObjectFunctionDefinition {
-    /// `flags` (long_flags, `object_function_flags`) — test against `FN_FLAG_*`.
-    pub flags: u32,
+    /// `flags` (long_flags, `object_function_flags`).
+    pub flags: Flags<ObjectFunctionFlags, u32>,
     /// `import name` (string_id) — the name whose magnitude this entry
     /// reads. Resolved via `object_get_function_value(object_index,
     /// import_name, …)` — may recurse into another entry in this
@@ -253,7 +248,7 @@ pub struct ObjectFunctionDefinition {
 
 impl ObjectFunctionDefinition {
     fn from_struct(s: &TagStruct<'_>) -> Self {
-        let flags = s.read_int_any("flags").unwrap_or(0) as u32;
+        let flags = s.try_read_flags("flags").unwrap_or_default();
         let import_name = s.read_string_id("import name").unwrap_or_default();
         let export_name = s.read_string_id("export name").unwrap_or_default();
         let turn_off_with_function_name =
