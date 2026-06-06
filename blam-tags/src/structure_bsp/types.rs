@@ -19,6 +19,73 @@ use crate::api::{TagBlock, TagStruct};
 use crate::file::TagFile;
 use crate::fields::TagFieldData;
 use crate::math::{RealBounds, RealPlane2d, RealPlane3d, RealPoint3d, RealVector3d};
+use crate::typed_enums::{Enum, Flags};
+
+/// `structure_bsp_flags_definition` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum StructureBspFlags {
+    #[strum(serialize = "lightmap compressed")] LightmapCompressed = 0,
+}
+
+/// `structure_cluster_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum StructureClusterFlags {
+    #[strum(serialize = "one way portal")] OneWayPortal = 0,
+    #[strum(serialize = "door portal")] DoorPortal = 1,
+    #[strum(serialize = "postprocessed geometry")] PostprocessedGeometry = 2,
+    #[strum(serialize = "is the sky")] IsTheSky = 3,
+    #[strum(serialize = "decorators are lit")] DecoratorsAreLit = 4,
+}
+
+/// `instanced_geometry_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum InstancedGeometryFlags {
+    #[strum(serialize = "not in lightprobes")] NotInLightprobes = 0,
+    #[strum(serialize = "render only")] RenderOnly = 1,
+    #[strum(serialize = "does not block aoe damage")] DoesNotBlockAoeDamage = 2,
+    #[strum(serialize = "collidable")] Collidable = 3,
+    #[strum(serialize = "decal spacing")] DecalSpacing = 4,
+    #[strum(serialize = "not for render")] NotForRender = 5,
+}
+
+/// `instanced_geometry_pathfinding_policy_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum InstancedGeometryPathfindingPolicy {
+    #[default]
+    #[strum(serialize = "cut-out")] CutOut = 0,
+    #[strum(serialize = "static")] Static = 1,
+    #[strum(serialize = "none")] None = 2,
+}
+
+/// `instanced_geometry_lightmapping_policy_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum InstancedGeometryLightmappingPolicy {
+    #[default]
+    #[strum(serialize = "per-pixel seperate")] PerPixelSeparate = 0,
+    #[strum(serialize = "per-vertex")] PerVertex = 1,
+    #[strum(serialize = "single-probe")] SingleProbe = 2,
+    #[strum(serialize = "per-pixel shared")] PerPixelShared = 3,
+}
 
 const SBSP_GROUP: [u8; 4] = *b"sbsp";
 
@@ -50,7 +117,7 @@ impl std::error::Error for StructureBspError {}
 /// instances / materials. A scenario references one or more.
 #[derive(Debug, Clone, Default)]
 pub struct StructureBsp {
-    pub flags: u32,
+    pub flags: Flags<StructureBspFlags, u32>,
     pub world_bounds_x: RealBounds,
     pub world_bounds_y: RealBounds,
     pub world_bounds_z: RealBounds,
@@ -169,7 +236,7 @@ impl StructureBsp {
 
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             world_bounds_x: s.read_real_bounds("world bounds x"),
             world_bounds_y: s.read_real_bounds("world bounds y"),
             world_bounds_z: s.read_real_bounds("world bounds z"),
@@ -312,6 +379,8 @@ pub struct BspCameraFxPaletteEntry {
     /// `name^` (string_id) — author-friendly name.
     pub name: String,
     /// `flags` byte (engine `structure_camera_fx_palette_entry.flags`).
+    /// Typed migration deferred to the camera_fx_settings pass (the
+    /// `ClusterCameraFxPaletteOverrides` mirror + its consumers live there).
     pub flags: u8,
     /// `forced exposure` (stops). Active when `flags & 0x01`.
     pub forced_exposure: f32,
@@ -1093,7 +1162,7 @@ pub struct BspCluster {
     /// `mesh index` — into [`StructureBsp::meshes_metadata`].
     pub mesh_index: i16,
     /// `flags` (cluster runtime flags).
-    pub flags: u16,
+    pub flags: Flags<StructureClusterFlags, u16>,
     /// Portal block indices into [`StructureBsp::cluster_portals`].
     pub portals: Vec<i16>,
 }
@@ -1108,7 +1177,7 @@ impl BspCluster {
             atmosphere_index: s.read_int_any("atmosphere index").unwrap_or(-1) as i8,
             camera_fx_index: s.read_int_any("camera fx index").unwrap_or(-1) as i8,
             mesh_index: s.read_int_any("mesh index").unwrap_or(-1) as i16,
-            flags: s.read_int_any("flags").unwrap_or(0) as u16,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             portals: s
                 .field("portals")
                 .and_then(|f| f.as_block())
@@ -1140,19 +1209,17 @@ pub struct BspInstance {
     /// `instance definition` block index — see runtime documentation
     /// for how this maps to render-geometry meshes.
     pub definition_index: i16,
-    pub flags: u16,
+    pub flags: Flags<InstancedGeometryFlags, u16>,
     /// `lightmap texcoord block index` — into per_instance_lightmap_texcoords.
     pub lightmap_texcoord_block_index: i16,
     pub world_bounding_sphere_center: RealPoint3d,
     pub world_bounding_sphere_radius: f32,
     /// `name` — string_id, for debugging / identification.
     pub name: String,
-    /// `pathfinding policy` enum index.
-    pub pathfinding_policy: i16,
-    /// `lightmapping policy` enum: 0 = per_pixel, 1 = per_vertex,
-    /// 2 = single_probe, 3 = per_pixel_shared, 4 = no_lightmaps,
-    /// 5 = ... (numbering differs across MCC builds — check by name).
-    pub lightmapping_policy: i16,
+    /// `pathfinding policy` enum.
+    pub pathfinding_policy: Enum<InstancedGeometryPathfindingPolicy, i16>,
+    /// `lightmapping policy` enum.
+    pub lightmapping_policy: Enum<InstancedGeometryLightmappingPolicy, i16>,
     pub lightmap_resolution_scale: f32,
 }
 
@@ -1165,7 +1232,7 @@ impl BspInstance {
             up: s.read_vec3("up"),
             position: s.read_point3d("position"),
             definition_index: s.read_block_index("instance definition"),
-            flags: s.read_int_any("flags").unwrap_or(0) as u16,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             lightmap_texcoord_block_index: s
                 .read_int_any("lightmap texcoord block index")
                 .unwrap_or(-1) as i16,
@@ -1174,8 +1241,8 @@ impl BspInstance {
                 .read_real("world bounding sphere radius")
                 .unwrap_or(0.0),
             name: s.read_string_id("name").unwrap_or_default(),
-            pathfinding_policy: s.read_int_any("pathfinding policy").unwrap_or(0) as i16,
-            lightmapping_policy: s.read_int_any("lightmapping policy").unwrap_or(0) as i16,
+            pathfinding_policy: s.try_read_enum("pathfinding policy").unwrap_or_default(),
+            lightmapping_policy: s.try_read_enum("lightmapping policy").unwrap_or_default(),
             lightmap_resolution_scale: s.read_real("lightmap resolution scale").unwrap_or(1.0),
         }
     }

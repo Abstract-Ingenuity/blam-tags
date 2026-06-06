@@ -15,6 +15,7 @@ pub use types::{
     BspClusterPortal, BspCollisionMaterial, BspInstance, BspInstanceDefinition, BspLeaf,
     BspMarker, BspMaterial, BspMeshMetadata, BspMeshPart, BspWeatherPaletteEntry,
     CollisionBsp2dNode, CollisionBsp2dReference, CollisionEdge, CollisionLeaf, CollisionSurface,
-    CollisionVertex, StructureBsp, StructureBspError, StructureSurface,
-    StructureSurfaceTriangleMapping,
+    CollisionVertex, InstancedGeometryFlags, InstancedGeometryLightmappingPolicy,
+    InstancedGeometryPathfindingPolicy, StructureBsp, StructureBspError, StructureBspFlags,
+    StructureClusterFlags, StructureSurface, StructureSurfaceTriangleMapping,
 };
