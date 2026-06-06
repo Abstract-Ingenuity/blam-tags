@@ -33,6 +33,35 @@ use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::geometry::{read_compression_bounds, strip_to_list, CompressionBounds};
 use crate::math::{RealOrientation, RealPoint2d, RealPoint3d, RealQuaternion, RealVector3d};
+use crate::typed_enums::{Enum, Flags};
+
+/// `mesh_flags` (byte_flags in the schema; stored here as u32 for the
+/// existing API). Shared global render-geometry mesh flags.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum MeshFlags {
+    #[strum(serialize = "mesh has vertex color")] MeshHasVertexColor = 0,
+    #[strum(serialize = "use region index for sorting")] UseRegionIndexForSorting = 1,
+    #[strum(serialize = "use vertex buffers for indices")] UseVertexBuffersForIndices = 2,
+    #[strum(serialize = "mesh has per-instance lighting (do not modify)")] MeshHasPerInstanceLighting = 3,
+    #[strum(serialize = "mesh is unindexed (do not modify)")] MeshIsUnindexed = 4,
+}
+
+/// `part_flags` (byte_flags). Shared global render-geometry part flags.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum PartFlags {
+    #[strum(serialize = "dislikes photons")] DislikesPhotons = 0,
+    #[strum(serialize = "ignored by lightmapper")] IgnoredByLightmapper = 1,
+    #[strum(serialize = "has transparent sorting plane")] HasTransparentSortingPlane = 2,
+    #[strum(serialize = "is water surface")] IsWaterSurface = 3,
+}
 
 /// Errors from runtime render_model extraction.
 #[derive(Debug)]
@@ -116,25 +145,21 @@ pub struct RenderPermutation {
 /// field name `PRT vertex type*`). Selects which PRT entry point the
 /// engine remaps to at `render_mesh_part_default @ 0x18069EBC0` via
 /// `entry_point_remapping_0[transfer_vector_vertex_type]`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
+/// `mesh_transfer_vertex_type_definition` (char_enum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
 pub enum PrtVertexType {
     #[default]
-    None = 0,
-    Ambient = 1,
-    Linear = 2,
-    Quadratic = 3,
+    #[strum(serialize = "No PRT")] None = 0,
+    #[strum(serialize = "PRT Ambient")] Ambient = 1,
+    #[strum(serialize = "PRT Linear")] Linear = 2,
+    #[strum(serialize = "PRT Quadratic")] Quadratic = 3,
 }
 
 impl PrtVertexType {
-    pub fn from_raw(v: i32) -> Self {
-        match v {
-            1 => Self::Ambient,
-            2 => Self::Linear,
-            3 => Self::Quadratic,
-            _ => Self::None,
-        }
-    }
     pub fn is_some(self) -> bool { !matches!(self, Self::None) }
 }
 
@@ -161,7 +186,7 @@ pub struct RenderMesh {
     pub water_data: Option<RawWaterData>,
     /// `meshes[i].PRT vertex type` — author-declared PRT variant. Only
     /// `Ambient` appears in the sampled MCC H3 corpus.
-    pub prt_vertex_type: PrtVertexType,
+    pub prt_vertex_type: Enum<PrtVertexType, i8>,
     /// True iff `meshes[i].vertex_buffer_indices[3] != 0xFFFF`, i.e. a
     /// runtime PRT vertex buffer is present. Mirrors the engine check
     /// at `select_instance_entry_point @ 0x180691340` and
@@ -1017,15 +1042,7 @@ where
         // `lightmapping_policy == 2 (single-probe)` AND
         // `vertex_buffer_indices[3] != 0xFFFF`. We surface the per-mesh
         // half here; the policy bit comes from sbsp at the caller.
-        let prt_vertex_type = mesh
-            .field("PRT vertex type")
-            .and_then(|f| f.value())
-            .map(|v| match v {
-                TagFieldData::CharEnum { value, .. } => value as i32,
-                _ => 0,
-            })
-            .map(PrtVertexType::from_raw)
-            .unwrap_or(PrtVertexType::None);
+        let prt_vertex_type = mesh.try_read_enum("PRT vertex type").unwrap_or_default();
         let has_prt_vertex_stream = mesh
             .field("vertex buffer indices")
             .and_then(|f| f.as_array())
@@ -1044,8 +1061,9 @@ where
         // Engine `render_mesh_part_default @ 0x18069EBC0` reads this
         // bit to remap `_entry_point_static_lighting_prt_quadratic` →
         // `_entry_point_vertex_color_lighting` at draw time.
-        let mesh_flags = mesh.read_int_any("mesh flags").unwrap_or(0) as u32;
-        let has_vertex_color = (mesh_flags & 1) != 0;
+        let mesh_flags: Flags<MeshFlags, u32> =
+            mesh.try_read_flags("mesh flags").unwrap_or_default();
+        let has_vertex_color = mesh_flags.contains(MeshFlags::MeshHasVertexColor);
 
         // No raw_vertex / raw_indices means no inline geometry — emit
         // an empty mesh placeholder so indexing into `meshes` still
@@ -1290,10 +1308,11 @@ fn read_raw_water_data(
     let mut parts: Vec<RawWaterPart> = Vec::new();
     for p in 0..parts_block.len() {
         let Some(part) = parts_block.element(p) else { continue };
-        let part_flags = part.read_int_any("part flags").unwrap_or(0) as u32;
-        // Bit 3 = `_part_is_water_surface` per `e_part_flags`
+        let part_flags: Flags<PartFlags, u32> =
+            part.try_read_flags("part flags").unwrap_or_default();
+        // `is water surface` per `e_part_flags`
         // (`Ares/source/geometry/geometry_definitions.h:44-51`).
-        if (part_flags & 0x08) == 0 {
+        if !part_flags.contains(PartFlags::IsWaterSurface) {
             continue;
         }
         let regular_base = part.read_int_any("index start").unwrap_or(0);
