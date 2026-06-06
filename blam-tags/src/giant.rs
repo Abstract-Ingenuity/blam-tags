@@ -8,10 +8,29 @@ use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::math::AngleBounds;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::Enum;
 use crate::unit::UnitDefinition;
 use std::sync::Arc;
 
 const GIANT_GROUP: [u8; 4] = *b"gint";
+
+/// `slider_movement_patterns` (long_enum) — easing curve for a giant's
+/// buckle/recovery pose interpolation.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i32)]
+pub enum SliderMovementPattern {
+    #[default]
+    #[strum(serialize = "linear")] Linear = 0,
+    #[strum(serialize = "light_ease_in")] LightEaseIn = 1,
+    #[strum(serialize = "full_ease_in")] FullEaseIn = 2,
+    #[strum(serialize = "light_ease_out")] LightEaseOut = 3,
+    #[strum(serialize = "full_ease_out")] FullEaseOut = 4,
+    #[strum(serialize = "light_ease_in_and_out")] LightEaseInAndOut = 5,
+    #[strum(serialize = "full_ease_in_and_out")] FullEaseInAndOut = 6,
+}
 
 #[derive(Debug)]
 pub enum GiantError {
@@ -48,9 +67,9 @@ impl From<crate::object::ObjectDefinitionError> for GiantError {
 #[derive(Debug, Clone, Default)]
 pub struct GiantBuckleParameters {
     pub lower_time: f32,
-    pub lower_curve: i32,
+    pub lower_curve: Enum<SliderMovementPattern, i32>,
     pub raise_time: f32,
-    pub raise_curve: i32,
+    pub raise_curve: Enum<SliderMovementPattern, i32>,
     pub pause_time_easy: f32,
     pub pause_time_normal: f32,
     pub pause_time_heroic: f32,
@@ -74,9 +93,9 @@ impl GiantBuckleParameters {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
             lower_time: s.read_real("lower time").unwrap_or(0.0),
-            lower_curve: s.read_int_any("lower curve").unwrap_or(0) as i32,
+            lower_curve: s.read_enum("lower curve"),
             raise_time: s.read_real("raise time").unwrap_or(0.0),
-            raise_curve: s.read_int_any("raise curve").unwrap_or(0) as i32,
+            raise_curve: s.read_enum("raise curve"),
             pause_time_easy: s.read_real("pause time (easy)").unwrap_or(0.0),
             pause_time_normal: s.read_real("pause time (normal)").unwrap_or(0.0),
             pause_time_heroic: s.read_real("pause time (heroic)").unwrap_or(0.0),
@@ -103,6 +122,8 @@ impl GiantBuckleParameters {
 #[derive(Debug, Clone, Default)]
 pub struct GiantDefinition {
     pub unit: Arc<UnitDefinition>,
+    /// `giant_definition_flags` (long_flags) — empty option list in the
+    /// halo3_mcc schema (no named bits), so kept as the raw integer.
     pub flags: u32,
     /// `accel_time:acceleration time in seconds`.
     pub accel_time: f32,

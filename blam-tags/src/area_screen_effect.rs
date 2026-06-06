@@ -26,6 +26,7 @@ use crate::fields::TagFieldType;
 use crate::file::TagFile;
 use crate::math::RealRgbColor;
 use crate::tag_function::TagFunction;
+use crate::typed_enums::Flags;
 
 /// Errors from `area_screen_effect` tag walking.
 #[derive(Debug)]
@@ -51,12 +52,18 @@ impl std::error::Error for AreaScreenEffectError {}
 const SEFC_GROUP: [u8; 4] = *b"sefc";
 
 /// `area_screen_effect_flags_definition` — 4 bits authored on each
-/// `single_screen_effect`. Note these are bit POSITIONS (`1<<n`), not
-/// bit MASKS.
-pub const SEFC_FLAG_DEBUG_DISABLE: u32 = 1 << 0;
-pub const SEFC_FLAG_ALLOW_OUTSIDE_RADIUS: u32 = 1 << 1;
-pub const SEFC_FLAG_FIRST_PERSON_ONLY: u32 = 1 << 2;
-pub const SEFC_FLAG_THIRD_PERSON_ONLY: u32 = 1 << 3;
+/// `single_screen_effect`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum AreaScreenEffectFlags {
+    #[strum(serialize = "debug disable")] DebugDisable = 0,
+    #[strum(serialize = "allow effect outside radius")] AllowEffectOutsideRadius = 1,
+    #[strum(serialize = "first person only")] FirstPersonOnly = 2,
+    #[strum(serialize = "third person only")] ThirdPersonOnly = 3,
+}
 
 /// One `single_screen_effect` (132B authored) — one entry of the
 /// area_screen_effect's `screen_effects` block. A tag carries up to 8.
@@ -65,8 +72,8 @@ pub struct SingleScreenEffect {
     /// `string_id` authored name. Empty when unauthored.
     pub name: String,
 
-    /// `area_screen_effect_flags_definition`. Test against `SEFC_FLAG_*`.
-    pub flags: u32,
+    /// `area_screen_effect_flags_definition`.
+    pub flags: Flags<AreaScreenEffectFlags, u32>,
 
     /// World-units distance at which the effect is fully attenuated.
     /// Engine: `*((float*)effect + 2)`. Not used for the scenario-global
@@ -168,7 +175,7 @@ impl AreaScreenEffect {
 impl SingleScreenEffect {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         let name = s.read_string_id("name").unwrap_or_default();
-        let flags = s.read_int_any("flags").unwrap_or(0) as u32;
+        let flags = s.try_read_flags("flags").unwrap_or_default();
 
         let maximum_distance = s.read_real("maximum distance").unwrap_or(0.0);
         let distance_falloff = read_falloff(s, "distance falloff");
@@ -210,17 +217,17 @@ impl SingleScreenEffect {
     /// True if `flags & first_person_only` is set. Engine path skips
     /// the effect for non-first-person observers in this case.
     pub fn first_person_only(&self) -> bool {
-        (self.flags & SEFC_FLAG_FIRST_PERSON_ONLY) != 0
+        self.flags.contains(AreaScreenEffectFlags::FirstPersonOnly)
     }
 
     /// True if `flags & third_person_only` is set.
     pub fn third_person_only(&self) -> bool {
-        (self.flags & SEFC_FLAG_THIRD_PERSON_ONLY) != 0
+        self.flags.contains(AreaScreenEffectFlags::ThirdPersonOnly)
     }
 
     /// True if `flags & debug_disable` — engine skips this effect.
     pub fn debug_disabled(&self) -> bool {
-        (self.flags & SEFC_FLAG_DEBUG_DISABLE) != 0
+        self.flags.contains(AreaScreenEffectFlags::DebugDisable)
     }
 }
 
