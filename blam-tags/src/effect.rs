@@ -74,6 +74,7 @@
 use crate::api::TagStruct;
 use crate::fields::TagFieldData;
 use crate::file::TagFile;
+use crate::typed_enums::{Enum, Flags};
 use crate::math::{
     AngleBounds, RealBounds, RealEulerAngles2d, RealPoint3d,
 };
@@ -214,94 +215,188 @@ impl EffectPriority {
 // Enum: effect_environments
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// `effect_environments` (short_enum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 #[repr(i16)]
 pub enum EffectEnvironment {
     #[default]
-    Anywhere = 0,
-    Air = 1,
-    Water = 2,
-    Vacuum = 3,
-}
-
-impl EffectEnvironment {
-    pub fn from_int(v: i64) -> Self {
-        match v {
-            1 => Self::Air,
-            2 => Self::Water,
-            3 => Self::Vacuum,
-            _ => Self::Anywhere,
-        }
-    }
+    #[strum(serialize = "any environment")] Anywhere = 0,
+    #[strum(serialize = "air only")] Air = 1,
+    #[strum(serialize = "water only")] Water = 2,
+    #[strum(serialize = "space only")] Vacuum = 3,
 }
 
 // ---------------------------------------------------------------------------
 // Enum: effect_dispositions
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// `effect_dispositions` (short_enum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 #[repr(i16)]
 pub enum EffectDisposition {
     #[default]
-    Agnostic = 0,
-    Violent = 1,
-    Nonviolent = 2,
-}
-
-impl EffectDisposition {
-    pub fn from_int(v: i64) -> Self {
-        match v {
-            1 => Self::Violent,
-            2 => Self::Nonviolent,
-            _ => Self::Agnostic,
-        }
-    }
+    #[strum(serialize = "either mode")] Agnostic = 0,
+    #[strum(serialize = "violent mode only")] Violent = 1,
+    #[strum(serialize = "nonviolent mode only")] Nonviolent = 2,
 }
 
 // ---------------------------------------------------------------------------
 // Enum: effect_camera_modes
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
+/// `effect_camera_modes` (char_enum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
 pub enum EffectCameraMode {
     #[default]
-    Independent = 0,
-    FirstPersonOnly = 1,
-    ThirdPersonOnly = 2,
-    Both = 3,
-}
-
-impl EffectCameraMode {
-    pub fn from_int(v: i64) -> Self {
-        match v {
-            1 => Self::FirstPersonOnly,
-            2 => Self::ThirdPersonOnly,
-            3 => Self::Both,
-            _ => Self::Independent,
-        }
-    }
+    #[strum(serialize = "independent of camera mode")] Independent = 0,
+    #[strum(serialize = "only in first person")] FirstPersonOnly = 1,
+    #[strum(serialize = "only in third person")] ThirdPersonOnly = 2,
+    #[strum(serialize = "both first and third")] Both = 3,
 }
 
 // ---------------------------------------------------------------------------
 // Enum: coordinate_system_enum (particle systems only)
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// `coordinate_system_enum` (short_enum, particle systems only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 #[repr(i16)]
 pub enum CoordinateSystem {
     #[default]
-    World = 0,
-    Local = 1,
+    #[strum(serialize = "world")] World = 0,
+    #[strum(serialize = "local")] Local = 1,
 }
 
-impl CoordinateSystem {
-    pub fn from_int(v: i64) -> Self {
-        match v {
-            1 => Self::Local,
-            _ => Self::World,
-        }
-    }
+/// `effect_flags` (long_flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum EffectFlags {
+    #[strum(serialize = "deleted when attachment deactivates")] DeletedWhenAttachmentDeactivates = 0,
+    #[strum(serialize = "run events in parallel")] RunEventsInParallel = 1,
+    #[strum(serialize = "do not re-use parts when looping")] DoNotReusePartsWhenLooping = 2,
+    #[strum(serialize = "age creator's weapon")] AgeCreatorsWeapon = 3,
+    #[strum(serialize = "use parent position but world orientation")] UseParentPositionButWorldOrientation = 4,
+    #[strum(serialize = "can penetrate walls (expensive)")] CanPenetrateWalls = 5,
+    #[strum(serialize = "cannot be restarted")] CannotBeRestarted = 6,
+    #[strum(serialize = "force use own lightprobe")] ForceUseOwnLightprobe = 7,
+    #[strum(serialize = "heavy performance")] HeavyPerformance = 8,
+    #[strum(serialize = "half resolution")] HalfResolution = 9,
+}
+
+/// `event_flags` (long_flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum EffectEventFlags {
+    #[strum(serialize = "disabled for debugging")] DisabledForDebugging = 0,
+    #[strum(serialize = "particles die when effect ends")] ParticlesDieWhenEffectEnds = 1,
+}
+
+/// `effect_part_flags` (word_flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum EffectPartFlags {
+    #[strum(serialize = "face down regardless of location (decals)")] FaceDownRegardlessOfLocation = 0,
+    #[strum(serialize = "offset origin away from geometry (lights)")] OffsetOriginAwayFromGeometry = 1,
+    #[strum(serialize = "never attached to object")] NeverAttachedToObject = 2,
+    #[strum(serialize = "disabled for debugging")] DisabledForDebugging = 3,
+    #[strum(serialize = "draw regardless of distance")] DrawRegardlessOfDistance = 4,
+    #[strum(serialize = "make every tick")] MakeEveryTick = 5,
+    #[strum(serialize = "inherit parent variant")] InheritParentVariant = 6,
+    #[strum(serialize = "batch AOE damage")] BatchAoeDamage = 7,
+}
+
+/// `effect_location_flags` (long_flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum EffectLocationFlags {
+    #[strum(serialize = "optional (no error if not found)")] Optional = 0,
+    #[strum(serialize = "destructible (no error if goes away)")] Destructible = 1,
+    #[strum(serialize = "track sub-frame movements")] TrackSubFrameMovements = 2,
+}
+
+/// `particle_system_flags` (word_flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum ParticleSystemFlags {
+    #[strum(serialize = "particles freeze when offscreen")] ParticlesFreezeWhenOffscreen = 0,
+    #[strum(serialize = "particles continue as usual when offscreen")] ParticlesContinueWhenOffscreen = 1,
+    #[strum(serialize = "lod always 1.0")] LodAlways1 = 2,
+    #[strum(serialize = "lod same in splitscreen")] LodSameInSplitscreen = 3,
+    #[strum(serialize = "disabled in 3- and 4-way splitscreen")] DisabledIn3And4WaySplitscreen = 4,
+    #[strum(serialize = "disabled for debugging")] DisabledForDebugging = 5,
+    #[strum(serialize = "inherit effect velocity")] InheritEffectVelocity = 6,
+    #[strum(serialize = "don't render system")] DontRenderSystem = 7,
+    #[strum(serialize = "render when zoomed")] RenderWhenZoomed = 8,
+    #[strum(serialize = "force cpu updating")] ForceCpuUpdating = 9,
+    #[strum(serialize = "force gpu updating")] ForceGpuUpdating = 10,
+    #[strum(serialize = "override near fade (use with caution)")] OverrideNearFade = 11,
+    #[strum(serialize = "particles die when effect ends")] ParticlesDieWhenEffectEnds = 12,
+    #[strum(serialize = "gpu occlusion (weather only)")] GpuOcclusion = 13,
+}
+
+/// `effect_part_scaleable_values` (long_flags) — which per-part values
+/// the A/B effect scales drive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum EffectPartScaleableValues {
+    #[strum(serialize = "velocity")] Velocity = 0,
+    #[strum(serialize = "velocity delta")] VelocityDelta = 1,
+    #[strum(serialize = "velocity cone angle")] VelocityConeAngle = 2,
+    #[strum(serialize = "angular velocity")] AngularVelocity = 3,
+    #[strum(serialize = "angular velocity delta")] AngularVelocityDelta = 4,
+    #[strum(serialize = "type-specific scale")] TypeSpecificScale = 5,
+}
+
+/// `emission_shape_enum` (char_enum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum EmissionShape {
+    #[default]
+    #[strum(serialize = "sprayer")] Sprayer = 0,
+    #[strum(serialize = "disc")] Disc = 1,
+    #[strum(serialize = "globe")] Globe = 2,
+    #[strum(serialize = "implode")] Implode = 3,
+    #[strum(serialize = "tube")] Tube = 4,
+    #[strum(serialize = "halo")] Halo = 5,
+    #[strum(serialize = "impact contour")] ImpactContour = 6,
+    #[strum(serialize = "impact area")] ImpactArea = 7,
+    #[strum(serialize = "debris")] Debris = 8,
+    #[strum(serialize = "line")] Line = 9,
+    #[strum(serialize = "breakable surface")] BreakableSurface = 10,
 }
 
 // ---------------------------------------------------------------------------
@@ -439,8 +534,8 @@ pub struct EffectLocation {
     /// `impact`, `water_surface`, `structure_surface`, `child`) are
     /// resolved by the engine — see schema explanation at field 0.
     pub marker_name: String,
-    /// `effect_location_flags` — `LOCATION_FLAG_*` constants.
-    pub flags: u32,
+    /// `effect_location_flags`.
+    pub flags: Flags<EffectLocationFlags, u32>,
     /// `priority!*` — `global_effect_priority_enum`.
     pub priority: EffectPriority,
 }
@@ -448,7 +543,7 @@ pub struct EffectLocation {
 impl EffectLocation {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         let marker_name = s.read_string_id("marker name").unwrap_or_default();
-        let flags = s.read_int_any("flags").unwrap_or(0) as u32;
+        let flags = s.try_read_flags("flags").unwrap_or_default();
         // priority field is stripped from the embedded layout — defaults
         // to Normal per engine `global_effect_priority_enum` zero value.
         let priority = EffectPriority::Normal;
@@ -462,17 +557,17 @@ impl EffectLocation {
 
 #[derive(Debug, Clone, Default)]
 pub struct EffectPart {
-    pub environment: EffectEnvironment,
-    pub violence_mode: EffectDisposition,
+    pub environment: Enum<EffectEnvironment, i16>,
+    pub violence_mode: Enum<EffectDisposition, i16>,
     /// Block index into the owning effect's `locations[]`. -1 means
     /// "use default location" (engine substitutes the first valid).
     pub location: i16,
     /// Beams use a second endpoint marker; -1 for non-beam parts.
     pub secondary_location_beams: i16,
-    /// `effect_part_flags` — `PART_FLAG_*` constants (u16).
-    pub flags: u16,
+    /// `effect_part_flags`.
+    pub flags: Flags<EffectPartFlags, u16>,
     pub priority: EffectPriority,
-    pub camera_mode: EffectCameraMode,
+    pub camera_mode: Enum<EffectCameraMode, i8>,
     /// `runtime base group tag!` — engine-computed `c_tag_index`
     /// dispatch key. Schema stores as `Tag(u32)` BE fourcc.
     pub runtime_base_group_tag: [u8; 4],
@@ -500,29 +595,26 @@ pub struct EffectPart {
     pub relative_orientation_yaw_pitch: RealEulerAngles2d,
     /// Bitmask of `SCALE_*` constants. Bits indicate which params
     /// multiply by `effect.scale_a`.
-    pub a_scales_values: u32,
+    pub a_scales_values: Flags<EffectPartScaleableValues, u32>,
     /// Bitmask of `SCALE_*` constants. Bits indicate which params
     /// multiply by `effect.scale_b`.
-    pub b_scales_values: u32,
+    pub b_scales_values: Flags<EffectPartScaleableValues, u32>,
 }
 
 impl EffectPart {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        let environment = EffectEnvironment::from_int(
-            s.read_int_any("create in").unwrap_or(0) as i64,
-        );
-        let violence_mode = EffectDisposition::from_int(
-            s.read_int_any("violence mode").unwrap_or(0) as i64,
-        );
+        let environment = s.try_read_enum("create in").unwrap_or_default();
+        let violence_mode = s.try_read_enum("violence mode").unwrap_or_default();
         let location = s.read_int_any("location").unwrap_or(-1) as i16;
-        // Stripped from layout: secondary_location_beams (used only by beam parts),
-        // priority (defaults to Normal), camera_mode (defaults to Independent),
-        // velocity_orientation_yaw_pitch (defaults to (0,0)).
+        // `camera mode` is an authored short_enum — resolve it by name.
+        let camera_mode = s.try_read_enum("camera mode").unwrap_or_default();
+        // Not surfaced: secondary_location_beams (beam parts only), priority
+        // (`priority!*` is a runtime/readonly field — always Normal in source
+        // tags), velocity_orientation_yaw_pitch (defaults to (0,0)).
         let secondary_location_beams: i16 = -1;
         let priority = EffectPriority::Normal;
-        let camera_mode = EffectCameraMode::Independent;
         let velocity_orientation_yaw_pitch = RealEulerAngles2d { yaw: 0.0, pitch: 0.0 };
-        let flags = s.read_int_any("flags").unwrap_or(0) as u16;
+        let flags = s.try_read_flags("flags").unwrap_or_default();
         // `runtime base group tag` (Tag(u32)) is computed by tool.exe
         // at cache-build from the `type` tag_reference's group. Read
         // it directly; if empty, fall back to type_group below.
@@ -548,8 +640,8 @@ impl EffectPart {
         let relative_offset = s.read_point3d("relative offset");
         let relative_orientation_yaw_pitch =
             s.read_euler2d("relative orientation (yaw, pitch)");
-        let a_scales_values = s.read_int_any("A scales values").unwrap_or(0) as u32;
-        let b_scales_values = s.read_int_any("B scales values").unwrap_or(0) as u32;
+        let a_scales_values = s.try_read_flags("A scales values").unwrap_or_default();
+        let b_scales_values = s.try_read_flags("B scales values").unwrap_or_default();
         Self {
             environment,
             violence_mode,
@@ -582,8 +674,8 @@ impl EffectPart {
 
 #[derive(Debug, Clone, Default)]
 pub struct EffectAcceleration {
-    pub environment: EffectEnvironment,
-    pub violence_mode: EffectDisposition,
+    pub environment: Enum<EffectEnvironment, i16>,
+    pub violence_mode: Enum<EffectDisposition, i16>,
     pub location: i16,
     pub acceleration: f32,
     pub inner_cone_angle_degrees: f32,
@@ -592,12 +684,8 @@ pub struct EffectAcceleration {
 
 impl EffectAcceleration {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        let environment = EffectEnvironment::from_int(
-            s.read_int_any("create in").unwrap_or(0) as i64,
-        );
-        let violence_mode = EffectDisposition::from_int(
-            s.read_int_any("violence mode").unwrap_or(0) as i64,
-        );
+        let environment = s.try_read_enum("create in").unwrap_or_default();
+        let violence_mode = s.try_read_enum("violence mode").unwrap_or_default();
         let location = s.read_int_any("location").unwrap_or(-1) as i16;
         let acceleration = s.read_real("acceleration").unwrap_or(0.0);
         let inner_cone_angle_degrees = s.read_real("inner cone angle").unwrap_or(0.0);
@@ -629,7 +717,8 @@ pub struct ParticleSystemEmitter {
     /// `emission_shape_enum` — sprayer/disc/globe/implode/tube/halo/
     /// impact_contour/impact_area/debris/line/breakable_surface.
     /// Raw integer until P3 ports the full enum.
-    pub emission_shape: i8,
+    pub emission_shape: Enum<EmissionShape, i8>,
+    /// `emitter_flags` — empty option list in the schema, kept raw.
     pub flags: u8,
     /// `emission_axis_enum` — constant/cone/disc/globe.
     pub particle_axis_for_models: i8,
@@ -683,7 +772,7 @@ pub struct ParticleSystemEmitter {
 impl ParticleSystemEmitter {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         let name = s.read_string_id("emitter name").unwrap_or_default();
-        let emission_shape = s.read_int_any("emission shape").unwrap_or(0) as i8;
+        let emission_shape = s.try_read_enum("emission shape").unwrap_or_default();
         // flags!: layout may strip. Defaults to 0.
         let flags = s.read_int_any("flags").unwrap_or(0) as u8;
         let particle_axis_for_models =
@@ -770,14 +859,14 @@ pub struct ParticleSystemDefinition {
     /// per schema (wider than other location references which use
     /// `short_block_index`).
     pub location: i32,
-    pub coordinate_system: CoordinateSystem,
-    pub environment: EffectEnvironment,
-    pub disposition: EffectDisposition,
-    pub camera_mode: EffectCameraMode,
+    pub coordinate_system: Enum<CoordinateSystem, i16>,
+    pub environment: Enum<EffectEnvironment, i16>,
+    pub disposition: Enum<EffectDisposition, i16>,
+    pub camera_mode: Enum<EffectCameraMode, i16>,
     /// `sort_bias`: -10..10 typical, positive = closer to camera.
     pub sort_bias: i16,
-    /// `particle_system_flags` — `PARTICLE_SYSTEM_FLAG_*` (u16).
-    pub flags: u16,
+    /// `particle_system_flags`.
+    pub flags: Flags<ParticleSystemFlags, u16>,
     pub pixel_budget_ms: f32,
     pub near_fade_range: f32,
     pub near_fade_cutoff: f32,
@@ -800,18 +889,12 @@ impl ParticleSystemDefinition {
         let priority = EffectPriority::Normal;
         let particle_tag_path = s.read_tag_ref_path("particle").unwrap_or_default();
         let location = s.read_int_any("location").unwrap_or(-1) as i32;
-        let coordinate_system =
-            CoordinateSystem::from_int(s.read_int_any("coordinate system").unwrap_or(0) as i64);
-        let environment = EffectEnvironment::from_int(
-            s.read_int_any("environment").unwrap_or(0) as i64,
-        );
-        let disposition = EffectDisposition::from_int(
-            s.read_int_any("disposition").unwrap_or(0) as i64,
-        );
-        let camera_mode =
-            EffectCameraMode::from_int(s.read_int_any("camera mode").unwrap_or(0) as i64);
+        let coordinate_system = s.try_read_enum("coordinate system").unwrap_or_default();
+        let environment = s.try_read_enum("environment").unwrap_or_default();
+        let disposition = s.try_read_enum("disposition").unwrap_or_default();
+        let camera_mode = s.try_read_enum("camera mode").unwrap_or_default();
         let sort_bias = s.read_int_any("sort bias").unwrap_or(0) as i16;
-        let flags = s.read_int_any("flags").unwrap_or(0) as u16;
+        let flags = s.try_read_flags("flags").unwrap_or_default();
         let pixel_budget_ms = s.read_real("Pixel budget").unwrap_or(0.0);
         let near_fade_range = s.read_real("near fade range").unwrap_or(0.0);
         let near_fade_cutoff = s.read_real("near fade cutoff").unwrap_or(0.0);
@@ -871,8 +954,8 @@ impl ParticleSystemDefinition {
 pub struct EffectEvent {
     /// `event name^` — `string_id`.
     pub name: String,
-    /// `event_flags` — `EVENT_FLAG_*` constants.
-    pub flags: u32,
+    /// `event_flags`.
+    pub flags: Flags<EffectEventFlags, u32>,
     pub priority: EffectPriority,
     /// `skip fraction#chance that this event will be skipped entirely`
     /// — `real_fraction` in `[0, 1]`.
@@ -889,7 +972,7 @@ pub struct EffectEvent {
 impl EffectEvent {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         let name = s.read_string_id("event name").unwrap_or_default();
-        let flags = s.read_int_any("flags").unwrap_or(0) as u32;
+        let flags = s.try_read_flags("flags").unwrap_or_default();
         // priority stripped from layout.
         let priority = EffectPriority::Normal;
         let skip_fraction = s.read_real("skip fraction").unwrap_or(0.0);
@@ -955,8 +1038,8 @@ impl EffectConicalDistribution {
 
 #[derive(Debug, Clone, Default)]
 pub struct EffectDefinition {
-    /// `effect_flags` — `EFFECT_FLAG_*` constants.
-    pub flags: u32,
+    /// `effect_flags`.
+    pub flags: Flags<EffectFlags, u32>,
     /// `fixed random seed` — non-zero ⇒ deterministic effect.
     pub fixed_random_seed: i32,
     /// `restart if within{overlap threshold}:world units` — engine
@@ -1000,7 +1083,7 @@ impl EffectDefinition {
     }
 
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        let flags = s.read_int_any("flags").unwrap_or(0) as u32;
+        let flags = s.try_read_flags("flags").unwrap_or_default();
         let fixed_random_seed = s.read_int_any("fixed random seed").unwrap_or(0) as i32;
         // Schema name uses curly-brace alias: `restart if within{overlap threshold}:world units`.
         // The alias replaces the base name in the embedded layout.
