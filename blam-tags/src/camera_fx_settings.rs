@@ -21,8 +21,112 @@ use crate::fields::TagFieldType;
 use crate::file::TagFile;
 use crate::math::RealRgbColor;
 use crate::tag_function::TagFunction;
+use crate::typed_enums::{Enum, Flags};
 
 const CFXS_GROUP: [u8; 4] = *b"cfxs";
+
+// ---------------------------------------------------------------------------
+// Typed flag / enum definitions (schema-name-resolved).
+//
+// Every cfxs parameter block carries a `flags` word, but the schema uses
+// FIVE distinct flag definitions depending on the block — and bit 2 means
+// different things in each, which is exactly the positional-decode trap
+// this refactor exists to kill. They are typed separately so a wire bit
+// can never be read against the wrong layout.
+// ---------------------------------------------------------------------------
+
+/// `camera_fx_parameter_flags_auto_adjust` — ExposureBlock ONLY. This is
+/// the one variant where bit 2 is the real `auto-adjust target` flag.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum CameraFxAutoAdjustFlags {
+    #[default]
+    #[strum(serialize = "use default (ignore these values)")] UseDefault = 0,
+    #[strum(serialize = "maximum change is relative")]        MaxChangeIsRelative = 1,
+    #[strum(serialize = "auto-adjust target")]                AutoAdjustTarget = 2,
+    #[strum(serialize = "bit3")]                              Bit3 = 3,
+    #[strum(serialize = "fixed")]                             Fixed = 4,
+}
+
+/// `camera_fx_parameter_flags_no_auto_adjust` — every scalar / instant /
+/// color parameter block. Identical layout to the auto-adjust variant
+/// EXCEPT bit 2 is `(unused)` here, not `auto-adjust target`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum CameraFxParameterFlags {
+    #[default]
+    #[strum(serialize = "use default (ignore these values)")] UseDefault = 0,
+    #[strum(serialize = "maximum change is relative")]        MaxChangeIsRelative = 1,
+    #[strum(serialize = "(unused)")]                          Unused2 = 2,
+    #[strum(serialize = "bit3")]                              Bit3 = 3,
+    #[strum(serialize = "fixed")]                             Fixed = 4,
+}
+
+/// `camera_fx_parameter_flags_bling_spikes` — the bling-count (`WordParameter`)
+/// block. Here bit 3 is `double sided bling`, not `bit3`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum CameraFxBlingSpikesFlags {
+    #[default]
+    #[strum(serialize = "use default (ignore these values)")] UseDefault = 0,
+    #[strum(serialize = "maximum change is relative")]        MaxChangeIsRelative = 1,
+    #[strum(serialize = "(unused)")]                          Unused2 = 2,
+    #[strum(serialize = "double sided bling")]                DoubleSidedBling = 3,
+    #[strum(serialize = "fixed")]                             Fixed = 4,
+}
+
+/// `camera_fx_parameter_flags_ssao` == `camera_fx_parameter_flags_cg`
+/// (identical option lists) — Ssao / Lightshafts / ColorGrading blocks.
+/// Here bit 1 is `enable` (the toggle the engine gates these passes on).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum CameraFxToggleFlags {
+    #[default]
+    #[strum(serialize = "use default (ignore these values)")] UseDefault = 0,
+    #[strum(serialize = "enable")]                            Enable = 1,
+    #[strum(serialize = "unused0")]                           Unused0 = 2,
+    #[strum(serialize = "unused1")]                           Unused1 = 3,
+    #[strum(serialize = "fixed")]                             Fixed = 4,
+}
+
+/// `camera_fx_parameter_flags_enable` — the six color-grading effect
+/// sub-blocks (curves / brightness-contrast / hslv / colorize / selective
+/// / color-balance). A single `enable` bit.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum CameraFxEnableFlags {
+    #[default]
+    #[strum(serialize = "enable")] Enable = 0,
+}
+
+/// `col_grad_curves_editor_mode` — CurvesEditorBlock.mode.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i32)]
+pub enum ColGradCurvesEditorMode {
+    /// Per-channel red/green/blue curves.
+    #[default]
+    #[strum(serialize = "RGB")]        Rgb = 0,
+    /// Single brightness curve applied to all three channels.
+    #[strum(serialize = "Brightness")] Brightness = 1,
+}
 
 #[derive(Debug)]
 pub enum CameraFxError {
@@ -51,12 +155,12 @@ impl std::error::Error for CameraFxError {}
 /// fields per frame when blending the runtime `c_camera_fx_values`
 /// toward the cfxs target — dropping any of them breaks faithful
 /// per-frame parameter interpolation.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ScalarParameter {
-    /// `camera_fx_parameter_flags_no_auto_adjust`. Bit 0 = `use
-    /// default (ignore these values)` — engine treats the parameter
-    /// as absent when set, falling through to the default cfxs.
-    pub flags: u16,
+    /// `camera_fx_parameter_flags_no_auto_adjust`. `UseDefault` =
+    /// engine treats the parameter as absent when set, falling through
+    /// to the default cfxs.
+    pub flags: Flags<CameraFxParameterFlags, u16>,
     /// Authored target value (units depend on the parameter — stops,
     /// HDR multiplier, length, angle, etc.).
     pub value: f32,
@@ -69,9 +173,9 @@ pub struct ScalarParameter {
 /// `c_camera_fx_settings::s_real_instant_parameter` (8B) — the
 /// snap-to-target variant (no blending). Used by
 /// `auto_exposure_sensitivity` and `auto_exposure_anti_bloom`.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct InstantScalarParameter {
-    pub flags: u16,
+    pub flags: Flags<CameraFxParameterFlags, u16>,
     pub value: f32,
 }
 
@@ -79,17 +183,17 @@ pub struct InstantScalarParameter {
 /// per-stage bloom color overrides. The `flags` `use default`
 /// bit (0x01) tells the engine to ignore the per-stage color and
 /// substitute the global default (1, 1, 1).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ColorParameter {
-    pub flags: u16,
+    pub flags: Flags<CameraFxParameterFlags, u16>,
     pub color: RealRgbColor,
 }
 
 impl ColorParameter {
-    /// Per the schema's `use default` bit (0x01) — when set, engine
-    /// ignores `color` and substitutes (1, 1, 1).
+    /// Per the schema's `UseDefault` bit — when set, engine ignores
+    /// `color` and substitutes (1, 1, 1).
     pub fn use_default(&self) -> bool {
-        (self.flags & 0x01) != 0
+        self.flags.contains(CameraFxParameterFlags::UseDefault)
     }
 
     /// The effective color the engine actually applies — `(1,1,1)`
@@ -104,9 +208,9 @@ impl ColorParameter {
 }
 
 /// `c_camera_fx_settings::s_word_parameter` (4B) — bling spike count.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct WordParameter {
-    pub flags: u16,
+    pub flags: Flags<CameraFxBlingSpikesFlags, u16>,
     pub value: u16,
 }
 
@@ -165,10 +269,10 @@ pub struct CameraFxSettings {
 /// `s_ssao_parameter` (cfxs sub-struct, schema size 16B).
 /// Engine: `c_screen_postprocess::render_ssao @ 0x1806b50e0` reads
 /// these per frame. `flags & 2 == 0` → SSAO disabled (return early).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SsaoBlock {
-    /// Bit 1 (`& 2`) = enable.
-    pub flags: u32,
+    /// `Enable` (bit 1) gates the pass; engine returns early when unset.
+    pub flags: Flags<CameraFxToggleFlags, u32>,
     /// AO darkening multiplier. Tuned per-cfxs.
     pub intensity: f32,
     /// World-space sample radius. Larger = wider AO falloff.
@@ -181,17 +285,17 @@ pub struct SsaoBlock {
 
 impl SsaoBlock {
     pub fn is_enabled(&self) -> bool {
-        (self.flags & 2) != 0
+        self.flags.contains(CameraFxToggleFlags::Enable)
     }
 }
 
 /// `s_lightshafts` (cfxs sub-struct, schema size 44B).
 /// Engine: `c_screen_postprocess::render_lightshafts @ 0x1806b55c0`.
 /// `flags & 2 == 0` → disabled.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct LightshaftsBlock {
-    /// Bit 1 (`& 2`) = enable.
-    pub flags: u32,
+    /// `Enable` (bit 1) gates the pass; engine returns early when unset.
+    pub flags: Flags<CameraFxToggleFlags, u32>,
     /// Light source pitch in degrees `[0, 90]` (vertical angle).
     pub pitch: f32,
     /// Light source heading in degrees `[0, 360]` (horizontal angle).
@@ -212,7 +316,7 @@ pub struct LightshaftsBlock {
 
 impl LightshaftsBlock {
     pub fn is_enabled(&self) -> bool {
-        (self.flags & 2) != 0
+        self.flags.contains(CameraFxToggleFlags::Enable)
     }
 }
 
@@ -225,10 +329,10 @@ impl LightshaftsBlock {
 /// bake of the 16³ LUT).
 #[derive(Debug, Clone, Default)]
 pub struct ColorGradingBlock {
-    /// Bit 1 (`& 2`) = enable. `c_screen_postprocess::update_color_grading
+    /// `Enable` (bit 1). `c_screen_postprocess::update_color_grading
     /// @ dllcache:146` checks `(pColorGrading->m_flags & 2) == 0` and
     /// falls through to the identity-LUT fast path when unset.
-    pub flags: u32,
+    pub flags: Flags<CameraFxToggleFlags, u32>,
     /// Authored cross-fade duration (in seconds) when transitioning
     /// between color-grading settings. Engine: `g_fColorGradingBlendFactor`.
     pub blend_time: f32,
@@ -257,10 +361,10 @@ pub struct ColorGradingBlock {
 }
 
 impl ColorGradingBlock {
-    /// `(m_flags & 2) != 0` — engine's gate before applying any of the
+    /// `Enable` set — engine's gate before applying any of the
     /// per-effect blocks.
     pub fn is_enabled(&self) -> bool {
-        (self.flags & 2) != 0
+        self.flags.contains(CameraFxToggleFlags::Enable)
     }
 }
 
@@ -271,10 +375,10 @@ impl ColorGradingBlock {
 /// `range = 1.0`.
 #[derive(Debug, Clone, Default)]
 pub struct CurvesEditorBlock {
-    /// Bit 0 = enable.
-    pub flags: u32,
-    /// 0 = RGB (per-channel curves), 1 = Brightness (single curve).
-    pub mode: u32,
+    /// `Enable` (bit 0).
+    pub flags: Flags<CameraFxEnableFlags, u32>,
+    /// `Rgb` (per-channel curves) or `Brightness` (single curve).
+    pub mode: Enum<ColGradCurvesEditorMode, i32>,
     pub brightness: Option<TagFunction>,
     pub red: Option<TagFunction>,
     pub green: Option<TagFunction>,
@@ -282,10 +386,10 @@ pub struct CurvesEditorBlock {
 }
 
 /// `Brightness, contrast` block (12B).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct BrightnessContrast {
-    /// Bit 0 = enable.
-    pub flags: u32,
+    /// `Enable` (bit 0).
+    pub flags: Flags<CameraFxEnableFlags, u32>,
     /// Authored slider in [-1, 1]. Engine formula:
     /// `b≥0: c = c + (1-c)*b ; b<0: c = c * (b+1)` per channel, then
     /// `c = (contrast+1) * (c - 0.5) + 0.5`.
@@ -297,10 +401,10 @@ pub struct BrightnessContrast {
 /// `Hue, saturation, lightness, vibrance` block (20B). Field names
 /// follow *engine* semantics — the schema's slider labels for offsets
 /// 12 and 16 are swapped vs how the runtime reads them.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct HslvBlock {
-    /// Bit 0 = enable.
-    pub flags: u32,
+    /// `Enable` (bit 0).
+    pub flags: Flags<CameraFxEnableFlags, u32>,
     /// Hue offset in degrees, `[-180, 180]`. Added directly to `hsl.H`.
     pub hue_offset_deg: f32,
     /// Saturation additive offset, `[-1, 1]`.
@@ -319,10 +423,10 @@ pub struct HslvBlock {
 /// color-zone band. Engine `ProcessSelectiveColor` accumulates a CMYK
 /// adjustment by weighting each band by the input pixel's hue / tonal
 /// distance to that zone.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SelectiveColorBlock {
-    /// Bit 0 = enable.
-    pub flags: u32,
+    /// `Enable` (bit 0).
+    pub flags: Flags<CameraFxEnableFlags, u32>,
     /// Order matters — `ProcessSelectiveColor` walks them in declaration
     /// order: `dFactors[0..5]` map to reds..magentas (hue zones via
     /// 6-bin RGB ordering); `dFactors[6..8]` map to whites/neutrals/
@@ -346,10 +450,10 @@ pub struct CmybBand {
 /// `SetColorBalanceParams` builds a `Tones[3][3]` (per-channel lo,
 /// gamma, hi) which the per-texel loop applies as
 /// `out = pow(remap(in, lo, hi), 1/gamma)` per RGB channel.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ColorBalanceBlock {
-    /// Bit 0 = enable.
-    pub flags: u32,
+    /// `Enable` (bit 0).
+    pub flags: Flags<CameraFxEnableFlags, u32>,
     pub shadows: CmyBand,
     pub midtones: CmyBand,
     pub highlights: CmyBand,
@@ -367,10 +471,10 @@ pub struct CmyBand {
 /// `Colorize effect` block (20B). Field names follow *engine*
 /// semantics; schema's "saturation" / "lightness" slider labels are
 /// swapped vs the read offsets.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ColorizeBlock {
-    /// Bit 0 = enable.
-    pub flags: u32,
+    /// `Enable` (bit 0).
+    pub flags: Flags<CameraFxEnableFlags, u32>,
     /// Lerp factor in `[0, 1]`. 0 = no colorize (preserve original
     /// H/S/L), 1 = pure target. Engine: `out = target*blend + in*(1-blend)`.
     pub blendfactor: f32,
@@ -386,10 +490,11 @@ pub struct ColorizeBlock {
 
 #[derive(Debug, Clone, Default)]
 pub struct ExposureBlock {
-    /// Bit 0: auto-adjust target. Bit 2: auto-adjust delay enabled.
-    /// Bit 4: fixed (use `exposure` value verbatim, no auto). Bit 5:
-    /// scripted.
-    pub flags: u16,
+    /// `camera_fx_parameter_flags_auto_adjust`: `UseDefault`,
+    /// `MaxChangeIsRelative`, `AutoAdjustTarget` (bit 2), and `Fixed`
+    /// (bit 4 — use `exposure` value verbatim, no auto; also reused by
+    /// `apply_engine_postprocess` as the "already baked" sentinel).
+    pub flags: Flags<CameraFxAutoAdjustFlags, u16>,
     /// Exposure stops (log₂ of luminance multiplier). 0 = neutral.
     /// `view_exposure = pow(2, exposure) × tone_curve_white_point × 0.66943`.
     pub exposure: f32,
@@ -406,9 +511,9 @@ pub struct ExposureBlock {
 }
 
 impl ExposureBlock {
-    /// `flags & 0x10` — fixed-exposure flag.
+    /// `Fixed` (bit 4) — fixed-exposure flag.
     pub fn is_fixed(&self) -> bool {
-        (self.flags & 0x10) != 0
+        self.flags.contains(CameraFxAutoAdjustFlags::Fixed)
     }
 
     /// Compute Halo's `view_exposure` for a given exposure_boost +
@@ -459,14 +564,15 @@ impl CameraFxSettings {
     /// Verified against `globals/default.camera_fx_settings` exportcommands
     /// dump (`AutoBrightness -4.836501 = log2(0.035)`).
     pub fn apply_engine_postprocess(&mut self) {
-        const INIT_BIT: u16 = 0x10;           // engine's "already postprocessed" sentinel
+        // Engine's `flags & 0x10 == 0` / `flags |= 0x10` (bit 4) — the
+        // `Fixed` bit is reused as the "already postprocessed" sentinel.
         const DEFAULT_BRIGHTNESS: f32 = 0.035; // baked default seen in default.cfxs
         const MIN_CLAMP: f32 = 1.0e-5;        // engine's fmaxf floor
 
         let e = &mut self.exposure;
-        if (e.flags & INIT_BIT) == 0 {
+        if !e.flags.contains(CameraFxAutoAdjustFlags::Fixed) {
             e.auto_exposure_screen_brightness = DEFAULT_BRIGHTNESS;
-            e.flags |= INIT_BIT;
+            e.flags.set(CameraFxAutoAdjustFlags::Fixed, true);
         }
         e.auto_exposure_screen_brightness = e.auto_exposure_screen_brightness.max(MIN_CLAMP);
         e.auto_exposure_screen_brightness = e.auto_exposure_screen_brightness.log2();
@@ -477,7 +583,7 @@ impl CameraFxSettings {
             .field("exposure")
             .and_then(|f| f.as_struct())
             .map(|sub| ExposureBlock {
-                flags: sub.read_int_any("flags").unwrap_or(0) as u16,
+                flags: sub.try_read_flags("flags").unwrap_or_default(),
                 exposure: sub.read_real("exposure").unwrap_or(0.0),
                 maximum_change: sub.read_real("maximum change").unwrap_or(0.0),
                 blend_speed: sub.read_real("blend speed (0-1)").unwrap_or(0.0),
@@ -499,7 +605,7 @@ impl CameraFxSettings {
             s.field(struct_name)
                 .and_then(|f| f.as_struct())
                 .map(|sub| ScalarParameter {
-                    flags: sub.read_int_any("flags").unwrap_or(0) as u16,
+                    flags: sub.try_read_flags("flags").unwrap_or_default(),
                     value: sub.read_real(value_field).unwrap_or(0.0),
                     max_change: sub.read_real("maximum change").unwrap_or(0.0),
                     blend_speed: sub.read_real("blend speed (0-1)").unwrap_or(0.0),
@@ -510,7 +616,7 @@ impl CameraFxSettings {
             s.field(struct_name)
                 .and_then(|f| f.as_struct())
                 .map(|sub| InstantScalarParameter {
-                    flags: sub.read_int_any("flags").unwrap_or(0) as u16,
+                    flags: sub.try_read_flags("flags").unwrap_or_default(),
                     value: sub.read_real(value_field).unwrap_or(0.0),
                 })
                 .unwrap_or_default()
@@ -519,7 +625,7 @@ impl CameraFxSettings {
             s.field(struct_name)
                 .and_then(|f| f.as_struct())
                 .map(|sub| ColorParameter {
-                    flags: sub.read_int_any("flags").unwrap_or(0) as u16,
+                    flags: sub.try_read_flags("flags").unwrap_or_default(),
                     color: sub.read_rgb(value_field),
                 })
                 .unwrap_or_default()
@@ -528,7 +634,7 @@ impl CameraFxSettings {
             s.field(struct_name)
                 .and_then(|f| f.as_struct())
                 .map(|sub| WordParameter {
-                    flags: sub.read_int_any("flags").unwrap_or(0) as u16,
+                    flags: sub.try_read_flags("flags").unwrap_or_default(),
                     value: sub.read_int_any(value_field).unwrap_or(0) as u16,
                 })
                 .unwrap_or_default()
@@ -536,13 +642,13 @@ impl CameraFxSettings {
 
         let color_grading = parse_color_grading(s);
         let ssao = s.field("ssao").and_then(|f| f.as_struct()).map(|sub| SsaoBlock {
-            flags: sub.read_int_any("flags").unwrap_or(0) as u32,
+            flags: sub.try_read_flags("flags").unwrap_or_default(),
             intensity: sub.read_real("intensity").unwrap_or(0.0),
             radius: sub.read_real("radius").unwrap_or(0.0),
             sample_z_threshold: sub.read_real("sample z threshold").unwrap_or(0.0),
         });
         let lightshafts = s.field("lightshafts").and_then(|f| f.as_struct()).map(|sub| LightshaftsBlock {
-            flags: sub.read_int_any("flags").unwrap_or(0) as u32,
+            flags: sub.try_read_flags("flags").unwrap_or_default(),
             pitch: sub.read_real("pitch").unwrap_or(0.0),
             heading: sub.read_real("heading").unwrap_or(0.0),
             tint: sub.read_rgb("tint"),
@@ -612,8 +718,8 @@ fn parse_color_grading(s: &TagStruct<'_>) -> Option<ColorGradingBlock> {
             mapping.field("data").and_then(|f| f.as_function())
         };
         CurvesEditorBlock {
-            flags: sub.read_int_any("flags").unwrap_or(0) as u32,
-            mode: sub.read_int_any("mode").unwrap_or(0) as u32,
+            flags: sub.try_read_flags("flags").unwrap_or_default(),
+            mode: sub.try_read_enum("mode").unwrap_or_default(),
             brightness: parse_curve("brightness curve"),
             red: parse_curve("red curve"),
             green: parse_curve("green curve"),
@@ -622,13 +728,13 @@ fn parse_color_grading(s: &TagStruct<'_>) -> Option<ColorGradingBlock> {
     });
 
     let brightness_contrast = block_first("Brightness, contrast").map(|sub| BrightnessContrast {
-        flags: sub.read_int_any("flags").unwrap_or(0) as u32,
+        flags: sub.try_read_flags("flags").unwrap_or_default(),
         brightness: sub.read_real("brightness").unwrap_or(0.0),
         contrast: sub.read_real("contrast").unwrap_or(0.0),
     });
 
     let hslv = block_first("Hue, saturation, lightness, vibrance").map(|sub| HslvBlock {
-        flags: sub.read_int_any("flags").unwrap_or(0) as u32,
+        flags: sub.try_read_flags("flags").unwrap_or_default(),
         hue_offset_deg: sub.read_real("hue").unwrap_or(0.0),
         saturation_offset: sub.read_real("saturation").unwrap_or(0.0),
         // Schema label "lightness" — engine reads as saturation
@@ -640,7 +746,7 @@ fn parse_color_grading(s: &TagStruct<'_>) -> Option<ColorGradingBlock> {
     });
 
     let colorize = block_first("Colorize effect").map(|sub| ColorizeBlock {
-        flags: sub.read_int_any("flags").unwrap_or(0) as u32,
+        flags: sub.try_read_flags("flags").unwrap_or_default(),
         blendfactor: sub.read_real("blendfactor").unwrap_or(0.0),
         target_hue_deg: sub.read_real("hue").unwrap_or(0.0),
         // Schema label "saturation" — engine reads as L-target bias
@@ -663,7 +769,7 @@ fn parse_color_grading(s: &TagStruct<'_>) -> Option<ColorGradingBlock> {
                 .unwrap_or_default()
         };
         SelectiveColorBlock {
-            flags: sub.read_int_any("flags").unwrap_or(0) as u32,
+            flags: sub.try_read_flags("flags").unwrap_or_default(),
             // Order MUST match `ProcessSelectiveColor`'s walk:
             // reds → yellows → greens → cyans → blues → magentas →
             // whites → neutrals → blacks.
@@ -693,7 +799,7 @@ fn parse_color_grading(s: &TagStruct<'_>) -> Option<ColorGradingBlock> {
                 .unwrap_or_default()
         };
         ColorBalanceBlock {
-            flags: sub.read_int_any("flags").unwrap_or(0) as u32,
+            flags: sub.try_read_flags("flags").unwrap_or_default(),
             shadows: read_cmy("shadows"),
             midtones: read_cmy("midtones"),
             highlights: read_cmy("highlights"),
@@ -701,7 +807,7 @@ fn parse_color_grading(s: &TagStruct<'_>) -> Option<ColorGradingBlock> {
     });
 
     Some(ColorGradingBlock {
-        flags: cg.read_int_any("flags").unwrap_or(0) as u32,
+        flags: cg.try_read_flags("flags").unwrap_or_default(),
         blend_time: cg.read_real("blend time").unwrap_or(0.0),
         curves_editor,
         brightness_contrast,
