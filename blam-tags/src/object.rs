@@ -39,6 +39,7 @@ use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::math::{RealEulerAngles3d, RealPoint3d, RealRgbColor};
 use crate::tag_function::TagFunction;
+use crate::typed_enums::{Enum, Flags};
 
 /// All 14 object subgroups that share the `object_struct_definition`.
 /// Any tag in this set has a valid `object` substruct (under the
@@ -95,22 +96,91 @@ impl std::fmt::Display for ObjectDefinitionError {
 impl std::error::Error for ObjectDefinitionError {}
 
 // ---------------------------------------------------------------------------
-// object_definition_flags (bit names from object_definition_flags enum)
+// object_definition_flags
 // ---------------------------------------------------------------------------
 
-/// `flags & 0x0001` — engine `object_definition_flags::does_not_cast_shadow`.
-/// Drives `render_object_has_lightmap_shadow @ 0x180696EE0`.
-pub const OBJ_FLAG_DOES_NOT_CAST_SHADOW: u16 = 1 << 0;
+/// `object_definition_flags` (word_flags). Bit 0 `DoesNotCastShadow`
+/// drives `render_object_has_lightmap_shadow @ 0x180696EE0`; bit 1
+/// `SearchCardinalDirectionLightmapsOnFailure` (engine
+/// `_object_searches_lightmaps_on_failure_bit`) selects the 9-ray
+/// sideways lightprobe branch in `lights_prepare_for_object_static_new`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum ObjectDefinitionFlags {
+    #[strum(serialize = "does not cast shadow")] DoesNotCastShadow = 0,
+    #[strum(serialize = "search cardinal direction lightmaps on failure")] SearchCardinalDirectionLightmapsOnFailure = 1,
+    #[strum(serialize = "preserves initial damage owner")] PreservesInitialDamageOwner = 2,
+    #[strum(serialize = "not a pathfinding obstacle")] NotAPathfindingObstacle = 3,
+    #[strum(serialize = "extension of parent")] ExtensionOfParent = 4,
+    #[strum(serialize = "does not cause collision damage")] DoesNotCauseCollisionDamage = 5,
+    #[strum(serialize = "early mover")] EarlyMover = 6,
+    #[strum(serialize = "early mover localized physics")] EarlyMoverLocalizedPhysics = 7,
+    #[strum(serialize = "object scales attachments")] ObjectScalesAttachments = 8,
+    #[strum(serialize = "non physical in map editor")] NonPhysicalInMapEditor = 9,
+    #[strum(serialize = "attach to clusters by dynamic sphere")] AttachToClustersByDynamicSphere = 10,
+    #[strum(serialize = "effects created by this object do not spawn objects in multiplayer")] EffectsDoNotSpawnObjectsInMultiplayer = 11,
+    #[strum(serialize = "does not collide with camera")] DoesNotCollideWithCamera = 12,
+    #[strum(serialize = "damage not blocked by obstructions")] DamageNotBlockedByObstructions = 13,
+}
 
-/// `flags & 0x0002` — engine `_object_searches_lightmaps_on_failure_bit`.
-/// When set, `lights_prepare_for_object_static_new @ 0x1808A2930:376`
-/// or's `flags |= 1` before calling `lights_distant_lighting_at_point_new
-/// @ 0x1808A3220`, which selects the 9-ray sideways direction-builder
-/// branch (`lightmap_sample_raycast_sideways`). When unset, the
-/// default 1-ray-with-offset branch fires instead. The flag is per-tag,
-/// not per-class — IDA's mistyped `v71->class_index` decompile reads
-/// the low byte of `_object_definition.flags` at +2.
-pub const OBJ_FLAG_SEARCHES_LIGHTMAPS_ON_FAILURE: u16 = 1 << 1;
+/// `object_definition_secondary_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum ObjectDefinitionSecondaryFlags {
+    #[strum(serialize = "does not affect projectile aiming")] DoesNotAffectProjectileAiming = 0,
+}
+
+/// `lightmap_shadow_mode_enum` (short_enum). Gate in
+/// `render_object_has_lightmap_shadow`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum LightmapShadowMode {
+    #[default]
+    #[strum(serialize = "default")] Default = 0,
+    #[strum(serialize = "never")] Never = 1,
+    #[strum(serialize = "always")] Always = 2,
+    #[strum(serialize = "blur")] Blur = 3,
+}
+
+/// `sweetener_size_enum` (char_enum) — sound-system field.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum SweetenerSize {
+    #[default]
+    #[strum(serialize = "default")] Default = 0,
+    #[strum(serialize = "small")] Small = 1,
+    #[strum(serialize = "medium")] Medium = 2,
+    #[strum(serialize = "large")] Large = 3,
+}
+
+/// `water_density_type_enum` (char_enum) — physics field.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum WaterDensityType {
+    #[default]
+    #[strum(serialize = "default")] Default = 0,
+    #[strum(serialize = "super_floater")] SuperFloater = 1,
+    #[strum(serialize = "floater")] Floater = 2,
+    #[strum(serialize = "neutral")] Neutral = 3,
+    #[strum(serialize = "sinker")] Sinker = 4,
+    #[strum(serialize = "super_sinker")] SuperSinker = 5,
+    #[strum(serialize = "none")] None = 6,
+}
 
 // ---------------------------------------------------------------------------
 // object_function_flags
@@ -522,9 +592,8 @@ where
 /// consumers come online.
 #[derive(Debug, Clone, Default)]
 pub struct ObjectDefinition {
-    /// `flags` (word_flags, `object_definition_flags`). Test against
-    /// `OBJ_FLAG_*` (e.g. `OBJ_FLAG_DOES_NOT_CAST_SHADOW`).
-    pub flags: u16,
+    /// `flags` (word_flags, `object_definition_flags`).
+    pub flags: Flags<ObjectDefinitionFlags, u16>,
     /// `bounding radius:world units` (real).
     pub bounding_radius: f32,
     /// `bounding offset` (real_point_3d).
@@ -532,16 +601,15 @@ pub struct ObjectDefinition {
     /// `acceleration scale` (real) — AI movement scale; not used by
     /// renderer but kept for completeness.
     pub acceleration_scale: f32,
-    /// `lightmap shadow mode` (short_enum). 0 = `default` (engine
-    /// type-matrix decides), 1 = `never`, 2 = `always`. Gate in
+    /// `lightmap shadow mode` (short_enum). Gate in
     /// `render_object_has_lightmap_shadow`.
-    pub lightmap_shadow_mode: i16,
+    pub lightmap_shadow_mode: Enum<LightmapShadowMode, i16>,
     /// `sweetener size` (char_enum) — sound-system field; not used
     /// by renderer.
-    pub sweetener_size: i8,
+    pub sweetener_size: Enum<SweetenerSize, i8>,
     /// `water density` (char_enum) — physics field; not used by
     /// renderer.
-    pub water_density: i8,
+    pub water_density: Enum<WaterDensityType, i8>,
     /// `dynamic light sphere radius` (real). Override sphere for
     /// dynamic-lights bookkeeping; only used when non-zero.
     pub dynamic_light_sphere_radius: f32,
@@ -574,7 +642,7 @@ pub struct ObjectDefinition {
     /// `hud text message index` (short_integer).
     pub hud_text_message_index: i16,
     /// `secondary flags` (word_flags, `object_definition_secondary_flags`).
-    pub secondary_flags: u16,
+    pub secondary_flags: Flags<ObjectDefinitionSecondaryFlags, u16>,
     /// `attachments` block (max 16).
     pub attachments: Vec<ObjectAttachment>,
     /// `widgets` block (max 4).
@@ -630,15 +698,13 @@ impl ObjectDefinition {
     /// to the right inheritance level). Useful when an outer tag
     /// reader has already walked there.
     pub fn from_object_struct(obj: &TagStruct<'_>) -> Self {
-        let flags = obj.read_int_any("flags").unwrap_or(0) as u16;
+        let flags = obj.try_read_flags("flags").unwrap_or_default();
         let bounding_radius = obj.read_real("bounding radius").unwrap_or(0.0);
         let bounding_offset = obj.read_point3d("bounding offset");
         let acceleration_scale = obj.read_real("acceleration scale").unwrap_or(0.0);
-        let lightmap_shadow_mode = obj
-            .read_int_any("lightmap shadow mode")
-            .unwrap_or(0) as i16;
-        let sweetener_size = obj.read_int_any("sweetener size").unwrap_or(0) as i8;
-        let water_density = obj.read_int_any("water density").unwrap_or(0) as i8;
+        let lightmap_shadow_mode = obj.try_read_enum("lightmap shadow mode").unwrap_or_default();
+        let sweetener_size = obj.try_read_enum("sweetener size").unwrap_or_default();
+        let water_density = obj.try_read_enum("water density").unwrap_or_default();
         let dynamic_light_sphere_radius = obj
             .read_real("dynamic light sphere radius")
             .unwrap_or(0.0);
@@ -658,7 +724,7 @@ impl ObjectDefinition {
         let hud_text_message_index = obj
             .read_int_any("hud text message index")
             .unwrap_or(0) as i16;
-        let secondary_flags = obj.read_int_any("secondary flags").unwrap_or(0) as u16;
+        let secondary_flags = obj.try_read_flags("secondary flags").unwrap_or_default();
         let attachments = read_block_vec(obj, "attachments", ObjectAttachment::from_struct);
         let widgets = read_block_vec(obj, "widgets", ObjectWidget::from_struct);
         let change_colors = read_block_vec(obj, "change colors", ObjectChangeColors::from_struct);
@@ -728,10 +794,10 @@ impl ObjectDefinition {
     /// See `protomorph/src/halo/loader.rs::read_casts_shadow_flag`
     /// for the prior in-place implementation.
     pub fn casts_shadow_runtime(&self) -> bool {
-        if self.flags & OBJ_FLAG_DOES_NOT_CAST_SHADOW != 0 {
+        if self.flags.contains(ObjectDefinitionFlags::DoesNotCastShadow) {
             return false;
         }
-        if self.lightmap_shadow_mode == 1 {
+        if self.lightmap_shadow_mode.get() == LightmapShadowMode::Never {
             return false;
         }
         true
