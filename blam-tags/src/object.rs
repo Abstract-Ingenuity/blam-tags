@@ -210,6 +210,192 @@ pub enum ObjectFunctionFlags {
 }
 
 // ---------------------------------------------------------------------------
+// AI properties / attachment / change-color / multiplayer enums
+// ---------------------------------------------------------------------------
+
+/// `ai_properties_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum AiPropertiesFlags {
+    #[strum(serialize = "detroyable cover")] DetroyableCover = 0,
+    #[strum(serialize = "pathfinding ignore when dead")] PathfindingIgnoreWhenDead = 1,
+    #[strum(serialize = "dynamic cover")] DynamicCover = 2,
+    #[strum(serialize = "non flight-blocking")] NonFlightBlocking = 3,
+    #[strum(serialize = "dynamic cover from centre")] DynamicCoverFromCentre = 4,
+    #[strum(serialize = "has corner markers")] HasCornerMarkers = 5,
+}
+
+/// `ai_size_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum AiSize {
+    #[default]
+    #[strum(serialize = "default")] Default = 0,
+    #[strum(serialize = "tiny")] Tiny = 1,
+    #[strum(serialize = "small")] Small = 2,
+    #[strum(serialize = "medium")] Medium = 3,
+    #[strum(serialize = "large")] Large = 4,
+    #[strum(serialize = "huge")] Huge = 5,
+    #[strum(serialize = "immobile")] Immobile = 6,
+}
+
+/// `global_ai_jump_height_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum GlobalAiJumpHeight {
+    #[default]
+    #[strum(serialize = "NONE")] None = 0,
+    #[strum(serialize = "down")] Down = 1,
+    #[strum(serialize = "step")] Step = 2,
+    #[strum(serialize = "crouch")] Crouch = 3,
+    #[strum(serialize = "stand")] Stand = 4,
+    #[strum(serialize = "storey")] Storey = 5,
+    #[strum(serialize = "tower")] Tower = 6,
+    #[strum(serialize = "infinite")] Infinite = 7,
+}
+
+/// `global_object_change_color_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum GlobalObjectChangeColor {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "primary")] Primary = 1,
+    #[strum(serialize = "secondary")] Secondary = 2,
+    #[strum(serialize = "tertiary")] Tertiary = 3,
+    #[strum(serialize = "quaternary")] Quaternary = 4,
+}
+
+/// `global_rgb_interpolation_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum GlobalRgbInterpolationFlags {
+    #[strum(serialize = "blend in hsv")] BlendInHsv = 0,
+    #[strum(serialize = "...more colors")] MoreColors = 1,
+}
+
+/// `global_game_engine_type_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum GlobalGameEngineTypeFlags {
+    #[strum(serialize = "ctf")] Ctf = 0,
+    #[strum(serialize = "slayer")] Slayer = 1,
+    #[strum(serialize = "oddball")] Oddball = 2,
+    #[strum(serialize = "king")] King = 3,
+    #[strum(serialize = "juggernaut")] Juggernaut = 4,
+    #[strum(serialize = "territories")] Territories = 5,
+    #[strum(serialize = "assault")] Assault = 6,
+    #[strum(serialize = "vip")] Vip = 7,
+    #[strum(serialize = "infection")] Infection = 8,
+    #[strum(serialize = "target training")] TargetTraining = 9,
+}
+
+/// `multiplayer_object_type` (char_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum MultiplayerObjectType {
+    #[default]
+    #[strum(serialize = "ordinary")] Ordinary = 0,
+    #[strum(serialize = "weapon")] Weapon = 1,
+    #[strum(serialize = "grenade")] Grenade = 2,
+    #[strum(serialize = "projectile")] Projectile = 3,
+    #[strum(serialize = "powerup")] Powerup = 4,
+    #[strum(serialize = "equipment")] Equipment = 5,
+    #[strum(serialize = "light land vehicle")] LightLandVehicle = 6,
+    #[strum(serialize = "heavy land vehicle")] HeavyLandVehicle = 7,
+    #[strum(serialize = "flying vehicle")] FlyingVehicle = 8,
+    #[strum(serialize = "teleporter 2way")] Teleporter2Way = 9,
+    #[strum(serialize = "teleporter sender")] TeleporterSender = 10,
+    #[strum(serialize = "teleporter receiver")] TeleporterReceiver = 11,
+    #[strum(serialize = "player spawn location")] PlayerSpawnLocation = 12,
+    #[strum(serialize = "player respawn zone")] PlayerRespawnZone = 13,
+    #[strum(serialize = "oddball spawn location")] OddballSpawnLocation = 14,
+    #[strum(serialize = "ctf flag spawn location")] CtfFlagSpawnLocation = 15,
+    #[strum(serialize = "target spawn location")] TargetSpawnLocation = 16,
+    #[strum(serialize = "ctf flag return area")] CtfFlagReturnArea = 17,
+    #[strum(serialize = "koth hill area")] KothHillArea = 18,
+    #[strum(serialize = "infection safe area")] InfectionSafeArea = 19,
+    #[strum(serialize = "territory area")] TerritoryArea = 20,
+    #[strum(serialize = "vip influence area")] VipInfluenceArea = 21,
+    #[strum(serialize = "vip destination zone")] VipDestinationZone = 22,
+    #[strum(serialize = "juggernaut destination zone")] JuggernautDestinationZone = 23,
+}
+
+/// `teleporter_passability_flags` (byte_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u8)]
+pub enum TeleporterPassabilityFlags {
+    #[strum(serialize = "disallow players")] DisallowPlayers = 0,
+    #[strum(serialize = "allow light land vehicles")] AllowLightLandVehicles = 1,
+    #[strum(serialize = "allow heavy land vehicles")] AllowHeavyLandVehicles = 2,
+    #[strum(serialize = "allow flying vehicles")] AllowFlyingVehicles = 3,
+    #[strum(serialize = "allow projectiles")] AllowProjectiles = 4,
+}
+
+/// `multiplayer_object_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum MultiplayerObjectFlags {
+    #[strum(serialize = "only visible in editor")] OnlyVisibleInEditor = 0,
+    #[strum(serialize = "valid initial player spawn")] ValidInitialPlayerSpawn = 1,
+    #[strum(serialize = "fixed boundary orientation")] FixedBoundaryOrientation = 2,
+    #[strum(serialize = "candy monitor should ignore")] CandyMonitorShouldIgnore = 3,
+}
+
+/// `multiplayer_object_boundary_shape` (char_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum MultiplayerObjectBoundaryShape {
+    #[default]
+    #[strum(serialize = "unused")] Unused = 0,
+    #[strum(serialize = "sphere")] Sphere = 1,
+    #[strum(serialize = "cylinder")] Cylinder = 2,
+    #[strum(serialize = "box")] Box = 3,
+}
+
+/// `multiplayer_object_spawn_timer_types` (char_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum MultiplayerObjectSpawnTimerTypes {
+    #[default]
+    #[strum(serialize = "starts on death")] StartsOnDeath = 0,
+    #[strum(serialize = "starts on disturbance")] StartsOnDisturbance = 1,
+}
+
+// ---------------------------------------------------------------------------
 // ObjectFunctionDefinition
 // ---------------------------------------------------------------------------
 
@@ -312,22 +498,22 @@ impl ObjectEarlyMoverObb {
 #[derive(Debug, Clone, Default)]
 pub struct ObjectAiProperties {
     /// `ai flags` (long_flags, `ai_properties_flags`).
-    pub ai_flags: u32,
+    pub ai_flags: Flags<AiPropertiesFlags, u32>,
     /// `ai type name` (string_id) — combat dialogue category.
     pub ai_type_name: String,
     /// `ai size` (short_enum, `ai_size_enum`).
-    pub ai_size: i16,
+    pub ai_size: Enum<AiSize, i16>,
     /// `leap jump speed` (short_enum, `global_ai_jump_height_enum`).
-    pub leap_jump_speed: i16,
+    pub leap_jump_speed: Enum<GlobalAiJumpHeight, i16>,
 }
 
 impl ObjectAiProperties {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            ai_flags: s.read_int_any("ai flags").unwrap_or(0) as u32,
+            ai_flags: s.try_read_flags("ai flags").unwrap_or_default(),
             ai_type_name: s.read_string_id("ai type name").unwrap_or_default(),
-            ai_size: s.read_int_any("ai size").unwrap_or(0) as i16,
-            leap_jump_speed: s.read_int_any("leap jump speed").unwrap_or(0) as i16,
+            ai_size: s.try_read_enum("ai size").unwrap_or_default(),
+            leap_jump_speed: s.try_read_enum("leap jump speed").unwrap_or_default(),
         }
     }
 }
@@ -348,7 +534,7 @@ pub struct ObjectAttachment {
     /// `marker` (old_string_id) — the node/marker the attachment binds to.
     pub marker: String,
     /// `change color` (short_enum, `global_object_change_color_enum`).
-    pub change_color: i16,
+    pub change_color: Enum<GlobalObjectChangeColor, i16>,
     /// `primary scale` (string_id).
     pub primary_scale: String,
     /// `secondary scale` (string_id).
@@ -364,7 +550,7 @@ impl ObjectAttachment {
             type_ref,
             type_group: type_group_u32.to_be_bytes(),
             marker: s.read_string_id("marker").unwrap_or_default(),
-            change_color: s.read_int_any("change color").unwrap_or(0) as i16,
+            change_color: s.try_read_enum("change color").unwrap_or_default(),
             primary_scale: s.read_string_id("primary scale").unwrap_or_default(),
             secondary_scale: s.read_string_id("secondary scale").unwrap_or_default(),
         }
@@ -414,7 +600,7 @@ impl ObjectChangeColorInitialPermutation {
 #[derive(Debug, Clone, Default)]
 pub struct ObjectChangeColorFunction {
     /// `scale flags` (long_flags).
-    pub scale_flags: u32,
+    pub scale_flags: Flags<GlobalRgbInterpolationFlags, u32>,
     pub color_lower_bound: RealRgbColor,
     pub color_upper_bound: RealRgbColor,
     pub darken_by: String,
@@ -424,7 +610,7 @@ pub struct ObjectChangeColorFunction {
 impl ObjectChangeColorFunction {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            scale_flags: s.read_int_any("scale flags").unwrap_or(0) as u32,
+            scale_flags: s.try_read_flags("scale flags").unwrap_or_default(),
             color_lower_bound: s.read_rgb("color lower bound"),
             color_upper_bound: s.read_rgb("color upper bound"),
             darken_by: s.read_string_id("darken by").unwrap_or_default(),
@@ -459,17 +645,17 @@ impl ObjectChangeColors {
 #[derive(Debug, Clone, Default)]
 pub struct MultiplayerObject {
     /// `game engine flags` (word_flags) — which gametypes include this.
-    pub game_engine_flags: u16,
+    pub game_engine_flags: Flags<GlobalGameEngineTypeFlags, u16>,
     /// `type` (char_enum) — MP object type (weapon/grenade/spawn/etc.).
-    pub mp_type: i8,
+    pub mp_type: Enum<MultiplayerObjectType, i8>,
     /// `teleporter passability` (byte_flags) — teleporter-only.
-    pub teleporter_passability: u8,
+    pub teleporter_passability: Flags<TeleporterPassabilityFlags, u8>,
     /// `flags` (word_flags) — MP-specific.
-    pub flags: u16,
+    pub flags: Flags<MultiplayerObjectFlags, u16>,
     /// `boundary shape` (char_enum).
-    pub boundary_shape: i8,
+    pub boundary_shape: Enum<MultiplayerObjectBoundaryShape, i8>,
     /// `spawn timer type` (char_enum).
-    pub spawn_timer_type: i8,
+    pub spawn_timer_type: Enum<MultiplayerObjectSpawnTimerTypes, i8>,
     pub default_spawn_time: i16,
     pub default_abandonment_time: i16,
     pub boundary_width_or_radius: f32,
@@ -496,12 +682,12 @@ pub struct MultiplayerObject {
 impl MultiplayerObject {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            game_engine_flags: s.read_int_any("game engine flags").unwrap_or(0) as u16,
-            mp_type: s.read_int_any("type").unwrap_or(0) as i8,
-            teleporter_passability: s.read_int_any("teleporter passability").unwrap_or(0) as u8,
-            flags: s.read_int_any("flags").unwrap_or(0) as u16,
-            boundary_shape: s.read_int_any("boundary shape").unwrap_or(0) as i8,
-            spawn_timer_type: s.read_int_any("spawn timer type").unwrap_or(0) as i8,
+            game_engine_flags: s.try_read_flags("game engine flags").unwrap_or_default(),
+            mp_type: s.try_read_enum("type").unwrap_or_default(),
+            teleporter_passability: s.try_read_flags("teleporter passability").unwrap_or_default(),
+            flags: s.try_read_flags("flags").unwrap_or_default(),
+            boundary_shape: s.try_read_enum("boundary shape").unwrap_or_default(),
+            spawn_timer_type: s.try_read_enum("spawn timer type").unwrap_or_default(),
             default_spawn_time: s.read_int_any("default spawn time").unwrap_or(0) as i16,
             default_abandonment_time: s.read_int_any("default abandonment time").unwrap_or(0) as i16,
             boundary_width_or_radius: s.read_real("boundary width/radius").unwrap_or(0.0),
