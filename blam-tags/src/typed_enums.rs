@@ -187,10 +187,11 @@ impl<T: SchemaEnum, U: TagInt> Enum<T, U> {
     pub fn get(self) -> T {
         self.variant
     }
-    /// The raw storage value as authored in the tag.
+    /// Set the variant (e.g. for synthesized / overridden values).
     #[inline]
-    pub fn raw(self) -> U {
-        self.raw
+    pub fn set(&mut self, variant: T) {
+        self.variant = variant;
+        self.raw = U::from_i128(variant.to_index() as i128);
     }
     /// The canonical schema name of the resolved variant.
     #[inline]
@@ -206,12 +207,19 @@ impl<T: SchemaEnum, U: TagInt> Enum<T, U> {
         }
     }
 
+    /// The raw storage value as authored in the tag. `pub(crate)` —
+    /// callers operate on the typed variant, not the integer.
+    #[inline]
+    pub(crate) fn raw(self) -> U {
+        self.raw
+    }
+
     /// Resolve a raw value + its embedded name into a typed `Enum`.
     /// `name` is the embedded schema option name (`None` if the decoder
     /// couldn't resolve it). Panics on an unresolved value — a tag whose
     /// enum value has no embedded name, or a name with no matching `T`
     /// variant, is a real decode error we want surfaced, not buried.
-    pub fn resolve(field: &str, raw: U, name: Option<&str>) -> Self {
+    pub(crate) fn resolve(field: &str, raw: U, name: Option<&str>) -> Self {
         let variant = match name {
             Some(n) => T::from_schema_name(n).unwrap_or_else(|| {
                 panic!(
@@ -277,35 +285,64 @@ pub struct Flags<T, U> {
 }
 
 impl<T: SchemaEnum + PartialEq, U: TagInt> Flags<T, U> {
-    /// Is `flag`'s bit set?
+    /// The set flags, in canonical order.
+    pub fn get(&self) -> Vec<T> {
+        self.set.clone()
+    }
+    /// Is `flag` set?
     #[inline]
     pub fn contains(&self, flag: T) -> bool {
         self.set.iter().any(|f| *f == flag)
     }
-    /// Iterate the set variants (canonical order).
+    /// Are ALL of `flags` set?
+    pub fn test(&self, flags: &[T]) -> bool {
+        flags.iter().all(|f| self.contains(*f))
+    }
+    /// Are ANY of `flags` set?
+    pub fn test_any(&self, flags: &[T]) -> bool {
+        flags.iter().any(|f| self.contains(*f))
+    }
+    /// Set or clear a flag.
+    pub fn set(&mut self, flag: T, on: bool) {
+        let present = self.contains(flag);
+        if on && !present {
+            self.set.push(flag);
+            self.set.sort_by_key(|f| f.to_index());
+        } else if !on && present {
+            self.set.retain(|f| *f != flag);
+        }
+    }
+    /// Build directly from a set of flags (synthesized values).
+    pub fn from_slice(flags: &[T]) -> Self {
+        let mut f = Self::default();
+        for &flag in flags {
+            f.set(flag, true);
+        }
+        f.raw = U::from_i128(f.canonical_bits() as i128);
+        f
+    }
+    /// Iterate the set flags (canonical order).
     pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
         self.set.iter().copied()
     }
-    /// The set variants as a slice.
-    pub fn as_slice(&self) -> &[T] {
-        &self.set
-    }
-    /// Schema names of the set bits.
+    /// Schema names of the set flags.
     pub fn names(&self) -> Vec<&'static str> {
         self.set.iter().map(|f| f.schema_name()).collect()
     }
-    /// No bits set.
+    /// No flags set.
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
     }
-    /// The raw authored value.
+
+    /// The raw authored value. `pub(crate)` — callers operate on the
+    /// typed flag set, not the integer.
     #[inline]
-    pub fn raw(&self) -> U {
+    pub(crate) fn raw(&self) -> U {
         self.raw
     }
-    /// Canonical bit pattern (bits at `T` discriminants). May differ
-    /// from `raw()` when the authoring schema used a different bit order.
-    pub fn canonical_bits(&self) -> u64 {
+    /// Canonical bit pattern (bits at `T` discriminants). `pub(crate)` —
+    /// internal/serialization use only.
+    pub(crate) fn canonical_bits(&self) -> u64 {
         self.set.iter().fold(0u64, |acc, f| acc | (1u64 << f.to_index()))
     }
 
@@ -315,7 +352,7 @@ impl<T: SchemaEnum + PartialEq, U: TagInt> Flags<T, U> {
     /// map to a `T` variant. A set bit with NO embedded name (past the
     /// schema's string list) is preserved in `raw` but cannot be typed —
     /// that is tolerated (runtime/over-range bits), unlike enums.
-    pub fn resolve(field: &str, raw: U, names: &[(u32, String)]) -> Self {
+    pub(crate) fn resolve(field: &str, raw: U, names: &[(u32, String)]) -> Self {
         let set = names
             .iter()
             .map(|(bit, n)| {
@@ -427,14 +464,33 @@ mod tests {
         // embedded order: say the tag put "additive" at bit 5, "double-sided" at bit 0.
         let names = vec![(0u32, "double-sided".to_string()), (5u32, "additive".to_string())];
         let f: Flags<ContentFlags, u16> = Flags::resolve("flags", 0b100001, &names);
+        // typed queries — no raw integer in sight
+        assert_eq!(f.get(), vec![ContentFlags::DoubleSided, ContentFlags::Additive]);
         assert!(f.contains(ContentFlags::DoubleSided));
-        assert!(f.contains(ContentFlags::Additive));
-        assert!(!f.contains(ContentFlags::Subtractive));
+        assert!(f.test(&[ContentFlags::DoubleSided, ContentFlags::Additive]));
+        assert!(!f.test(&[ContentFlags::DoubleSided, ContentFlags::Subtractive]));
+        assert!(f.test_any(&[ContentFlags::Subtractive, ContentFlags::Additive]));
+        assert!(!f.test_any(&[ContentFlags::Subtractive]));
+        assert_eq!(f.names(), vec!["double-sided", "additive"]);
         // canonical re-pack uses T discriminants (0 and 1), NOT the embedded bit 5.
         assert_eq!(f.canonical_bits(), 0b11);
-        // raw preserves the authored bit pattern.
-        assert_eq!(f.raw(), 0b100001u16);
-        assert_eq!(f.names(), vec!["double-sided", "additive"]);
+        assert_eq!(f.raw(), 0b100001u16); // raw preserves the authored pattern
+    }
+
+    #[test]
+    fn flags_and_enum_mutation() {
+        let mut f: Flags<ContentFlags, u16> = Flags::from_slice(&[ContentFlags::Additive]);
+        assert!(f.contains(ContentFlags::Additive));
+        f.set(ContentFlags::Subtractive, true);
+        f.set(ContentFlags::Additive, false);
+        assert_eq!(f.get(), vec![ContentFlags::Subtractive]);
+        assert_eq!(f.canonical_bits(), 0b100);
+
+        let mut e: Enum<BeamProfileShape, i8> = Enum::from_variant(BeamProfileShape::Cross);
+        assert_eq!(e.get(), BeamProfileShape::Cross);
+        e.set(BeamProfileShape::NGon);
+        assert_eq!(e.get(), BeamProfileShape::NGon);
+        assert_eq!(e.name(), "n-gon");
     }
 
     #[test]
