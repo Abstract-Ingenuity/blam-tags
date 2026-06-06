@@ -8,9 +8,27 @@ use crate::biped::BipedPhysics;
 use crate::file::TagFile;
 use crate::math::Bounds;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::{Enum, Flags};
+use crate::unit::{GlobalChudBlipType, UnitDefaultTeam};
 use std::sync::Arc;
 
 const CREATURE_GROUP: [u8; 4] = *b"crea";
+
+/// `creature_definition_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum CreatureDefinitionFlags {
+    #[strum(serialize = "unused")] Unused = 0,
+    #[strum(serialize = "infection form")] InfectionForm = 1,
+    #[strum(serialize = "immune to falling damage")] ImmuneToFallingDamage = 2,
+    #[strum(serialize = "rotate while airborne")] RotateWhileAirborne = 3,
+    #[strum(serialize = "zapped by shields")] ZappedByShields = 4,
+    #[strum(serialize = "attach upon impact")] AttachUponImpact = 5,
+    #[strum(serialize = "not on motion sensor")] NotOnMotionSensor = 6,
+}
 
 #[derive(Debug)]
 pub enum CreatureError {
@@ -46,9 +64,9 @@ impl From<crate::object::ObjectDefinitionError> for CreatureError {
 #[derive(Debug, Clone, Default)]
 pub struct CreatureDefinition {
     pub object: Arc<ObjectDefinition>,
-    pub flags: u32,
-    pub default_team: i16,
-    pub motion_sensor_blip_size: i16,
+    pub flags: Flags<CreatureDefinitionFlags, u32>,
+    pub default_team: Enum<UnitDefaultTeam, i16>,
+    pub motion_sensor_blip_size: Enum<GlobalChudBlipType, i16>,
     /// `turning velocity maximum:degrees per second` (radians on disk).
     pub turning_velocity_maximum: f32,
     /// `turning acceleration maximum:degrees per second squared`.
@@ -88,11 +106,9 @@ impl CreatureDefinition {
             .unwrap_or_default();
         Ok(Self {
             object,
-            flags: root.read_int_any("flags").unwrap_or(0) as u32,
-            default_team: root.read_int_any("default team").unwrap_or(0) as i16,
-            motion_sensor_blip_size: root
-                .read_int_any("motion sensor blip size")
-                .unwrap_or(0) as i16,
+            flags: root.try_read_flags("flags").unwrap_or_default(),
+            default_team: root.read_enum("default team"),
+            motion_sensor_blip_size: root.read_enum("motion sensor blip size"),
             turning_velocity_maximum: root.read_real("turning velocity maximum").unwrap_or(0.0),
             turning_acceleration_maximum: root
                 .read_real("turning acceleration maximum")

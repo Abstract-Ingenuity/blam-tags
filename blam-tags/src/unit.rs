@@ -11,7 +11,258 @@
 use crate::api::TagStruct;
 use crate::math::{AngleBounds, Bounds, RealVector3d};
 use crate::object::ObjectDefinition;
+use crate::typed_enums::{Enum, Flags};
 use std::sync::Arc;
+
+// ---------------------------------------------------------------------------
+// Typed enums / flags (schema-name-resolved). Several are shared with
+// `creature` (a unit subtype) and imported there.
+// ---------------------------------------------------------------------------
+
+/// `unit_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum UnitFlags {
+    #[strum(serialize = "circular aiming")] CircularAiming = 0,
+    #[strum(serialize = "destroyed after dying")] DestroyedAfterDying = 1,
+    #[strum(serialize = "fires from camera")] FiresFromCamera = 2,
+    #[strum(serialize = "doesn't show readied weapon")] DoesntShowReadiedWeapon = 3,
+    #[strum(serialize = "causes passenger dialogue")] CausesPassengerDialogue = 4,
+    #[strum(serialize = "resists pings")] ResistsPings = 5,
+    #[strum(serialize = "melee attack is fatal")] MeleeAttackIsFatal = 6,
+    #[strum(serialize = "don't reface during pings")] DontRefaceDuringPings = 7,
+    #[strum(serialize = "has no aiming")] HasNoAiming = 8,
+    #[strum(serialize = "simple creature")] SimpleCreature = 9,
+    #[strum(serialize = "cannot open doors automatically")] CannotOpenDoorsAutomatically = 10,
+    #[strum(serialize = "not instantly killed by melee")] NotInstantlyKilledByMelee = 11,
+    #[strum(serialize = "flashlight power doesnt transfer to weapon")] FlashlightPowerDoesntTransferToWeapon = 12,
+    #[strum(serialize = "top level for AOE damage")] TopLevelForAoeDamage = 13,
+    #[strum(serialize = "special cinematic unit")] SpecialCinematicUnit = 14,
+    #[strum(serialize = "ignored by autoaiming")] IgnoredByAutoaiming = 15,
+    #[strum(serialize = "use velocity as acceleration")] UseVelocityAsAcceleration = 16,
+    #[strum(serialize = "acts as gunner for parent")] ActsAsGunnerForParent = 17,
+    #[strum(serialize = "controlled by parent gunner")] ControlledByParentGunner = 18,
+    #[strum(serialize = "parent's primary weapon")] ParentsPrimaryWeapon = 19,
+    #[strum(serialize = "unit has boost")] UnitHasBoost = 20,
+    #[strum(serialize = "allow aim while opening or closing")] AllowAimWhileOpeningOrClosing = 21,
+}
+
+/// `unit_default_teams`. Shared with `creature`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum UnitDefaultTeam {
+    #[default]
+    #[strum(serialize = "default")] Default = 0,
+    #[strum(serialize = "player")] Player = 1,
+    #[strum(serialize = "human")] Human = 2,
+    #[strum(serialize = "covenant")] Covenant = 3,
+    #[strum(serialize = "flood")] Flood = 4,
+    #[strum(serialize = "sentinel")] Sentinel = 5,
+    #[strum(serialize = "heretic")] Heretic = 6,
+    #[strum(serialize = "prophet")] Prophet = 7,
+    #[strum(serialize = "guilty")] Guilty = 8,
+    #[strum(serialize = "unused9")] Unused9 = 9,
+    #[strum(serialize = "unused10")] Unused10 = 10,
+    #[strum(serialize = "unused11")] Unused11 = 11,
+    #[strum(serialize = "unused12")] Unused12 = 12,
+    #[strum(serialize = "unused13")] Unused13 = 13,
+    #[strum(serialize = "unused14")] Unused14 = 14,
+    #[strum(serialize = "unused15")] Unused15 = 15,
+}
+
+/// `ai_sound_volume_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum AiSoundVolume {
+    #[default]
+    #[strum(serialize = "silent")] Silent = 0,
+    #[strum(serialize = "medium")] Medium = 1,
+    #[strum(serialize = "loud")] Loud = 2,
+    #[strum(serialize = "shout")] Shout = 3,
+    #[strum(serialize = "quiet")] Quiet = 4,
+}
+
+/// `global_chud_blip_type_definition`. Shared with `creature`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum GlobalChudBlipType {
+    #[default]
+    #[strum(serialize = "medium")] Medium = 0,
+    #[strum(serialize = "small")] Small = 1,
+    #[strum(serialize = "large")] Large = 2,
+}
+
+/// `unit_item_owner_size_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum UnitItemOwnerSize {
+    #[default]
+    #[strum(serialize = "small")] Small = 0,
+    #[strum(serialize = "medium")] Medium = 1,
+    #[strum(serialize = "player")] Player = 2,
+    #[strum(serialize = "large")] Large = 3,
+}
+
+/// `global_grenade_type_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum GlobalGrenadeType {
+    #[default]
+    #[strum(serialize = "human fragmentation")] HumanFragmentation = 0,
+    #[strum(serialize = "covenant plasma")] CovenantPlasma = 1,
+    #[strum(serialize = "brute claymore")] BruteClaymore = 2,
+    #[strum(serialize = "firebomb")] Firebomb = 3,
+}
+
+/// `unit_camera_flags_definition` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum UnitCameraFlags {
+    #[strum(serialize = "pitch bounds absolute space")] PitchBoundsAbsoluteSpace = 0,
+}
+
+/// `unit_seat_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum UnitSeatFlags {
+    #[strum(serialize = "invisible")] Invisible = 0,
+    #[strum(serialize = "locked")] Locked = 1,
+    #[strum(serialize = "driver")] Driver = 2,
+    #[strum(serialize = "gunner")] Gunner = 3,
+    #[strum(serialize = "third person camera")] ThirdPersonCamera = 4,
+    #[strum(serialize = "allows weapons")] AllowsWeapons = 5,
+    #[strum(serialize = "third person on enter")] ThirdPersonOnEnter = 6,
+    #[strum(serialize = "first person camera slaved to gun.")] FirstPersonCameraSlavedToGun = 7,
+    #[strum(serialize = "allow vehicle communication animations")] AllowVehicleCommunicationAnimations = 8,
+    #[strum(serialize = "not valid without driver")] NotValidWithoutDriver = 9,
+    #[strum(serialize = "allow AI noncombatants")] AllowAiNoncombatants = 10,
+    #[strum(serialize = "boarding seat")] BoardingSeat = 11,
+    #[strum(serialize = "ai firing disabled by max acceleration")] AiFiringDisabledByMaxAcceleration = 12,
+    #[strum(serialize = "boarding enters seat")] BoardingEntersSeat = 13,
+    #[strum(serialize = "boarding need any passenger")] BoardingNeedAnyPassenger = 14,
+    #[strum(serialize = "controls open and close")] ControlsOpenAndClose = 15,
+    #[strum(serialize = "invalid for player")] InvalidForPlayer = 16,
+    #[strum(serialize = "invalid for non-player")] InvalidForNonPlayer = 17,
+    #[strum(serialize = "gunner (player only)")] GunnerPlayerOnly = 18,
+    #[strum(serialize = "invisible under major damage")] InvisibleUnderMajorDamage = 19,
+    #[strum(serialize = "melee instant killable")] MeleeInstantKillable = 20,
+    #[strum(serialize = "leader preference")] LeaderPreference = 21,
+    #[strum(serialize = "allows exit and detach")] AllowsExitAndDetach = 22,
+    #[strum(serialize = "blocks headshots")] BlocksHeadshots = 23,
+    #[strum(serialize = "exits to ground")] ExitsToGround = 24,
+    #[strum(serialize = "closes early, opens late")] ClosesEarlyOpensLate = 25,
+    #[strum(serialize = "forward from attachment")] ForwardFromAttachment = 26,
+    #[strum(serialize = "disallow AI shooting")] DisallowAiShooting = 27,
+    #[strum(serialize = "closes early, opens early")] ClosesEarlyOpensEarly = 28,
+    #[strum(serialize = "closes late, opens late")] ClosesLateOpensLate = 29,
+    #[strum(serialize = "prevents weapon stowing")] PreventsWeaponStowing = 30,
+}
+
+/// `global_ai_seat_type_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum GlobalAiSeatType {
+    #[default]
+    #[strum(serialize = "NONE")] None = 0,
+    #[strum(serialize = "passenger")] Passenger = 1,
+    #[strum(serialize = "gunner")] Gunner = 2,
+    #[strum(serialize = "small cargo")] SmallCargo = 3,
+    #[strum(serialize = "large cargo")] LargeCargo = 4,
+    #[strum(serialize = "driver")] Driver = 5,
+}
+
+/// `campaign_metagame_bucket_flags`. Shared with `creature`/`crate`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u8)]
+pub enum CampaignMetagameBucketFlags {
+    #[strum(serialize = "only counts with riders")] OnlyCountsWithRiders = 0,
+}
+
+/// `campaign_metagame_bucket_type_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum CampaignMetagameBucketType {
+    #[default]
+    #[strum(serialize = "brute")] Brute = 0,
+    #[strum(serialize = "grunt")] Grunt = 1,
+    #[strum(serialize = "jackel")] Jackel = 2,
+    #[strum(serialize = "marine")] Marine = 3,
+    #[strum(serialize = "bugger")] Bugger = 4,
+    #[strum(serialize = "hunter")] Hunter = 5,
+    #[strum(serialize = "flood_infection")] FloodInfection = 6,
+    #[strum(serialize = "flood_carrier")] FloodCarrier = 7,
+    #[strum(serialize = "flood_combat")] FloodCombat = 8,
+    #[strum(serialize = "flood_pure")] FloodPure = 9,
+    #[strum(serialize = "sentinel")] Sentinel = 10,
+    #[strum(serialize = "elite")] Elite = 11,
+    #[strum(serialize = "turret")] Turret = 12,
+    #[strum(serialize = "mongoose")] Mongoose = 13,
+    #[strum(serialize = "warthog")] Warthog = 14,
+    #[strum(serialize = "scorpion")] Scorpion = 15,
+    #[strum(serialize = "hornet")] Hornet = 16,
+    #[strum(serialize = "pelican")] Pelican = 17,
+    #[strum(serialize = "shade")] Shade = 18,
+    #[strum(serialize = "watchtower")] Watchtower = 19,
+    #[strum(serialize = "ghost")] Ghost = 20,
+    #[strum(serialize = "chopper")] Chopper = 21,
+    #[strum(serialize = "mauler")] Mauler = 22,
+    #[strum(serialize = "wraith")] Wraith = 23,
+    #[strum(serialize = "banshee")] Banshee = 24,
+    #[strum(serialize = "phantom")] Phantom = 25,
+    #[strum(serialize = "scarab")] Scarab = 26,
+    #[strum(serialize = "guntower")] Guntower = 27,
+}
+
+/// `campaign_metagame_bucket_class_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum CampaignMetagameBucketClass {
+    #[default]
+    #[strum(serialize = "infantry")] Infantry = 0,
+    #[strum(serialize = "leader")] Leader = 1,
+    #[strum(serialize = "hero")] Hero = 2,
+    #[strum(serialize = "specialist")] Specialist = 3,
+    #[strum(serialize = "light vehicle")] LightVehicle = 4,
+    #[strum(serialize = "heavy vehicle")] HeavyVehicle = 5,
+    #[strum(serialize = "giant vehicle")] GiantVehicle = 6,
+    #[strum(serialize = "standard vehicle")] StandardVehicle = 7,
+}
 
 // ---------------------------------------------------------------------------
 // Sub-struct + block element types (schema-ordered)
@@ -24,7 +275,7 @@ use std::sync::Arc;
 /// need them.
 #[derive(Debug, Clone, Default)]
 pub struct UnitCamera {
-    pub flags: u16,
+    pub flags: Flags<UnitCameraFlags, u16>,
     pub camera_marker_name: String,
     pub camera_submerged_marker_name: String,
     pub pitch_auto_level: f32,
@@ -49,7 +300,7 @@ impl UnitCamera {
             .map(|b| b.len())
             .unwrap_or(0);
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u16,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             camera_marker_name: s.read_string_id("camera marker name").unwrap_or_default(),
             camera_submerged_marker_name: s
                 .read_string_id("camera submerged marker name")
@@ -212,7 +463,7 @@ impl UnitHudReference {
 /// Embeds a nested `unit_camera_struct` and a `unit_hud_reference_block`.
 #[derive(Debug, Clone, Default)]
 pub struct UnitSeat {
-    pub flags: u32,
+    pub flags: Flags<UnitSeatFlags, u32>,
     /// `label^` (old_string_id).
     pub label: String,
     pub marker_name: String,
@@ -225,7 +476,7 @@ pub struct UnitSeat {
     pub turnover_time: f32,
     pub acceleration: UnitSeatAcceleration,
     pub ai_scariness: f32,
-    pub ai_seat_type: i16,
+    pub ai_seat_type: Enum<GlobalAiSeatType, i16>,
     pub boarding_seat: i16,
     pub listener_interpolation_factor: f32,
     pub yaw_rate_bounds: Bounds<f32>,
@@ -263,7 +514,7 @@ impl UnitSeat {
             .unwrap_or_default();
         let hud_interface = read_block_vec(s, "unit hud interface", UnitHudReference::from_struct);
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             label: s.read_string_id("label").unwrap_or_default(),
             marker_name: s.read_string_id("marker name").unwrap_or_default(),
             entry_markers_name: s.read_string_id("entry marker(s) name").unwrap_or_default(),
@@ -279,7 +530,7 @@ impl UnitSeat {
             turnover_time: s.read_real("turnover time").unwrap_or(0.0),
             acceleration,
             ai_scariness: s.read_real("AI scariness").unwrap_or(0.0),
-            ai_seat_type: s.read_int_any("ai seat type").unwrap_or(0) as i16,
+            ai_seat_type: s.read_enum("ai seat type"),
             boarding_seat: s.read_block_index("boarding seat"),
             listener_interpolation_factor: s
                 .read_real("listener interpolation factor")
@@ -310,18 +561,18 @@ impl UnitSeat {
 /// `campaign_metagame_bucket_block` entry (size 8).
 #[derive(Debug, Clone, Default)]
 pub struct CampaignMetagameBucket {
-    pub flags: u8,
-    pub bucket_type: i8,
-    pub bucket_class: i8,
+    pub flags: Flags<CampaignMetagameBucketFlags, u8>,
+    pub bucket_type: Enum<CampaignMetagameBucketType, i8>,
+    pub bucket_class: Enum<CampaignMetagameBucketClass, i8>,
     pub point_count: i16,
 }
 
 impl CampaignMetagameBucket {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u8,
-            bucket_type: s.read_int_any("type").unwrap_or(0) as i8,
-            bucket_class: s.read_int_any("class").unwrap_or(0) as i8,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
+            bucket_type: s.read_enum("type"),
+            bucket_class: s.read_enum("class"),
             point_count: s.read_int_any("point count").unwrap_or(0) as i16,
         }
     }
@@ -345,9 +596,9 @@ where
 #[derive(Debug, Clone, Default)]
 pub struct UnitDefinition {
     pub object: Arc<ObjectDefinition>,
-    pub flags: u32,
-    pub default_team: i16,
-    pub constant_sound_volume: i16,
+    pub flags: Flags<UnitFlags, u32>,
+    pub default_team: Enum<UnitDefaultTeam, i16>,
+    pub constant_sound_volume: Enum<AiSoundVolume, i16>,
     pub campaign_metagame_bucket: Vec<CampaignMetagameBucket>,
     pub camera_field_of_view: f32,
     pub unit_camera: UnitCamera,
@@ -369,11 +620,11 @@ pub struct UnitDefinition {
     pub more_damn_nodes: UnitAdditionalNodeNames,
     pub melee_damage: String,
     pub your_momma: UnitBoardingMelee,
-    pub motion_sensor_blip_size: i16,
-    pub item_owner_size: i16,
+    pub motion_sensor_blip_size: Enum<GlobalChudBlipType, i16>,
+    pub item_owner_size: Enum<UnitItemOwnerSize, i16>,
     pub new_hud_interfaces: Vec<UnitHudReference>,
     pub grenade_velocity: f32,
-    pub grenade_type: i16,
+    pub grenade_type: Enum<GlobalGrenadeType, i16>,
     pub grenade_count: i16,
     pub powered_seats: Vec<UnitPoweredSeat>,
     pub weapons: Vec<UnitWeaponEntry>,
@@ -418,9 +669,9 @@ impl UnitDefinition {
 
         Self {
             object,
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
-            default_team: s.read_int_any("default team").unwrap_or(0) as i16,
-            constant_sound_volume: s.read_int_any("constant sound volume").unwrap_or(0) as i16,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
+            default_team: s.read_enum("default team"),
+            constant_sound_volume: s.read_enum("constant sound volume"),
             campaign_metagame_bucket: read_block_vec(
                 s,
                 "campaign metagame bucket",
@@ -452,15 +703,15 @@ impl UnitDefinition {
             more_damn_nodes,
             melee_damage: s.read_tag_ref_path("melee damage").unwrap_or_default(),
             your_momma,
-            motion_sensor_blip_size: s.read_int_any("motion sensor blip size").unwrap_or(0) as i16,
-            item_owner_size: s.read_int_any("item owner size").unwrap_or(0) as i16,
+            motion_sensor_blip_size: s.read_enum("motion sensor blip size"),
+            item_owner_size: s.read_enum("item owner size"),
             new_hud_interfaces: read_block_vec(
                 s,
                 "NEW HUD INTERFACES",
                 UnitHudReference::from_struct,
             ),
             grenade_velocity: s.read_real("grenade velocity").unwrap_or(0.0),
-            grenade_type: s.read_int_any("grenade type").unwrap_or(0) as i16,
+            grenade_type: s.read_enum("grenade type"),
             grenade_count: s.read_int_any("grenade count").unwrap_or(0) as i16,
             powered_seats: read_block_vec(s, "powered seats", UnitPoweredSeat::from_struct),
             weapons: read_block_vec(s, "weapons", UnitWeaponEntry::from_struct),
