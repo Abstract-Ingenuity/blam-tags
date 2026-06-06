@@ -336,24 +336,24 @@ fn resolve_bitmap(
 
     let filter_mode = match rm_param {
         Some(p) if flags & FLAG_FILTER != 0 => p.bitmap_filter_mode,
-        _ => op_param.default_filter_mode,
+        _ => op_param.default_filter_mode.get(),
     };
 
     // The "unified" rmsh override broadcasts to both axes; per-axis bits
     // (0x04 / 0x08) take precedence over 0x02 for their respective axis.
     let address_mode = match rm_param {
         Some(p) if flags & FLAG_ADDRESS != 0 => p.bitmap_address_mode,
-        _ => op_param.default_address_mode,
+        _ => op_param.default_address_mode.get(),
     };
     let address_mode_x = match rm_param {
         Some(p) if flags & FLAG_ADDRESS_X != 0 => p.bitmap_address_mode_x,
         Some(p) if flags & FLAG_ADDRESS    != 0 => p.bitmap_address_mode,
-        _ => op_param.default_address_mode,
+        _ => op_param.default_address_mode.get(),
     };
     let address_mode_y = match rm_param {
         Some(p) if flags & FLAG_ADDRESS_Y != 0 => p.bitmap_address_mode_y,
         Some(p) if flags & FLAG_ADDRESS    != 0 => p.bitmap_address_mode,
-        _ => op_param.default_address_mode,
+        _ => op_param.default_address_mode.get(),
     };
 
     let extern_texture_mode = rm_param.and_then(|p| p.bitmap_extern_mode);

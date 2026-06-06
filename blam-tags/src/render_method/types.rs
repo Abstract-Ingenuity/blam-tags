@@ -6,6 +6,7 @@
 //! corresponding Rust struct.
 
 use crate::api::{TagBlock, TagStruct};
+use crate::typed_enums::Enum;
 use crate::file::TagFile;
 use crate::math::ArgbColor;
 use crate::tag_function::TagFunction;
@@ -336,22 +337,28 @@ impl VertexType {
     }
 }
 
-/// Bitmap sampler filter mode (rmop default). Mirrors the schema's
-/// `render_method_bitmap_filter_mode_enum`.
+/// Bitmap sampler filter mode. The schema enum
+/// `render_method_bitmap_filter_mode_enum` (rmop `default filter mode`,
+/// name-resolved); the rmsh per-instance `bitmap filter mode` is a raw
+/// `short_integer` (no embedded names) decoded positionally via
+/// [`Self::from_index`].
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 pub enum BitmapFilterMode {
     #[default]
-    Trilinear              = 0,
-    Point                  = 1,
-    Bilinear               = 2,
-    Anisotropic1           = 3,
-    Anisotropic2Expensive  = 4,
-    Anisotropic3Expensive  = 5,
-    Anisotropic4Expensive  = 6,
-    LightprobeTextureArray = 7,
-    ComparisonPoint        = 8,
-    ComparisonBilinear     = 9,
+    #[strum(serialize = "trilinear")]                  Trilinear              = 0,
+    #[strum(serialize = "point")]                      Point                  = 1,
+    #[strum(serialize = "bilinear")]                   Bilinear               = 2,
+    #[strum(serialize = "anisotropic (1)")]            Anisotropic1           = 3,
+    #[strum(serialize = "anisotropic (2) expensive")]  Anisotropic2Expensive  = 4,
+    #[strum(serialize = "anisotropic (3) Expensive")]  Anisotropic3Expensive  = 5,
+    #[strum(serialize = "anisotropic (4) EXPENSIVE")]  Anisotropic4Expensive  = 6,
+    #[strum(serialize = "lightprobe texture array")]   LightprobeTextureArray = 7,
+    #[strum(serialize = "comparison point")]           ComparisonPoint        = 8,
+    #[strum(serialize = "comparison bilinear")]        ComparisonBilinear     = 9,
 }
 
 impl BitmapFilterMode {
@@ -372,16 +379,22 @@ impl BitmapFilterMode {
     }
 }
 
-/// Bitmap sampler address mode (rmop default). Mirrors the schema's
-/// `render_method_bitmap_address_mode_enum`.
+/// Bitmap sampler address mode. The schema enum
+/// `render_method_bitmap_address_mode_enum` (rmop `default address mode`,
+/// name-resolved); the rmsh per-instance `bitmap address mode[ x/y]` and
+/// the packed postprocess `address mode` nibbles are raw integers decoded
+/// positionally via [`Self::from_index`].
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 pub enum BitmapAddressMode {
     #[default]
-    Wrap        = 0,
-    Clamp       = 1,
-    Mirror      = 2,
-    BlackBorder = 3,
+    #[strum(serialize = "wrap")]         Wrap        = 0,
+    #[strum(serialize = "clamp")]        Clamp       = 1,
+    #[strum(serialize = "mirror")]       Mirror      = 2,
+    #[strum(serialize = "black border")] BlackBorder = 3,
 }
 
 impl BitmapAddressMode {
@@ -396,21 +409,26 @@ impl BitmapAddressMode {
     }
 }
 
-/// Bitmap sampler comparison function (rmop default). Mirrors the
-/// schema's `render_method_bitmap_comparison_function_enum`. Used by
+/// Bitmap sampler comparison function. The schema enum
+/// `render_method_bitmap_comparison_function_enum` (rmop `default
+/// comparison function`, name-resolved); the rmsh per-instance forms are
+/// raw integers decoded positionally via [`Self::from_index`]. Used by
 /// the comparison-filter sampler modes for shadow / depth fetches.
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 pub enum BitmapComparisonFunction {
     #[default]
-    Never        = 0,
-    Less         = 1,
-    Equal        = 2,
-    LessEqual    = 3,
-    Greater      = 4,
-    NotEqual     = 5,
-    GreaterEqual = 6,
-    Always       = 7,
+    #[strum(serialize = "never")]         Never        = 0,
+    #[strum(serialize = "less")]          Less         = 1,
+    #[strum(serialize = "equal")]         Equal        = 2,
+    #[strum(serialize = "less equal")]    LessEqual    = 3,
+    #[strum(serialize = "greater")]       Greater      = 4,
+    #[strum(serialize = "not equal")]     NotEqual     = 5,
+    #[strum(serialize = "greater equal")] GreaterEqual = 6,
+    #[strum(serialize = "always")]        Always       = 7,
 }
 
 impl BitmapComparisonFunction {
@@ -608,9 +626,9 @@ pub struct RenderMethodOptionParameter {
     pub default_real_value: f32,
     pub default_int_bool_value: i32,
     pub flags: i16,
-    pub default_filter_mode: BitmapFilterMode,
-    pub default_comparison_function: BitmapComparisonFunction,
-    pub default_address_mode: BitmapAddressMode,
+    pub default_filter_mode: Enum<BitmapFilterMode, i16>,
+    pub default_comparison_function: Enum<BitmapComparisonFunction, i16>,
+    pub default_address_mode: Enum<BitmapAddressMode, i16>,
     pub anisotropy_amount: i16,
     pub default_color: ArgbColor,
     pub default_bitmap_scale: f32,
@@ -979,15 +997,13 @@ impl RenderMethodOptionParameter {
             default_real_value: s.read_real("default real value").unwrap_or(0.0),
             default_int_bool_value: s.read_int_any("default int/bool value").unwrap_or(0) as i32,
             flags: s.read_int_any("flags").unwrap_or(0) as i16,
-            default_filter_mode: s.read_int_any("default filter mode")
-                .and_then(BitmapFilterMode::from_index)
+            // rmop defaults are true schema enums — resolve by embedded
+            // name (drift-immune).
+            default_filter_mode: s.try_read_enum("default filter mode").unwrap_or_default(),
+            default_comparison_function: s
+                .try_read_enum("default comparison function")
                 .unwrap_or_default(),
-            default_comparison_function: s.read_int_any("default comparison function")
-                .and_then(BitmapComparisonFunction::from_index)
-                .unwrap_or_default(),
-            default_address_mode: s.read_int_any("default address mode")
-                .and_then(BitmapAddressMode::from_index)
-                .unwrap_or_default(),
+            default_address_mode: s.try_read_enum("default address mode").unwrap_or_default(),
             anisotropy_amount: s.read_int_any("anisotropy amount").unwrap_or(0) as i16,
             default_color,
             default_bitmap_scale: s.read_real("default bitmap scale").unwrap_or(0.0),
