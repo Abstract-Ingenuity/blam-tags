@@ -6,7 +6,46 @@
 //! corresponding Rust struct.
 
 use crate::api::{TagBlock, TagStruct};
-use crate::typed_enums::Enum;
+use crate::typed_enums::{Enum, Flags};
+
+/// `global_render_method_flags_defintion` (word_flags, schema `shader
+/// flags*`). Readonly/tool-derived render-state hints.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum GlobalRenderMethodFlags {
+    #[strum(serialize = "don't fog me")] DontFogMe = 0,
+    #[strum(serialize = "use custom setting")] UseCustomSetting = 1,
+    #[strum(serialize = "calculate Z camera")] CalculateZCamera = 2,
+}
+
+/// `global_sort_layer_enum_defintion` (char_enum, schema `sort layer*`).
+/// Transparent draw-order bucket. Ordered by discriminant.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum GlobalSortLayer {
+    #[default]
+    #[strum(serialize = "invalid")] Invalid = 0,
+    #[strum(serialize = "pre-pass")] PrePass = 1,
+    #[strum(serialize = "normal")] Normal = 2,
+    #[strum(serialize = "post-pass")] PostPass = 3,
+}
+
+/// `global_render_method_runtime_flags_defintion` (byte_flags, schema
+/// `runtime flags!`). Runtime-resolved; 0 in source tags.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u8)]
+pub enum GlobalRenderMethodRuntimeFlags {
+    #[strum(serialize = "use VS with misc")] UseVsWithMisc = 0,
+}
 use crate::file::TagFile;
 use crate::math::ArgbColor;
 use crate::tag_function::TagFunction;
@@ -677,9 +716,9 @@ pub struct RenderMethod {
     /// case, the walker resolves params on the fly via `parameters`
     /// and the rmop defaults.
     pub postprocess_definition: Option<RenderMethodPostprocessDefinition>,
-    pub flags: u16,
-    pub sort_layer: i8,
-    pub runtime_flags: u8,
+    pub flags: Flags<GlobalRenderMethodFlags, u16>,
+    pub sort_layer: Enum<GlobalSortLayer, i8>,
+    pub runtime_flags: Flags<GlobalRenderMethodRuntimeFlags, u8>,
     pub custom_fog_setting_index: i32,
     pub prediction_atom_index: i32,
     /// FOURCC of the source tag — `'rmsh'`, `'rmtr'`, `'rmw '`, etc.
@@ -768,15 +807,17 @@ impl RenderMethod {
             .map(|e| RenderMethodPostprocessDefinition::from_struct(&e))
             .transpose()?;
 
-        let flags = s.read_int_any("shader flags")
-            .or_else(|| s.read_int_any("shader flags*"))
-            .unwrap_or(0) as u16;
-        let sort_layer = s.read_int_any("sort layer")
-            .or_else(|| s.read_int_any("sort layer*"))
-            .unwrap_or(0) as i8;
-        let runtime_flags = s.read_int_any("runtime flags")
-            .or_else(|| s.read_int_any("runtime flags!"))
-            .unwrap_or(0) as u8;
+        // Schema names carry `*`/`!` markers; tags store the clean name,
+        // but try both forms defensively. All three are name-resolved.
+        let flags = s.try_read_flags("shader flags")
+            .or_else(|| s.try_read_flags("shader flags*"))
+            .unwrap_or_default();
+        let sort_layer = s.try_read_enum("sort layer")
+            .or_else(|| s.try_read_enum("sort layer*"))
+            .unwrap_or_default();
+        let runtime_flags = s.try_read_flags("runtime flags")
+            .or_else(|| s.try_read_flags("runtime flags!"))
+            .unwrap_or_default();
         let custom_fog_setting_index = s.read_int_any("Custom fog setting index")
             .unwrap_or(0) as i32;
         let prediction_atom_index = s.read_int_any("prediction atom index")
