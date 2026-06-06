@@ -7,9 +7,52 @@
 use crate::device::DeviceDefinition;
 use crate::file::TagFile;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::{Enum, Flags};
 use std::sync::Arc;
 
 const MACHINE_GROUP: [u8; 4] = *b"mach";
+
+/// `machine_types` — engine `e_machine_type`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum MachineType {
+    #[default]
+    #[strum(serialize = "door")] Door = 0,
+    #[strum(serialize = "platform")] Platform = 1,
+    #[strum(serialize = "gear")] Gear = 2,
+}
+
+/// `machine_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum MachineFlags {
+    #[strum(serialize = "pathfinding obstacle")] PathfindingObstacle = 0,
+    #[strum(serialize = "...but not when open")] ButNotWhenOpen = 1,
+    #[strum(serialize = "elevator")] Elevator = 2,
+    #[strum(serialize = "is portal blocker")] IsPortalBlocker = 3,
+    #[strum(serialize = "is NOT pathfinding mobile")] IsNotPathfindingMobile = 4,
+    #[strum(serialize = "uses default occlusion bounds")] UsesDefaultOcclusionBounds = 5,
+}
+
+/// `machine_pathfinding_policy_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum MachinePathfindingPolicy {
+    #[default]
+    #[strum(serialize = "discs")] Discs = 0,
+    #[strum(serialize = "sectors")] Sectors = 1,
+    #[strum(serialize = "cut_out")] CutOut = 2,
+    #[strum(serialize = "none")] None = 3,
+}
 
 #[derive(Debug)]
 pub enum MachineError {
@@ -49,9 +92,9 @@ impl From<crate::object::ObjectDefinitionError> for MachineError {
 pub struct MachineDefinition {
     pub device: Arc<DeviceDefinition>,
     /// `type` enum — engine `e_machine_type` (door, gear, platform, etc.).
-    pub machine_type: i16,
+    pub machine_type: Enum<MachineType, i16>,
     /// `flags` (word_flags) — machine-specific.
-    pub flags: u16,
+    pub flags: Flags<MachineFlags, u16>,
     /// `door open time:seconds`.
     pub door_open_time: f32,
     /// `door occlusion bounds` (fraction_bounds, lower/upper).
@@ -59,7 +102,7 @@ pub struct MachineDefinition {
     pub door_occlusion_bounds_upper: f32,
     pub elevator_node: i16,
     /// `pathfinding policy` enum.
-    pub pathfinding_policy: i16,
+    pub pathfinding_policy: Enum<MachinePathfindingPolicy, i16>,
 }
 
 impl MachineDefinition {
@@ -84,13 +127,13 @@ impl MachineDefinition {
         let bounds = root.read_fraction_bounds("door occlusion bounds");
         Ok(Self {
             device,
-            machine_type: root.read_int_any("type").unwrap_or(0) as i16,
-            flags: root.read_int_any("flags").unwrap_or(0) as u16,
+            machine_type: root.read_enum("type"),
+            flags: root.try_read_flags("flags").unwrap_or_default(),
             door_open_time: root.read_real("door open time").unwrap_or(0.0),
             door_occlusion_bounds_lower: bounds.lower,
             door_occlusion_bounds_upper: bounds.upper,
             elevator_node: root.read_int_any("elevator node").unwrap_or(0) as i16,
-            pathfinding_policy: root.read_int_any("pathfinding policy").unwrap_or(0) as i16,
+            pathfinding_policy: root.read_enum("pathfinding policy"),
         })
     }
 }

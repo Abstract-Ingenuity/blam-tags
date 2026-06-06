@@ -7,9 +7,36 @@
 use crate::device::DeviceDefinition;
 use crate::file::TagFile;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::Enum;
 use std::sync::Arc;
 
 const CONTROL_GROUP: [u8; 4] = *b"ctrl";
+
+/// `control_types`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum ControlType {
+    #[default]
+    #[strum(serialize = "toggle switch")] ToggleSwitch = 0,
+    #[strum(serialize = "on button")] OnButton = 1,
+    #[strum(serialize = "off button")] OffButton = 2,
+    #[strum(serialize = "call button")] CallButton = 3,
+}
+
+/// `control_triggers`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum ControlTriggers {
+    #[default]
+    #[strum(serialize = "touched by player")] TouchedByPlayer = 0,
+    #[strum(serialize = "destroyed")] Destroyed = 1,
+}
 
 #[derive(Debug)]
 pub enum ControlError {
@@ -49,9 +76,9 @@ impl From<crate::object::ObjectDefinitionError> for ControlError {
 pub struct ControlDefinition {
     pub device: Arc<DeviceDefinition>,
     /// `type` enum (toggle/momentary/etc.).
-    pub control_type: i16,
+    pub control_type: Enum<ControlType, i16>,
     /// `triggers when` enum.
-    pub triggers_when: i16,
+    pub triggers_when: Enum<ControlTriggers, i16>,
     /// `call value:[0,1]`.
     pub call_value: f32,
     /// `action string` string_id.
@@ -82,8 +109,8 @@ impl ControlDefinition {
 
         Ok(Self {
             device,
-            control_type: root.read_int_any("type").unwrap_or(0) as i16,
-            triggers_when: root.read_int_any("triggers when").unwrap_or(0) as i16,
+            control_type: root.read_enum("type"),
+            triggers_when: root.read_enum("triggers when"),
             call_value: root.read_real("call value").unwrap_or(0.0),
             action_string: root.read_string_id("action string").unwrap_or_default(),
             on: root.read_tag_ref_path("on").unwrap_or_default(),

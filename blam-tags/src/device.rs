@@ -12,7 +12,31 @@
 
 use crate::api::TagStruct;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::Flags;
 use std::sync::Arc;
+
+/// `device_definition_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum DeviceDefinitionFlags {
+    #[strum(serialize = "position loops")] PositionLoops = 0,
+    #[strum(serialize = "(unused)")] Unused = 1,
+    #[strum(serialize = "allow interpolation")] AllowInterpolation = 2,
+}
+
+/// `device_lightmap_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum DeviceLightmapFlags {
+    #[strum(serialize = "don't use in lightmap")] DontUseInLightmap = 0,
+    #[strum(serialize = "don't use in lightprobe")] DontUseInLightprobe = 1,
+}
 
 /// Walked `device_struct_definition`. Field order matches schema
 /// verbatim (`device.json:62-128`).
@@ -24,7 +48,7 @@ pub struct DeviceDefinition {
     pub object: Arc<ObjectDefinition>,
 
     /// `device_struct_definition.flags` (long_flags).
-    pub flags: u32,
+    pub flags: Flags<DeviceDefinitionFlags, u32>,
 
     /// `power transition time:seconds` — divisor for the
     /// `change_in_power` compute case (engine `abs(power_velocity) /
@@ -43,7 +67,7 @@ pub struct DeviceDefinition {
     pub depowered_position_acceleration_time: f32,
 
     /// `lightmap flags` (word_flags).
-    pub lightmap_flags: u16,
+    pub lightmap_flags: Flags<DeviceLightmapFlags, u16>,
 
     // -- transition effect tag refs (Halo 3 had ~12 allowed effect groups) --
     /// `open (up)` (tag_reference).
@@ -79,7 +103,7 @@ impl DeviceDefinition {
     ) -> Self {
         Self {
             object,
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             power_transition_time: s.read_real("power transition time").unwrap_or(0.0),
             power_acceleration_time: s.read_real("power acceleration time").unwrap_or(0.0),
             position_transition_time: s.read_real("position transition time").unwrap_or(0.0),
@@ -90,7 +114,7 @@ impl DeviceDefinition {
             depowered_position_acceleration_time: s
                 .read_real("depowered position acceleration time")
                 .unwrap_or(0.0),
-            lightmap_flags: s.read_int_any("lightmap flags").unwrap_or(0) as u16,
+            lightmap_flags: s.try_read_flags("lightmap flags").unwrap_or_default(),
             open_up: s.read_tag_ref_path("open (up)").unwrap_or_default(),
             close_down: s.read_tag_ref_path("close (down)").unwrap_or_default(),
             opened: s.read_tag_ref_path("opened").unwrap_or_default(),
