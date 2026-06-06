@@ -45,6 +45,25 @@ pub enum StructureClusterFlags {
     #[strum(serialize = "decorators are lit")] DecoratorsAreLit = 4,
 }
 
+/// `camera_fx_palette_flags` (byte_flags) — per-cluster cfxs override
+/// gates on `structure_camera_fx_palette_entry`. Verified against
+/// `c_camera_fx_values::update @ dllcache 0x180687CB0`: bit 3
+/// (`OverrideInherentBloom`) gates BOTH the inherent-bloom and
+/// bloom-intensity target overrides in that engine rev, and bit 4
+/// (`OverrideBloomIntensity`) is defined in the schema but NOT consumed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u8)]
+pub enum CameraFxPaletteFlags {
+    #[strum(serialize = "force exposure")] ForceExposure = 0,
+    #[strum(serialize = "force auto-exposure")] ForceAutoExposure = 1,
+    #[strum(serialize = "override exposure bounds")] OverrideExposureBounds = 2,
+    #[strum(serialize = "override inherent bloom")] OverrideInherentBloom = 3,
+    #[strum(serialize = "override bloom intensity")] OverrideBloomIntensity = 4,
+}
+
 /// `instanced_geometry_flags` (word_flags).
 #[derive(Clone, Copy, PartialEq, Eq, Debug,
          num_derive::FromPrimitive, num_derive::ToPrimitive,
@@ -366,10 +385,11 @@ impl BspAtmospherePaletteEntry {
 /// `c_camera_fx_values::update @ 0x180687CB0:47-101` —
 /// `cluster_palette_entry` arg. When set, individual fields can
 /// override (per `flags` bits) the scenario-level cfxs:
-///   bit 0 → `forced_exposure` overrides exposure target (clears AUTO_BIT).
-///   bit 1 → `forced_auto_exposure_brightness` overrides AUTO target (sets AUTO_BIT).
-///   bit 2 → `exposure_min` / `exposure_max` override clamp range.
-///   bit 3 → `inherent_bloom` + `bloom_intensity` override bloom params.
+///   `ForceExposure` → `forced_exposure` overrides exposure target (clears AutoAdjustTarget).
+///   `ForceAutoExposure` → `forced_auto_exposure_brightness` overrides AUTO target (sets AutoAdjustTarget).
+///   `OverrideExposureBounds` → `exposure_min` / `exposure_max` override clamp range.
+///   `OverrideInherentBloom` → `inherent_bloom` + `bloom_intensity` override bloom params
+///                             (engine 0x180687CB0 gates BOTH on this single bit).
 ///
 /// Engine struct layout (`structure_camera_fx_palette_entry`, 48 B):
 ///   `name` (i32 string_id, 4) + `camera_fx_tag` (TagRef, 16) +
@@ -378,21 +398,20 @@ impl BspAtmospherePaletteEntry {
 pub struct BspCameraFxPaletteEntry {
     /// `name^` (string_id) — author-friendly name.
     pub name: String,
-    /// `flags` byte (engine `structure_camera_fx_palette_entry.flags`).
-    /// Typed migration deferred to the camera_fx_settings pass (the
-    /// `ClusterCameraFxPaletteOverrides` mirror + its consumers live there).
-    pub flags: u8,
-    /// `forced exposure` (stops). Active when `flags & 0x01`.
+    /// `flags` (engine `structure_camera_fx_palette_entry.flags`),
+    /// schema-name-resolved into [`CameraFxPaletteFlags`].
+    pub flags: Flags<CameraFxPaletteFlags, u8>,
+    /// `forced exposure` (stops). Active on `ForceExposure`.
     pub forced_exposure: f32,
-    /// `forced auto exposure brightness` (stops). Active when `flags & 0x02`.
+    /// `forced auto exposure brightness` (stops). Active on `ForceAutoExposure`.
     pub forced_auto_exposure_brightness: f32,
-    /// `exposure min` (stops). Active when `flags & 0x04`.
+    /// `exposure min` (stops). Active on `OverrideExposureBounds`.
     pub exposure_min: f32,
-    /// `exposure max` (stops). Active when `flags & 0x04`.
+    /// `exposure max` (stops). Active on `OverrideExposureBounds`.
     pub exposure_max: f32,
-    /// `inherent bloom`. Active when `flags & 0x08`.
+    /// `inherent bloom`. Active on `OverrideInherentBloom`.
     pub inherent_bloom: f32,
-    /// `bloom intensity`. Active when `flags & 0x08`.
+    /// `bloom intensity`. Active on `OverrideInherentBloom` (same bit).
     pub bloom_intensity: f32,
 }
 
@@ -410,7 +429,12 @@ impl BspCameraFxPaletteEntry {
         // names.
         Self {
             name: s.read_string_id("name").unwrap_or_default(),
-            flags: s.read_int_any("camera_fx_palette_flags").unwrap_or(0) as u8,
+            // Field is NAMED "flags" (def `camera_fx_palette_flags`). The
+            // prior `read_int_any("camera_fx_palette_flags")` read the def
+            // name, not the field name, so it always missed → flags == 0
+            // and the whole cluster-override path was dead. try_read_flags
+            // resolves the real "flags" field by name.
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             forced_exposure: s.read_real("forced exposure").unwrap_or(0.0),
             forced_auto_exposure_brightness: s
                 .read_real("forced auto-exposure screen brightness")

@@ -13,6 +13,7 @@ mod types;
 pub use types::{
     Bsp3d, Bsp3dNode, BspAtmospherePaletteEntry, BspCameraFxPaletteEntry, BspCluster,
     BspClusterPortal, BspCollisionMaterial, BspInstance, BspInstanceDefinition, BspLeaf,
+    CameraFxPaletteFlags,
     BspMarker, BspMaterial, BspMeshMetadata, BspMeshPart, BspWeatherPaletteEntry,
     CollisionBsp2dNode, CollisionBsp2dReference, CollisionEdge, CollisionLeaf, CollisionSurface,
     CollisionVertex, InstancedGeometryFlags, InstancedGeometryLightmappingPolicy,
