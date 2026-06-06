@@ -31,7 +31,320 @@ use crate::file::TagFile;
 use crate::item::ItemDefinition;
 use crate::math::{Bounds, RealEulerAngles2d, RealVector2d, RealVector3d};
 use crate::object::ObjectDefinition;
+use crate::typed_enums::{Enum, Flags};
 use std::sync::Arc;
+
+/// `weapon_definition_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum WeaponDefinitionFlags {
+    #[strum(serialize = "must be readied")] MustBeReadied = 0,
+    #[strum(serialize = "doesn't count toward maximum")] DoesntCountTowardMaximum = 1,
+    #[strum(serialize = "aim assists only when zoomed")] AimAssistsOnlyWhenZoomed = 2,
+    #[strum(serialize = "prevents grenade throwing")] PreventsGrenadeThrowing = 3,
+    #[strum(serialize = "prevents melee attack")] PreventsMeleeAttack = 4,
+    #[strum(serialize = "detonates when dropped")] DetonatesWhenDropped = 5,
+    #[strum(serialize = "cannot fire at maximum age")] CannotFireAtMaximumAge = 6,
+    #[strum(serialize = "secondary trigger overrides grenades")] SecondaryTriggerOverridesGrenades = 7,
+    #[strum(serialize = "support weapon")] SupportWeapon = 8,
+    #[strum(serialize = "AIs use weapon melee damage")] AisUseWeaponMeleeDamage = 9,
+    #[strum(serialize = "forces no binoculars")] ForcesNoBinoculars = 10,
+    #[strum(serialize = "loop fp firing animation")] LoopFpFiringAnimation = 11,
+    #[strum(serialize = "prevents crouching")] PreventsCrouching = 12,
+    #[strum(serialize = "cannot fire while boosting")] CannotFireWhileBoosting = 13,
+    #[strum(serialize = "use empty melee on empty")] UseEmptyMeleeOnEmpty = 14,
+    #[strum(serialize = "uses 3rd person camera")] Uses3rdPersonCamera = 15,
+    #[strum(serialize = "can be dual wielded")] CanBeDualWielded = 16,
+    #[strum(serialize = "can only be dual wielded")] CanOnlyBeDualWielded = 17,
+    #[strum(serialize = "melee only")] MeleeOnly = 18,
+    #[strum(serialize = "cant fire if parent dead")] CantFireIfParentDead = 19,
+    #[strum(serialize = "weapon ages with each kill")] WeaponAgesWithEachKill = 20,
+    #[strum(serialize = "weapon uses old dual fire error code")] UsesOldDualFireErrorCode = 21,
+    #[strum(serialize = "allows unaimed lunge")] AllowsUnaimedLunge = 22,
+    #[strum(serialize = "cannot be used by player")] CannotBeUsedByPlayer = 23,
+    #[strum(serialize = "hold fp firing animation")] HoldFpFiringAnimation = 24,
+    #[strum(serialize = "strict deviation angle")] StrictDeviationAngle = 25,
+}
+
+/// `weapon_definition_secondary_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum WeaponDefinitionSecondaryFlags {
+    #[strum(serialize = "magnitizes only when zoomed")] MagnitizesOnlyWhenZoomed = 0,
+    #[strum(serialize = "force enable equipment tossing")] ForceEnableEquipmentTossing = 1,
+    #[strum(serialize = "non-lunge melee dash disabled")] NonLungeMeleeDashDisabled = 2,
+}
+
+/// `secondary_trigger_modes` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum SecondaryTriggerMode {
+    #[default]
+    #[strum(serialize = "normal")] Normal = 0,
+    #[strum(serialize = "slaved to primary")] SlavedToPrimary = 1,
+    #[strum(serialize = "inhibits primary")] InhibitsPrimary = 2,
+    #[strum(serialize = "loads alterate ammunition")] LoadsAlternateAmmunition = 3,
+    #[strum(serialize = "loads multiple primary ammunition")] LoadsMultiplePrimaryAmmunition = 4,
+}
+
+/// `global_damage_reporting_enum_definition` (char_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum GlobalDamageReporting {
+    #[default]
+    #[strum(serialize = "teh guardians")] TehGuardians = 0,
+    #[strum(serialize = "falling damage")] FallingDamage = 1,
+    #[strum(serialize = "generic collision damage")] GenericCollisionDamage = 2,
+    #[strum(serialize = "generic melee damage")] GenericMeleeDamage = 3,
+    #[strum(serialize = "generic explosion")] GenericExplosion = 4,
+    #[strum(serialize = "magnum pistol")] MagnumPistol = 5,
+    #[strum(serialize = "plasma pistol")] PlasmaPistol = 6,
+    #[strum(serialize = "needler")] Needler = 7,
+    #[strum(serialize = "excavator")] Excavator = 8,
+    #[strum(serialize = "smg")] Smg = 9,
+    #[strum(serialize = "plasma rifle")] PlasmaRifle = 10,
+    #[strum(serialize = "battle rifle")] BattleRifle = 11,
+    #[strum(serialize = "carbine")] Carbine = 12,
+    #[strum(serialize = "shotgun")] Shotgun = 13,
+    #[strum(serialize = "sniper rifle")] SniperRifle = 14,
+    #[strum(serialize = "beam rifle")] BeamRifle = 15,
+    #[strum(serialize = "assault rifle")] AssaultRifle = 16,
+    #[strum(serialize = "spike rifle")] SpikeRifle = 17,
+    #[strum(serialize = "flak cannon")] FlakCannon = 18,
+    #[strum(serialize = "missile launcher")] MissileLauncher = 19,
+    #[strum(serialize = "rocket launcher")] RocketLauncher = 20,
+    #[strum(serialize = "spartan laser")] SpartanLaser = 21,
+    #[strum(serialize = "brute shot")] BruteShot = 22,
+    #[strum(serialize = "flame thrower")] FlameThrower = 23,
+    #[strum(serialize = "sentinal gun")] SentinalGun = 24,
+    #[strum(serialize = "energy sword")] EnergySword = 25,
+    #[strum(serialize = "gravity hammer")] GravityHammer = 26,
+    #[strum(serialize = "frag grenade")] FragGrenade = 27,
+    #[strum(serialize = "plasma grenade")] PlasmaGrenade = 28,
+    #[strum(serialize = "claymore grenade")] ClaymoreGrenade = 29,
+    #[strum(serialize = "firebomb grenade")] FirebombGrenade = 30,
+    #[strum(serialize = "flag melee damage")] FlagMeleeDamage = 31,
+    #[strum(serialize = "bomb melee damage")] BombMeleeDamage = 32,
+    #[strum(serialize = "bomb explosion damage")] BombExplosionDamage = 33,
+    #[strum(serialize = "ball melee damage")] BallMeleeDamage = 34,
+    #[strum(serialize = "human turret")] HumanTurret = 35,
+    #[strum(serialize = "plasma cannon")] PlasmaCannon = 36,
+    #[strum(serialize = "plasma mortar")] PlasmaMortar = 37,
+    #[strum(serialize = "plasma turret")] PlasmaTurret = 38,
+    #[strum(serialize = "banshee")] Banshee = 39,
+    #[strum(serialize = "ghost")] Ghost = 40,
+    #[strum(serialize = "mongoose")] Mongoose = 41,
+    #[strum(serialize = "scorpion")] Scorpion = 42,
+    #[strum(serialize = "scorpion gunner")] ScorpionGunner = 43,
+    #[strum(serialize = "warthog driver")] WarthogDriver = 44,
+    #[strum(serialize = "warthog gunner")] WarthogGunner = 45,
+    #[strum(serialize = "warthog gunner gauss")] WarthogGunnerGauss = 46,
+    #[strum(serialize = "wraith")] Wraith = 47,
+    #[strum(serialize = "wraith anti-infantry")] WraithAntiInfantry = 48,
+    #[strum(serialize = "tank")] Tank = 49,
+    #[strum(serialize = "chopper")] Chopper = 50,
+    #[strum(serialize = "hornet")] Hornet = 51,
+    #[strum(serialize = "mantis")] Mantis = 52,
+    #[strum(serialize = "mauler")] Mauler = 53,
+    #[strum(serialize = "sentinel beam")] SentinelBeam = 54,
+    #[strum(serialize = "sentinel rpg")] SentinelRpg = 55,
+    #[strum(serialize = "teleporter")] Teleporter = 56,
+    #[strum(serialize = "prox-mine")] ProxMine = 57,
+    #[strum(serialize = "elephant turret")] ElephantTurret = 58,
+    #[strum(serialize = "shade turret")] ShadeTurret = 59,
+    #[strum(serialize = "silenced smg")] SilencedSmg = 60,
+    #[strum(serialize = "automag")] Automag = 61,
+    #[strum(serialize = "brute plasma rifle")] BrutePlasmaRifle = 62,
+}
+
+/// `movement_penalty_modes` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum MovementPenaltyMode {
+    #[default]
+    #[strum(serialize = "always")] Always = 0,
+    #[strum(serialize = "when zoomed")] WhenZoomed = 1,
+    #[strum(serialize = "when zoomed or reloading")] WhenZoomedOrReloading = 2,
+}
+
+/// `multiplayer_weapon_types` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum MultiplayerWeaponType {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "ctf flag")] CtfFlag = 1,
+    #[strum(serialize = "oddball ball")] OddballBall = 2,
+    #[strum(serialize = "headhunter head")] HeadhunterHead = 3,
+    #[strum(serialize = "juggernaut powerup")] JuggernautPowerup = 4,
+}
+
+/// `weapon_types` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum WeaponType {
+    #[default]
+    #[strum(serialize = "undefined")] Undefined = 0,
+    #[strum(serialize = "shotgun")] Shotgun = 1,
+    #[strum(serialize = "needler")] Needler = 2,
+    #[strum(serialize = "plasma pistol")] PlasmaPistol = 3,
+    #[strum(serialize = "plasma rifle")] PlasmaRifle = 4,
+    #[strum(serialize = "rocket launcher")] RocketLauncher = 5,
+    #[strum(serialize = "energy blade")] EnergyBlade = 6,
+    #[strum(serialize = "splaser")] Splaser = 7,
+}
+
+/// `weapon_tracking_types` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum WeaponTrackingType {
+    #[default]
+    #[strum(serialize = "no tracking")] NoTracking = 0,
+    #[strum(serialize = "human tracking")] HumanTracking = 1,
+    #[strum(serialize = "plasma tracking")] PlasmaTracking = 2,
+}
+
+/// `magazine_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum MagazineFlags {
+    #[strum(serialize = "wastes rounds when reloaded")] WastesRoundsWhenReloaded = 0,
+    #[strum(serialize = "every round must be chambered")] EveryRoundMustBeChambered = 1,
+}
+
+/// `weapon_barrel_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum WeaponBarrelFlags {
+    #[strum(serialize = "tracks fired projectile")] TracksFiredProjectile = 0,
+    #[strum(serialize = "random firing effects")] RandomFiringEffects = 1,
+    #[strum(serialize = "can fire with partial ammo")] CanFireWithPartialAmmo = 2,
+    #[strum(serialize = "projectiles use weapon origin")] ProjectilesUseWeaponOrigin = 3,
+    #[strum(serialize = "ejects during chamber")] EjectsDuringChamber = 4,
+    #[strum(serialize = "use error when unzoomed")] UseErrorWhenUnzoomed = 5,
+    #[strum(serialize = "projectile vector cannot be adjusted")] ProjectileVectorCannotBeAdjusted = 6,
+    #[strum(serialize = "projectiles have identical error")] ProjectilesHaveIdenticalError = 7,
+    #[strum(serialize = "projectiles fire parallel")] ProjectilesFireParallel = 8,
+    #[strum(serialize = "cant fire when others firing")] CantFireWhenOthersFiring = 9,
+    #[strum(serialize = "cant fire when others recovering")] CantFireWhenOthersRecovering = 10,
+    #[strum(serialize = "don't clear fire bit after recovering")] DontClearFireBitAfterRecovering = 11,
+    #[strum(serialize = "stagger fire across multiple markers")] StaggerFireAcrossMultipleMarkers = 12,
+    #[strum(serialize = "fires locked projectiles")] FiresLockedProjectiles = 13,
+    #[strum(serialize = "can fire at maximum age")] CanFireAtMaximumAge = 14,
+    #[strum(serialize = "use 1 firing effect per burst")] Use1FiringEffectPerBurst = 15,
+    #[strum(serialize = "ignore tracked object")] IgnoreTrackedObject = 16,
+}
+
+/// `weapon_trigger_definition_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum WeaponTriggerDefinitionFlags {
+    #[strum(serialize = "autofire single action only")] AutofireSingleActionOnly = 0,
+}
+
+/// `weapon_trigger_inputs` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum WeaponTriggerInput {
+    #[default]
+    #[strum(serialize = "right trigger")] RightTrigger = 0,
+    #[strum(serialize = "left trigger")] LeftTrigger = 1,
+    #[strum(serialize = "melee attack")] MeleeAttack = 2,
+}
+
+/// `weapon_trigger_behaviors` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum WeaponTriggerBehavior {
+    #[default]
+    #[strum(serialize = "spew")] Spew = 0,
+    #[strum(serialize = "latch")] Latch = 1,
+    #[strum(serialize = "latch-autofire")] LatchAutofire = 2,
+    #[strum(serialize = "charge")] Charge = 3,
+    #[strum(serialize = "latch-zoom")] LatchZoom = 4,
+    #[strum(serialize = "latch-rocketlauncher")] LatchRocketlauncher = 5,
+    #[strum(serialize = "spew-charge")] SpewCharge = 6,
+    #[strum(serialize = "sword-charge")] SwordCharge = 7,
+}
+
+/// `trigger_prediction_type_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum TriggerPredictionType {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "spew")] Spew = 1,
+    #[strum(serialize = "charge")] Charge = 2,
+}
+
+/// `weapon_trigger_autofire_actions` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum WeaponTriggerAutofireAction {
+    #[default]
+    #[strum(serialize = "fire")] Fire = 0,
+    #[strum(serialize = "charge")] Charge = 1,
+    #[strum(serialize = "track")] Track = 2,
+    #[strum(serialize = "fire other")] FireOther = 3,
+}
+
+/// `weapon_trigger_overcharged_actions` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum WeaponTriggerOverchargedAction {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "explode")] Explode = 1,
+    #[strum(serialize = "discharge")] Discharge = 2,
+}
 
 const WEAPON_GROUP: [u8; 4] = *b"weap";
 
@@ -85,14 +398,14 @@ pub struct WeaponDefinition {
     /// `object`) gets a cheap clone.
     pub item: Arc<ItemDefinition>,
 
-    /// `flags` (long_flags).
-    pub flags: u32,
+    /// `weapon_definition_flags` (long_flags).
+    pub flags: Flags<WeaponDefinitionFlags, u32>,
     /// `secondary flags` (long_flags).
-    pub secondary_flags: u32,
+    pub secondary_flags: Flags<WeaponDefinitionSecondaryFlags, u32>,
     /// `unused label!` (old_string_id) — retained for layout parity.
     pub unused_label: String,
     /// `secondary trigger mode` (short_enum).
-    pub secondary_trigger_mode: i16,
+    pub secondary_trigger_mode: Enum<SecondaryTriggerMode, i16>,
     /// `maximum alternate shots loaded` (short_integer).
     pub maximum_alternate_shots_loaded: i16,
     /// `turn on time` (real).
@@ -126,7 +439,7 @@ pub struct WeaponDefinition {
     pub melee_damage_parameters: WeaponMeleeDamageParameters,
     pub clang_effect: String,
     /// `melee damage reporting type` (char_enum).
-    pub melee_damage_reporting_type: i8,
+    pub melee_damage_reporting_type: Enum<GlobalDamageReporting, i8>,
 
     // -- zoom --
     pub magnification_levels: i16,
@@ -137,7 +450,7 @@ pub struct WeaponDefinition {
 
     // -- movement --
     /// `movement penalized` (short_enum).
-    pub movement_penalized: i16,
+    pub movement_penalized: Enum<MovementPenaltyMode, i16>,
     pub forward_movement_penalty: f32,
     pub sideways_movement_penalty: f32,
 
@@ -169,9 +482,9 @@ pub struct WeaponDefinition {
     pub weapon_name: String,
 
     /// `multiplayer weapon type` (short_enum).
-    pub multiplayer_weapon_type: i16,
+    pub multiplayer_weapon_type: Enum<MultiplayerWeaponType, i16>,
     /// `weapon type` (short_enum).
-    pub weapon_type: i16,
+    pub weapon_type: Enum<WeaponType, i16>,
     /// `tracking` substruct — single `tracking_type` enum.
     pub tracking: WeaponTracking,
     /// `player interface` substruct — first-person interface block
@@ -294,13 +607,13 @@ impl WeaponAimAssist {
 #[derive(Debug, Clone, Default)]
 pub struct WeaponTracking {
     /// `tracking type` enum (heat-seeking, lock-on, etc.).
-    pub tracking_type: i16,
+    pub tracking_type: Enum<WeaponTrackingType, i16>,
 }
 
 impl WeaponTracking {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            tracking_type: s.read_int_any("tracking type").unwrap_or(0) as i16,
+            tracking_type: s.try_read_enum("tracking type").unwrap_or_default(),
         }
     }
 }
@@ -336,7 +649,7 @@ impl WeaponInterface {
 /// `magazines` struct, size 128, weapon.json:1037-1107).
 #[derive(Debug, Clone, Default)]
 pub struct WeaponDefinitionMagazine {
-    pub flags: u32,
+    pub flags: Flags<MagazineFlags, u32>,
     pub rounds_recharged_per_second: i16,
     pub rounds_total_initial: i16,
     pub rounds_total_maximum: i16,
@@ -356,16 +669,16 @@ pub struct WeaponDefinitionMagazine {
 /// `weapon_triggers` struct, size 144).
 #[derive(Debug, Clone, Default)]
 pub struct WeaponDefinitionTrigger {
-    pub flags: u32,
+    pub flags: Flags<WeaponTriggerDefinitionFlags, u32>,
     /// `input` enum — which trigger input drives this (primary/secondary).
-    pub input: i16,
+    pub input: Enum<WeaponTriggerInput, i16>,
     /// `behavior` enum.
-    pub behavior: i16,
+    pub behavior: Enum<WeaponTriggerBehavior, i16>,
     /// `primary barrel` block-index reference.
     pub primary_barrel: i16,
     /// `secondary barrel` block-index reference.
     pub secondary_barrel: i16,
-    pub prediction: i16,
+    pub prediction: Enum<TriggerPredictionType, i16>,
     /// `autofire` substruct (`weapon_trigger_autofire_struct`, 12 bytes).
     pub autofire: WeaponDefinitionTriggerAutofire,
     /// `charging` substruct (`weapon_trigger_charging_struct`, 104 bytes)
@@ -386,9 +699,9 @@ pub struct WeaponDefinitionTriggerAutofire {
     /// `autofire throw` (seconds).
     pub autofire_throw: f32,
     /// `secondary action` enum.
-    pub secondary_action: i16,
+    pub secondary_action: Enum<WeaponTriggerAutofireAction, i16>,
     /// `primary action` enum.
-    pub primary_action: i16,
+    pub primary_action: Enum<WeaponTriggerAutofireAction, i16>,
 }
 
 /// Walked `weapon_trigger_charging_struct` (104 bytes). Fields read
@@ -403,7 +716,7 @@ pub struct WeaponDefinitionTriggerCharging {
     /// `charged time:seconds` — time before overcharging.
     pub charged_time: f32,
     /// `overcharged action` enum.
-    pub overcharged_action: i16,
+    pub overcharged_action: Enum<WeaponTriggerOverchargedAction, i16>,
     /// `cancelled trigger throw`.
     pub cancelled_trigger_throw: i16,
     /// `charged illumination:[0,1]` — illumination when fully charged.
@@ -421,7 +734,7 @@ pub struct WeaponDefinitionTriggerCharging {
 /// `weapon_barrels` struct, size 308).
 #[derive(Debug, Clone, Default)]
 pub struct WeaponDefinitionBarrel {
-    pub flags: u32,
+    pub flags: Flags<WeaponBarrelFlags, u32>,
     /// `firing` substruct (`weapon_barrel_firing_parameters_struct`,
     /// 36 bytes) — rate-of-fire curve + barrel spin scale.
     pub firing: WeaponDefinitionBarrelFiring,
@@ -568,10 +881,10 @@ impl WeaponDefinition {
 
         Ok(Self {
             item,
-            flags: root.read_int_any("flags").unwrap_or(0) as u32,
-            secondary_flags: root.read_int_any("secondary flags").unwrap_or(0) as u32,
+            flags: root.try_read_flags("flags").unwrap_or_default(),
+            secondary_flags: root.try_read_flags("secondary flags").unwrap_or_default(),
             unused_label: root.read_string_id("unused label").unwrap_or_default(),
-            secondary_trigger_mode: root.read_int_any("secondary trigger mode").unwrap_or(0) as i16,
+            secondary_trigger_mode: root.try_read_enum("secondary trigger mode").unwrap_or_default(),
             maximum_alternate_shots_loaded: root
                 .read_int_any("maximum alternate shots loaded")
                 .unwrap_or(0) as i16,
@@ -614,14 +927,14 @@ impl WeaponDefinition {
             melee_damage_parameters,
             clang_effect: root.read_tag_ref_path("clang effect").unwrap_or_default(),
             melee_damage_reporting_type: root
-                .read_int_any("melee damage reporting type")
-                .unwrap_or(0) as i8,
+                .try_read_enum("melee damage reporting type")
+                .unwrap_or_default(),
 
             magnification_levels: root.read_int_any("magnification levels").unwrap_or(0) as i16,
             magnification_range: root.read_real_bounds("magnification range"),
             aim_assist,
 
-            movement_penalized: root.read_int_any("movement penalized").unwrap_or(0) as i16,
+            movement_penalized: root.try_read_enum("movement penalized").unwrap_or_default(),
             forward_movement_penalty: root.read_real("forward movement penalty").unwrap_or(0.0),
             sideways_movement_penalty: root.read_real("sideways movement penalty").unwrap_or(0.0),
 
@@ -652,9 +965,9 @@ impl WeaponDefinition {
             weapon_class: root.read_string_id("weapon class").unwrap_or_default(),
             weapon_name: root.read_string_id("weapon name").unwrap_or_default(),
             multiplayer_weapon_type: root
-                .read_int_any("multiplayer weapon type")
-                .unwrap_or(0) as i16,
-            weapon_type: root.read_int_any("weapon type").unwrap_or(0) as i16,
+                .try_read_enum("multiplayer weapon type")
+                .unwrap_or_default(),
+            weapon_type: root.try_read_enum("weapon type").unwrap_or_default(),
             tracking,
             player_interface,
 
@@ -697,7 +1010,7 @@ impl WeaponDefinition {
 impl WeaponDefinitionMagazine {
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             rounds_recharged_per_second: s
                 .read_int_any("rounds recharged")
                 .unwrap_or(0) as i16,
@@ -733,12 +1046,12 @@ impl WeaponDefinitionTrigger {
             .map(|sub| WeaponDefinitionTriggerCharging::from_struct(&sub))
             .unwrap_or_default();
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
-            input: s.read_int_any("input").unwrap_or(0) as i16,
-            behavior: s.read_int_any("behavior").unwrap_or(0) as i16,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
+            input: s.try_read_enum("input").unwrap_or_default(),
+            behavior: s.try_read_enum("behavior").unwrap_or_default(),
             primary_barrel: s.read_block_index("primary barrel"),
             secondary_barrel: s.read_block_index("secondary barrel"),
-            prediction: s.read_int_any("prediction").unwrap_or(0) as i16,
+            prediction: s.try_read_enum("prediction").unwrap_or_default(),
             autofire,
             charging,
             lock_on_hold_time: s.read_real("lock-on hold time").unwrap_or(0.0),
@@ -753,8 +1066,8 @@ impl WeaponDefinitionTriggerAutofire {
         Self {
             autofire_time: s.read_real("autofire time").unwrap_or(0.0),
             autofire_throw: s.read_real("autofire throw").unwrap_or(0.0),
-            secondary_action: s.read_int_any("secondary action").unwrap_or(0) as i16,
-            primary_action: s.read_int_any("primary action").unwrap_or(0) as i16,
+            secondary_action: s.try_read_enum("secondary action").unwrap_or_default(),
+            primary_action: s.try_read_enum("primary action").unwrap_or_default(),
         }
     }
 }
@@ -764,7 +1077,7 @@ impl WeaponDefinitionTriggerCharging {
         Self {
             charging_time: s.read_real("charging time").unwrap_or(0.0),
             charged_time: s.read_real("charged time").unwrap_or(0.0),
-            overcharged_action: s.read_int_any("overcharged action").unwrap_or(0) as i16,
+            overcharged_action: s.try_read_enum("overcharged action").unwrap_or_default(),
             cancelled_trigger_throw: s
                 .read_int_any("cancelled trigger throw")
                 .unwrap_or(0) as i16,
@@ -783,7 +1096,7 @@ impl WeaponDefinitionBarrel {
             .map(|sub| WeaponDefinitionBarrelFiring::from_struct(&sub))
             .unwrap_or_default();
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             firing,
             magazine: s.read_block_index("magazine"),
             rounds_per_shot: s.read_int_any("rounds per shot").unwrap_or(0) as i16,
