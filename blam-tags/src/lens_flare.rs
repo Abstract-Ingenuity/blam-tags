@@ -22,10 +22,108 @@
 //! `s_lens_flare_definition` (per Ares header).
 
 use crate::api::TagStruct;
+use crate::damage_effect::GlobalReverseTransitionFunction;
 use crate::fields::{TagFieldData, TagFieldType};
 use crate::file::TagFile;
 use crate::math::{FractionBounds, RealBounds, RealRgbColor};
+use crate::particle::ParticlePropertyOutputModifier;
 use crate::tag_function::TagFunction;
+use crate::typed_enums::{Enum, Flags};
+
+/// `lens_flare_flags_definition` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum LensFlareFlags {
+    #[strum(serialize = "rotate occlusion testing box with lens flare")] RotateOcclusionTestingBox = 0,
+    #[strum(serialize = "no occlusion test")] NoOcclusionTest = 1,
+    #[strum(serialize = "only render in first person")] OnlyRenderInFirstPerson = 2,
+    #[strum(serialize = "only render in third person")] OnlyRenderInThirdPerson = 3,
+    #[strum(serialize = "use simple occlusion box test")] UseSimpleOcclusionBoxTest = 4,
+    #[strum(serialize = "no reflection opacity feedback")] NoReflectionOpacityFeedback = 5,
+    #[strum(serialize = "scale by marker")] ScaleByMarker = 6,
+    #[strum(serialize = "don't autofade")] DontAutofade = 7,
+    #[strum(serialize = "don't render while zoomed")] DontRenderWhileZoomed = 8,
+}
+
+/// `lens_flare_reflection_flags_definition` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum LensFlareReflectionFlags {
+    #[strum(serialize = "rotate from center of screen")] RotateFromCenterOfScreen = 0,
+    #[strum(serialize = "radius scaled by distance")] RadiusScaledByDistance = 1,
+    #[strum(serialize = "radius scaled by occlusion factor")] RadiusScaledByOcclusionFactor = 2,
+    #[strum(serialize = "ignore external color")] IgnoreExternalColor = 3,
+    #[strum(serialize = "lock to flare X")] LockToFlareX = 4,
+    #[strum(serialize = "lock to flare Y")] LockToFlareY = 5,
+    #[strum(serialize = "proximity to center as function input")] ProximityToCenterAsFunctionInput = 6,
+    #[strum(serialize = "mirror across flare")] MirrorAcrossFlare = 7,
+    #[strum(serialize = "disabled for debugging")] DisabledForDebugging = 8,
+    #[strum(serialize = "flip U coordinate")] FlipUCoordinate = 9,
+    #[strum(serialize = "flip V coordinate")] FlipVCoordinate = 10,
+    #[strum(serialize = "draw in world space instead of screen space")] DrawInWorldSpace = 11,
+    #[strum(serialize = "use legacy H3 flares system")] UseLegacyH3FlaresSystem = 12,
+}
+
+/// `lens_flare_animation_flags_definition` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum LensFlareAnimationFlags {
+    #[strum(serialize = "synchronized")] Synchronized = 0,
+}
+
+/// `lens_flare_occlusion_offset_enum_definition` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum LensFlareOcclusionOffset {
+    #[default]
+    #[strum(serialize = "toward viewer")] TowardViewer = 0,
+    #[strum(serialize = "marker forward")] MarkerForward = 1,
+    #[strum(serialize = "none")] None = 2,
+}
+
+/// `lens_flare_occlusion_inner_radius_scale_enum_definition` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum LensFlareOcclusionInnerRadiusScale {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "1/2")] Half = 1,
+    #[strum(serialize = "1/4")] Quarter = 2,
+    #[strum(serialize = "1/8")] Eighth = 3,
+    #[strum(serialize = "1/16")] Sixteenth = 4,
+    #[strum(serialize = "1/32")] ThirtySecond = 5,
+    #[strum(serialize = "1/64")] SixtyFourth = 6,
+}
+
+/// `lens_flare_corona_rotation_function_enum_definition` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum LensFlareCoronaRotationFunction {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "rotation A")] RotationA = 1,
+    #[strum(serialize = "rotation B")] RotationB = 2,
+    #[strum(serialize = "rotation-translation")] RotationTranslation = 3,
+    #[strum(serialize = "translation")] Translation = 4,
+}
 
 const LENS_GROUP: [u8; 4] = *b"lens";
 
@@ -52,7 +150,7 @@ impl std::error::Error for LensFlareError {}
 /// One reflection / ghost in the lens-flare sprite stack.
 #[derive(Debug, Clone, Default)]
 pub struct LensFlareReflection {
-    pub flags: u16,
+    pub flags: Flags<LensFlareReflectionFlags, u16>,
     /// Index into the parent's `bitmap` tag_reference sprite atlas.
     pub bitmap_index: i16,
     /// Optional bitmap override (separate atlas for this reflection).
@@ -85,7 +183,7 @@ pub struct LensFlareReflection {
 pub struct ColorFunction {
     pub input_variable: String,
     pub range_variable: String,
-    pub output_modifier: i16,
+    pub output_modifier: Enum<ParticlePropertyOutputModifier, i16>,
     pub output_modifier_input: String,
     /// `lens flare color mapping` curve payload.
     pub mapping: Option<TagFunction>,
@@ -100,8 +198,8 @@ pub struct LensFlare {
     // ---- OCCLUSION ----
     pub occlusion_reflection_index: i32,
     pub occlusion_offset_distance: f32,
-    pub occlusion_offset_direction: i16,
-    pub occlusion_inner_radius_scale: i16,
+    pub occlusion_offset_direction: Enum<LensFlareOcclusionOffset, i16>,
+    pub occlusion_inner_radius_scale: Enum<LensFlareOcclusionInnerRadiusScale, i16>,
 
     // ---- FADE ----
     pub near_fade_begin_distance: f32,
@@ -111,19 +209,19 @@ pub struct LensFlare {
 
     // ---- BITMAP ----
     pub bitmap: Option<String>,
-    pub flags: u16,
+    pub flags: Flags<LensFlareFlags, u16>,
     pub runtime_flags: i16,
 
     // ---- ROTATION / FALLOFF ----
-    pub rotation_function: i16,
+    pub rotation_function: Enum<LensFlareCoronaRotationFunction, i16>,
     pub rotation_function_scale_degrees: f32,
-    pub falloff_function: i16,
+    pub falloff_function: Enum<GlobalReverseTransitionFunction, i16>,
 
     // ---- REFLECTIONS ----
     pub reflections: Vec<LensFlareReflection>,
 
     // ---- ANIMATIONS ----
-    pub animation_flags: u16,
+    pub animation_flags: Flags<LensFlareAnimationFlags, u16>,
     /// `time brightness` curves — sampled by elapsed seconds since
     /// the light became visible (occlusion gate).
     pub time_brightness: Vec<TagFunction>,
@@ -177,9 +275,10 @@ impl LensFlare {
         self.falloff_angle_degrees = falloff;
         self.cutoff_angle_degrees = cutoff;
 
-        // Reflection-flags bit 8 = "disabled for debugging" — engine
-        // strips these from the runtime list so they never render.
-        self.reflections.retain(|r| (r.flags & 0x100) == 0);
+        // "disabled for debugging" reflections — engine strips these from
+        // the runtime list so they never render.
+        self.reflections
+            .retain(|r| !r.flags.contains(LensFlareReflectionFlags::DisabledForDebugging));
     }
 
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
@@ -189,8 +288,8 @@ impl LensFlare {
 
             occlusion_reflection_index: s.read_int_any("occlusion reflection index").unwrap_or(0) as i32,
             occlusion_offset_distance: s.read_real("occlusion offset distance").unwrap_or(0.0),
-            occlusion_offset_direction: s.read_int_any("occlusion offset direction").unwrap_or(0) as i16,
-            occlusion_inner_radius_scale: s.read_int_any("occlusion inner radius scale").unwrap_or(0) as i16,
+            occlusion_offset_direction: s.try_read_enum("occlusion offset direction").unwrap_or_default(),
+            occlusion_inner_radius_scale: s.try_read_enum("occlusion inner radius scale").unwrap_or_default(),
 
             near_fade_begin_distance: s.read_real("near fade begin distance").unwrap_or(0.0),
             near_fade_end_distance: s.read_real("near fade end distance").unwrap_or(0.0),
@@ -198,16 +297,16 @@ impl LensFlare {
             far_fade_distance: s.read_real("far fade distance").unwrap_or(0.0),
 
             bitmap: s.read_tag_ref_path("bitmap"),
-            flags: s.read_int_any("flags").unwrap_or(0) as u16,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             runtime_flags: s.read_int_any("runtime flags").unwrap_or(0) as i16,
 
-            rotation_function: s.read_int_any("rotation function").unwrap_or(0) as i16,
+            rotation_function: s.try_read_enum("rotation function").unwrap_or_default(),
             rotation_function_scale_degrees: s.read_real("rotation function scale").unwrap_or(0.0),
-            falloff_function: s.read_int_any("falloff function").unwrap_or(0) as i16,
+            falloff_function: s.try_read_enum("falloff function").unwrap_or_default(),
 
             reflections: read_block(s, "reflections", LensFlareReflection::from_struct),
 
-            animation_flags: s.read_int_any("animation flags").unwrap_or(0) as u16,
+            animation_flags: s.try_read_flags("animation flags").unwrap_or_default(),
             time_brightness: read_scalar_animation_block(s, "time brightness"),
             age_brightness: read_scalar_animation_block(s, "age brightness"),
             time_color: read_color_animation_block(s, "time color"),
@@ -221,7 +320,7 @@ impl LensFlare {
 impl LensFlareReflection {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u16,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             bitmap_index: s.read_int_any("bitmap index").unwrap_or(0) as i16,
             bitmap_override: s.read_tag_ref_path("bitmapOverride"),
             rotation_offset_degrees: s.read_real("rotation offset").unwrap_or(0.0),
@@ -249,7 +348,7 @@ impl ColorFunction {
         Self {
             input_variable: s.read_string_id("Input Variable").unwrap_or_default(),
             range_variable: s.read_string_id("Range Variable").unwrap_or_default(),
-            output_modifier: s.read_int_any("Output Modifier").unwrap_or(0) as i16,
+            output_modifier: s.try_read_enum("Output Modifier").unwrap_or_default(),
             output_modifier_input: s.read_string_id("Output Modifier Input").unwrap_or_default(),
             mapping,
         }
