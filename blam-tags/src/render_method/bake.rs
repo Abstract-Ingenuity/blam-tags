@@ -518,7 +518,7 @@ fn filter_routing_pass(
         let ov_count = overlay_range.count() as usize;
         for ov_i in ov_start..(ov_start + ov_count) {
             let Some(anim) = overlay_map.overlays.get(ov_i) else { break };
-            let Some(atype) = anim.parameter_type else { continue };
+            let Some(atype) = anim.parameter_type.map(|e| e.get()) else { continue };
             if (anim_type_filter & (1u32 << (atype as u32))) == 0 {
                 continue;
             }

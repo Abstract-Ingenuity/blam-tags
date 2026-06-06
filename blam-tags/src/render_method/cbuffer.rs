@@ -284,7 +284,7 @@ pub fn compile_real_constant_at_time(
                 let v = anim.function.as_ref()
                     .map(|f| eval_value_at(f, anim.time_period_in_seconds, &anim.input_name, &anim.range_name, ctx))
                     .unwrap_or(0.0);
-                match anim.parameter_type {
+                match anim.parameter_type.map(|e| e.get()) {
                     Some(A::ScaleUniform) => { slot[0] = v; slot[1] = v; }
                     Some(A::ScaleX) => slot[0] = v,
                     Some(A::ScaleY) => slot[1] = v,
@@ -299,7 +299,7 @@ pub fn compile_real_constant_at_time(
             // then animated_parameters[Value] overrides via broadcast.
             slot = [rm.real_parameter; 4];
             for anim in &rm.animated_parameters {
-                if matches!(anim.parameter_type, Some(A::Value)) {
+                if matches!(anim.parameter_type.map(|e| e.get()), Some(A::Value)) {
                     let v = anim.function.as_ref()
                         .map(|f| eval_value_at(f, anim.time_period_in_seconds, &anim.input_name, &anim.range_name, ctx))
                         .unwrap_or(0.0);
@@ -314,7 +314,7 @@ pub fn compile_real_constant_at_time(
             // Color: animated[Color] writes RGB, animated[Alpha] writes .w.
             // No animated entries → rmop default survives Stage 1.
             for anim in &rm.animated_parameters {
-                match anim.parameter_type {
+                match anim.parameter_type.map(|e| e.get()) {
                     Some(A::Color) => {
                         if let Some(c) = anim.function.as_ref().and_then(extract_first_color) {
                             slot[0] = c[0]; slot[1] = c[1]; slot[2] = c[2];

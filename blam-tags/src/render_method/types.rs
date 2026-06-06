@@ -67,34 +67,20 @@ pub enum RenderMethodParameterType {
 /// output. Mirrors Ares `e_render_method_animated_parameter_type` (the
 /// MCC tag schema only encodes the first 9; runtime extends to 15).
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 pub enum RenderMethodAnimatedParameterType {
-    Value         = 0,
-    Color         = 1,
-    ScaleUniform  = 2,
-    ScaleX        = 3,
-    ScaleY        = 4,
-    TranslationX  = 5,
-    TranslationY  = 6,
-    FrameIndex    = 7,
-    Alpha         = 8,
-}
-
-impl RenderMethodAnimatedParameterType {
-    pub fn from_index(i: i128) -> Option<Self> {
-        Some(match i {
-            0 => Self::Value,
-            1 => Self::Color,
-            2 => Self::ScaleUniform,
-            3 => Self::ScaleX,
-            4 => Self::ScaleY,
-            5 => Self::TranslationX,
-            6 => Self::TranslationY,
-            7 => Self::FrameIndex,
-            8 => Self::Alpha,
-            _ => return None,
-        })
-    }
+    #[strum(serialize = "value")]         Value         = 0,
+    #[strum(serialize = "color")]         Color         = 1,
+    #[strum(serialize = "scale uniform")] ScaleUniform  = 2,
+    #[strum(serialize = "scale x")]       ScaleX        = 3,
+    #[strum(serialize = "scale y")]       ScaleY        = 4,
+    #[strum(serialize = "translation x")] TranslationX  = 5,
+    #[strum(serialize = "translation y")] TranslationY  = 6,
+    #[strum(serialize = "frame index")]   FrameIndex    = 7,
+    #[strum(serialize = "alpha")]         Alpha         = 8,
 }
 
 /// Engine-bound parameter source. Mirrors Ares `e_render_method_extern`
@@ -616,7 +602,7 @@ pub struct RenderMethodOptionParameter {
 /// `s_render_method_animated_parameter` (36 bytes).
 #[derive(Debug, Clone)]
 pub struct RenderMethodAnimatedParameter {
-    pub parameter_type: Option<RenderMethodAnimatedParameterType>,
+    pub parameter_type: Option<Enum<RenderMethodAnimatedParameterType, i32>>,
     pub input_name: String,
     pub range_name: String,
     pub time_period_in_seconds: f32,
@@ -1261,8 +1247,7 @@ impl RenderMethodParameter {
 impl RenderMethodAnimatedParameter {
     fn from_struct(s: &TagStruct<'_>) -> Result<Self, RenderMethodError> {
         Ok(Self {
-            parameter_type: s.read_int_any("type")
-                .and_then(RenderMethodAnimatedParameterType::from_index),
+            parameter_type: s.try_read_enum("type"),
             input_name: s.read_string_id("input name").unwrap_or_default(),
             range_name: s.read_string_id("range name").unwrap_or_default(),
             // Schema field name is `"time period"` (no suffix). The
