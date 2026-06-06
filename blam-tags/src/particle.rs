@@ -30,6 +30,7 @@ use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::math::{RealPoint2d, RealVector3d};
 use crate::render_method::{RenderMethod, RenderMethodError};
+use crate::typed_enums::{Enum, Flags};
 
 pub const PARTICLE_GROUP: [u8; 4] = *b"prt3";
 
@@ -99,84 +100,127 @@ pub const PARTICLE_ANIM_CAN_ANIMATE_BACKWARDS: u32 = 1 << 1;
 // particle into a quad. Per particle.json:
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// `particle_billboard_type_enum` (short_enum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 #[repr(i16)]
 pub enum ParticleBillboardStyle {
     #[default]
-    ScreenFacing = 0,
-    CameraFacing = 1,
-    ParallelToDirection = 2,
-    Perpendicular = 3,
-    Vertical = 4,
-    Horizontal = 5,
-    LocalVertical = 6,
-    LocalHorizontal = 7,
-    WorldModel = 8,
-    VelocityHorizontal = 9,
+    #[strum(serialize = "screen facing")] ScreenFacing = 0,
+    #[strum(serialize = "camera facing")] CameraFacing = 1,
+    #[strum(serialize = "parallel to direction")] ParallelToDirection = 2,
+    #[strum(serialize = "perpendicular to direction")] Perpendicular = 3,
+    #[strum(serialize = "vertical")] Vertical = 4,
+    #[strum(serialize = "horizontal")] Horizontal = 5,
+    #[strum(serialize = "local vertical")] LocalVertical = 6,
+    #[strum(serialize = "local horizontal")] LocalHorizontal = 7,
+    #[strum(serialize = "world (particle models)")] WorldModel = 8,
+    #[strum(serialize = "velocity horizontal (particle models)")] VelocityHorizontal = 9,
 }
 
-impl ParticleBillboardStyle {
-    pub fn from_int(v: i64) -> Self {
-        match v {
-            1 => Self::CameraFacing,
-            2 => Self::ParallelToDirection,
-            3 => Self::Perpendicular,
-            4 => Self::Vertical,
-            5 => Self::Horizontal,
-            6 => Self::LocalVertical,
-            7 => Self::LocalHorizontal,
-            8 => Self::WorldModel,
-            9 => Self::VelocityHorizontal,
-            _ => Self::ScreenFacing,
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// `attachment_type_enum` — when the attachment fires.
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// `attachment_type_enum` — when the attachment fires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 #[repr(i8)]
 pub enum ParticleAttachmentTrigger {
     #[default]
-    Birth = 0,
-    Collision = 1,
-    Death = 2,
+    #[strum(serialize = "birth")] Birth = 0,
+    #[strum(serialize = "collision")] Collision = 1,
+    #[strum(serialize = "death")] Death = 2,
 }
 
-impl ParticleAttachmentTrigger {
-    pub fn from_int(v: i64) -> Self {
-        match v {
-            1 => Self::Collision,
-            2 => Self::Death,
-            _ => Self::Birth,
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Output modifier — c_particle_property.m_output_modifier.
-// Per `output_mod_enum` in particle.json.
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+/// `output_mod_enum` — `c_particle_property.m_output_modifier`. Owned
+/// here; imported by `lens_flare`. Variant 0 is the blank `" "` option.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
 #[repr(i8)]
 pub enum ParticlePropertyOutputModifier {
     #[default]
-    None = 0,
-    Plus = 1,
-    Times = 2,
+    #[strum(serialize = " ")] None = 0,
+    #[strum(serialize = "Plus")] Plus = 1,
+    #[strum(serialize = "Times")] Times = 2,
 }
 
-impl ParticlePropertyOutputModifier {
-    pub fn from_int(v: i64) -> Self {
-        match v {
-            1 => Self::Plus,
-            2 => Self::Times,
-            _ => Self::None,
-        }
-    }
+/// `game_state_type_enum` — the per-property input/range/modifier state
+/// source the particle evaluator samples.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum GameStateType {
+    #[default]
+    #[strum(serialize = "particle age")] ParticleAge = 0,
+    #[strum(serialize = "system age")] SystemAge = 1,
+    #[strum(serialize = "particle random")] ParticleRandom = 2,
+    #[strum(serialize = "system random")] SystemRandom = 3,
+    #[strum(serialize = "particle correlation 1")] ParticleCorrelation1 = 4,
+    #[strum(serialize = "particle correlation 2")] ParticleCorrelation2 = 5,
+    #[strum(serialize = "particle correlation 3")] ParticleCorrelation3 = 6,
+    #[strum(serialize = "particle correlation 4")] ParticleCorrelation4 = 7,
+    #[strum(serialize = "system correlation 1")] SystemCorrelation1 = 8,
+    #[strum(serialize = "system correlation 2")] SystemCorrelation2 = 9,
+    #[strum(serialize = "particle emission time")] ParticleEmissionTime = 10,
+    #[strum(serialize = "location lod")] LocationLod = 11,
+    #[strum(serialize = "game time")] GameTime = 12,
+    #[strum(serialize = "effect a scale")] EffectAScale = 13,
+    #[strum(serialize = "effect b scale")] EffectBScale = 14,
+    #[strum(serialize = "particle rotation")] ParticleRotation = 15,
+    #[strum(serialize = "location random")] LocationRandom = 16,
+    #[strum(serialize = "distance from emitter")] DistanceFromEmitter = 17,
+    #[strum(serialize = "explosion animation")] ExplosionAnimation = 18,
+    #[strum(serialize = "explosion rotation")] ExplosionRotation = 19,
+    #[strum(serialize = "invalid state --- please set again")] InvalidState = 20,
+}
+
+/// `particle_main_flags` (long_flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum ParticleMainFlags {
+    #[strum(serialize = "dies at rest")] DiesAtRest = 0,
+    #[strum(serialize = "dies on structure collision")] DiesOnStructureCollision = 1,
+    #[strum(serialize = "dies in media")] DiesInMedia = 2,
+    #[strum(serialize = "dies in air")] DiesInAir = 3,
+    #[strum(serialize = "has sweetener")] HasSweetener = 4,
+}
+
+/// `particle_appearance_flags` (long_flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum ParticleAppearanceFlags {
+    #[strum(serialize = "random u mirror")] RandomUMirror = 0,
+    #[strum(serialize = "random v mirror")] RandomVMirror = 1,
+    #[strum(serialize = "random starting rotation")] RandomStartingRotation = 2,
+    #[strum(serialize = "tint from lightmap")] TintFromLightmap = 3,
+    #[strum(serialize = "tint from diffuse texture")] TintFromDiffuseTexture = 4,
+    #[strum(serialize = "bitmap authored vertically")] BitmapAuthoredVertically = 5,
+    #[strum(serialize = "intensity affects alpha")] IntensityAffectsAlpha = 6,
+    #[strum(serialize = "fade when viewed edge-on")] FadeWhenViewedEdgeOn = 7,
+    #[strum(serialize = "motion blur")] MotionBlur = 8,
+    #[strum(serialize = "double-sided")] DoubleSided = 9,
+}
+
+/// `particle_animation_flags` (long_flags).
+#[derive(Debug, Clone, Copy, PartialEq, Eq,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum ParticleAnimationFlags {
+    #[strum(serialize = "frame animation one shot")] FrameAnimationOneShot = 0,
+    #[strum(serialize = "can animate backwards")] CanAnimateBackwards = 1,
 }
 
 // ---------------------------------------------------------------------------
@@ -189,13 +233,12 @@ pub struct ParticleAttachment {
     pub type_ref: String,
     /// Group fourcc of the target tag (effe / snd! / foot / etc.).
     pub type_group: [u8; 4],
-    pub trigger: ParticleAttachmentTrigger,
+    pub trigger: Enum<ParticleAttachmentTrigger, i8>,
+    /// `attachment_flags` — empty option list in the schema, kept raw.
     pub flags: u8,
-    /// Indexes into `game_state_type_enum` — drives scale at attachment
-    /// fire time. P1 stores the raw byte; the particle subsystem
-    /// evaluates state→scale at fire time.
-    pub primary_scale: i8,
-    pub secondary_scale: i8,
+    /// `game_state_type_enum` — drives scale at attachment fire time.
+    pub primary_scale: Enum<GameStateType, i8>,
+    pub secondary_scale: Enum<GameStateType, i8>,
 }
 
 impl ParticleAttachment {
@@ -205,12 +248,10 @@ impl ParticleAttachment {
         Self {
             type_ref,
             type_group: type_group_u32.to_be_bytes(),
-            trigger: ParticleAttachmentTrigger::from_int(
-                s.read_int_any("trigger").unwrap_or(0) as i64,
-            ),
+            trigger: s.try_read_enum("trigger").unwrap_or_default(),
             flags: s.read_int_any("flags").unwrap_or(0) as u8,
-            primary_scale: s.read_int_any("primary scale").unwrap_or(0) as i8,
-            secondary_scale: s.read_int_any("secondary scale").unwrap_or(0) as i8,
+            primary_scale: s.try_read_enum("primary scale").unwrap_or_default(),
+            secondary_scale: s.try_read_enum("secondary scale").unwrap_or_default(),
         }
     }
 }
@@ -226,14 +267,14 @@ impl ParticleAttachment {
 
 #[derive(Debug, Clone, Default)]
 pub struct ParticlePropertyScalar {
-    /// `game_state_type_enum` index — what feeds the function input.
-    pub input_variable: i8,
-    /// Second `game_state_type_enum` index — feeds the range axis for
-    /// ranged interpolation curves.
-    pub range_variable: i8,
-    pub output_modifier: ParticlePropertyOutputModifier,
-    /// `game_state_type_enum` index — feeds the modifier's input.
-    pub output_modifier_input: i8,
+    /// `game_state_type_enum` — what feeds the function input.
+    pub input_variable: Enum<GameStateType, i8>,
+    /// Second `game_state_type_enum` — feeds the range axis for ranged
+    /// interpolation curves.
+    pub range_variable: Enum<GameStateType, i8>,
+    pub output_modifier: Enum<ParticlePropertyOutputModifier, i8>,
+    /// `game_state_type_enum` — feeds the modifier's input.
+    pub output_modifier_input: Enum<GameStateType, i8>,
     /// Fallback constant when the curve is the identity / not authored.
     /// Engine reads this at evaluate time when `m_flags & is_constant`.
     pub constant_value: f32,
@@ -245,14 +286,10 @@ pub struct ParticlePropertyScalar {
 impl ParticlePropertyScalar {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            input_variable: s.read_int_any("Input Variable").unwrap_or(0) as i8,
-            range_variable: s.read_int_any("Range Variable").unwrap_or(0) as i8,
-            output_modifier: ParticlePropertyOutputModifier::from_int(
-                s.read_int_any("Output Modifier").unwrap_or(0) as i64,
-            ),
-            output_modifier_input: s
-                .read_int_any("Output Modifier Input")
-                .unwrap_or(0) as i8,
+            input_variable: s.try_read_enum("Input Variable").unwrap_or_default(),
+            range_variable: s.try_read_enum("Range Variable").unwrap_or_default(),
+            output_modifier: s.try_read_enum("Output Modifier").unwrap_or_default(),
+            output_modifier_input: s.try_read_enum("Output Modifier Input").unwrap_or_default(),
             constant_value: s.read_real("runtime m_constant_value").unwrap_or(0.0),
             runtime_flags: s.read_int_any("runtime m_flags").unwrap_or(0) as u8,
         }
@@ -363,10 +400,10 @@ impl ParticleGpuData {
 
 #[derive(Debug, Clone, Default)]
 pub struct ParticleDefinition {
-    pub main_flags: u32,
+    pub main_flags: Flags<ParticleMainFlags, u32>,
     pub attachments: Vec<ParticleAttachment>,
-    pub appearance_flags: u32,
-    pub billboard_style: ParticleBillboardStyle,
+    pub appearance_flags: Flags<ParticleAppearanceFlags, u32>,
+    pub billboard_style: Enum<ParticleBillboardStyle, i16>,
     pub first_sequence_index: i16,
     pub sequence_count: i16,
     pub center_offset: RealPoint2d,
@@ -388,7 +425,7 @@ pub struct ParticleDefinition {
     pub intensity: ParticlePropertyScalar,
     pub alpha: ParticlePropertyScalar,
 
-    pub animation_flags: u32,
+    pub animation_flags: Flags<ParticleAnimationFlags, u32>,
     pub frame_index: ParticlePropertyScalar,
     pub animation_rate: ParticlePropertyScalar,
     pub palette_animation: ParticlePropertyScalar,
@@ -425,7 +462,7 @@ impl ParticleDefinition {
     }
 
     pub fn from_struct(s: &TagStruct<'_>) -> Result<Self, ParticleError> {
-        let main_flags = s.read_int_any("main flags").unwrap_or(0) as u32;
+        let main_flags = s.try_read_flags("main flags").unwrap_or_default();
         let attachments = s
             .field("attachments")
             .and_then(|f| f.as_block())
@@ -439,11 +476,8 @@ impl ParticleDefinition {
                 out
             })
             .unwrap_or_default();
-        let appearance_flags =
-            s.read_int_any("appearance flags").unwrap_or(0) as u32;
-        let billboard_style = ParticleBillboardStyle::from_int(
-            s.read_int_any("particle billboard style").unwrap_or(0) as i64,
-        );
+        let appearance_flags = s.try_read_flags("appearance flags").unwrap_or_default();
+        let billboard_style = s.try_read_enum("particle billboard style").unwrap_or_default();
         let first_sequence_index =
             s.read_int_any("first sequence index").unwrap_or(0) as i16;
         let sequence_count =
@@ -488,7 +522,7 @@ impl ParticleDefinition {
         let intensity = read_property_scalar(s, "intensity");
         let alpha = read_property_scalar(s, "alpha");
 
-        let animation_flags = s.read_int_any("animation flags").unwrap_or(0) as u32;
+        let animation_flags = s.try_read_flags("animation flags").unwrap_or_default();
         let frame_index = read_property_scalar(s, "frame index");
         let animation_rate = read_property_scalar(s, "animation rate");
         let palette_animation = read_property_scalar(s, "palette animation");
