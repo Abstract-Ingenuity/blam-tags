@@ -22,6 +22,7 @@
 
 use crate::api::TagStruct;
 use crate::file::TagFile;
+use crate::typed_enums::Enum;
 
 const EFFG_GROUP: [u8; 4] = *b"effg";
 
@@ -45,105 +46,65 @@ impl std::fmt::Display for EffectGlobalsError {
 
 impl std::error::Error for EffectGlobalsError {}
 
-/// `effect_holdback_type_enum` — 28 entries. Slot index matches the
-/// runtime enum referenced in `effect_allocate` and the per-subsystem
-/// `*_create` paths.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
+/// `effect_holdback_type_enum` (long_enum) — 28 entries. Slot index
+/// matches the runtime enum referenced in `effect_allocate` and the
+/// per-subsystem `*_create` paths.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i32)]
 pub enum EffectHoldbackType {
-    Effect = 0,
-    Event = 1,
-    Location = 2,
-    Lightprobe = 3,
-    EffectMessage = 4,
-    BeamSystem = 5,
-    BeamLocation = 6,
-    Beam = 7,
-    BeamProfileRow = 8,
-    ContrailSystem = 9,
-    ContrailLocation = 10,
-    Contrail = 11,
-    ContrailProfileRow = 12,
-    DecalSystem = 13,
-    Decal = 14,
-    DecalVertex = 15,
-    DecalIndex = 16,
-    LightVolumeSystem = 17,
-    LightVolumeLocation = 18,
-    LightVolume = 19,
-    LightVolumeProfileRow = 20,
-    ParticleSystem = 21,
-    ParticleLocation = 22,
-    ParticleEmitter = 23,
-    CpuParticle = 24,
-    GpuParticleRow = 25,
-    ContrailQueue = 26,
-    ParticleQueue = 27,
+    #[default]
+    #[strum(serialize = "type_effect")] Effect = 0,
+    #[strum(serialize = "type_event")] Event = 1,
+    #[strum(serialize = "type_location")] Location = 2,
+    #[strum(serialize = "type_lightprobe")] Lightprobe = 3,
+    #[strum(serialize = "type_effect_message")] EffectMessage = 4,
+    #[strum(serialize = "type_beam_system")] BeamSystem = 5,
+    #[strum(serialize = "type_beam_location")] BeamLocation = 6,
+    #[strum(serialize = "type_beam")] Beam = 7,
+    #[strum(serialize = "type_beam_profile_row")] BeamProfileRow = 8,
+    #[strum(serialize = "type_contrail_system")] ContrailSystem = 9,
+    #[strum(serialize = "type_contrail_location")] ContrailLocation = 10,
+    #[strum(serialize = "type_contrail")] Contrail = 11,
+    #[strum(serialize = "type_contrail_profile_row")] ContrailProfileRow = 12,
+    #[strum(serialize = "type_decal_system")] DecalSystem = 13,
+    #[strum(serialize = "type_decal")] Decal = 14,
+    #[strum(serialize = "type_decal_vertex")] DecalVertex = 15,
+    #[strum(serialize = "type_decal_index")] DecalIndex = 16,
+    #[strum(serialize = "type_light_volume_system")] LightVolumeSystem = 17,
+    #[strum(serialize = "type_light_volume_location")] LightVolumeLocation = 18,
+    #[strum(serialize = "type_light_volume")] LightVolume = 19,
+    #[strum(serialize = "type_light_volume_profile_row")] LightVolumeProfileRow = 20,
+    #[strum(serialize = "type_particle_system")] ParticleSystem = 21,
+    #[strum(serialize = "type_particle_location")] ParticleLocation = 22,
+    #[strum(serialize = "type_particle_emitter")] ParticleEmitter = 23,
+    #[strum(serialize = "type_cpu_particle")] CpuParticle = 24,
+    #[strum(serialize = "type_gpu_particle_row")] GpuParticleRow = 25,
+    #[strum(serialize = "type_contrail_queue")] ContrailQueue = 26,
+    #[strum(serialize = "type_particle_queue")] ParticleQueue = 27,
 }
 
-impl EffectHoldbackType {
-    pub fn from_index(i: i64) -> Option<Self> {
-        Some(match i {
-            0 => Self::Effect,
-            1 => Self::Event,
-            2 => Self::Location,
-            3 => Self::Lightprobe,
-            4 => Self::EffectMessage,
-            5 => Self::BeamSystem,
-            6 => Self::BeamLocation,
-            7 => Self::Beam,
-            8 => Self::BeamProfileRow,
-            9 => Self::ContrailSystem,
-            10 => Self::ContrailLocation,
-            11 => Self::Contrail,
-            12 => Self::ContrailProfileRow,
-            13 => Self::DecalSystem,
-            14 => Self::Decal,
-            15 => Self::DecalVertex,
-            16 => Self::DecalIndex,
-            17 => Self::LightVolumeSystem,
-            18 => Self::LightVolumeLocation,
-            19 => Self::LightVolume,
-            20 => Self::LightVolumeProfileRow,
-            21 => Self::ParticleSystem,
-            22 => Self::ParticleLocation,
-            23 => Self::ParticleEmitter,
-            24 => Self::CpuParticle,
-            25 => Self::GpuParticleRow,
-            26 => Self::ContrailQueue,
-            27 => Self::ParticleQueue,
-            _ => return None,
-        })
-    }
-}
-
-/// `global_effect_priority_enum` — 3 entries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
+/// `global_effect_priority_enum` (long_enum) — 3 entries.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i32)]
 pub enum EffectPriority {
-    Normal = 0,
-    High = 1,
-    Essential = 2,
-}
-
-impl EffectPriority {
-    pub fn from_index(i: i64) -> Option<Self> {
-        Some(match i {
-            0 => Self::Normal,
-            1 => Self::High,
-            2 => Self::Essential,
-            _ => return None,
-        })
-    }
+    #[default]
+    #[strum(serialize = "normal")] Normal = 0,
+    #[strum(serialize = "high")] High = 1,
+    #[strum(serialize = "essential")] Essential = 2,
 }
 
 /// One `effect_component_holdback_block` entry — per-priority budget
 /// for a given component type.
 #[derive(Debug, Clone, Default)]
 pub struct EffectPriorityHoldback {
-    /// Authored priority slot (`global_effect_priority_enum`). `None`
-    /// when the index is out of range — should not happen in practice.
-    pub priority: Option<EffectPriority>,
+    /// Authored priority slot (`global_effect_priority_enum`).
+    pub priority: Enum<EffectPriority, i32>,
     /// `absolute count` — direct allocation cap. `0` means "use
     /// relative_percentage instead".
     pub absolute_count: i32,
@@ -161,9 +122,8 @@ pub struct EffectPriorityHoldback {
 /// a holdback type + 3 priority slots.
 #[derive(Debug, Clone, Default)]
 pub struct EffectHoldback {
-    /// Authored holdback type (`effect_holdback_type_enum`). `None`
-    /// when the index is out of range.
-    pub holdback_type: Option<EffectHoldbackType>,
+    /// Authored holdback type (`effect_holdback_type_enum`).
+    pub holdback_type: Enum<EffectHoldbackType, i32>,
     /// `overall budget*#from code` — engine-side cap visible to the
     /// authoring UI but ultimately driven by compile-time constants.
     pub overall_budget: i32,
@@ -206,15 +166,13 @@ impl EffectGlobals {
 
     /// Look up the holdback row for a given component type.
     pub fn holdback(&self, ty: EffectHoldbackType) -> Option<&EffectHoldback> {
-        self.holdbacks.iter().find(|h| h.holdback_type == Some(ty))
+        self.holdbacks.iter().find(|h| h.holdback_type == ty)
     }
 }
 
 impl EffectHoldback {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        let holdback_type = s
-            .read_int_any("holdback type")
-            .and_then(|i| EffectHoldbackType::from_index(i as i64));
+        let holdback_type = s.read_enum("holdback type");
         let overall_budget = s.read_int_any("overall budget").unwrap_or(0) as i32;
         let priorities = s
             .field("priorities")
@@ -238,7 +196,7 @@ impl EffectHoldback {
     pub fn available(&self, priority: EffectPriority) -> i32 {
         self.priorities
             .iter()
-            .find(|p| p.priority == Some(priority))
+            .find(|p| p.priority == priority)
             .map(|p| p.available)
             .unwrap_or(0)
     }
@@ -246,9 +204,7 @@ impl EffectHoldback {
 
 impl EffectPriorityHoldback {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        let priority = s
-            .read_int_any("priority type")
-            .and_then(|i| EffectPriority::from_index(i as i64));
+        let priority = s.read_enum("priority type");
         Self {
             priority,
             absolute_count: s.read_int_any("absolute count").unwrap_or(0) as i32,

@@ -34,6 +34,7 @@
 use crate::api::TagStruct;
 use crate::effects_properties::EditableProperty;
 use crate::file::TagFile;
+use crate::typed_enums::{Enum, Flags};
 
 const PMOV_GROUP: [u8; 4] = *b"pmov";
 
@@ -57,40 +58,40 @@ impl std::fmt::Display for ParticlePhysicsError {
 
 impl std::error::Error for ParticlePhysicsError {}
 
-/// `particle_movement_flags` (8 bits) — composite of physics-enable +
+/// `particle_movement_flags` (long_flags) — composite of physics-enable +
 /// collision-target classes + swarm + wind. NOT a movement-type
-/// dispatch (that's `particle_movement_type` per controller).
-pub const PMOV_FLAG_PHYSICS: u32 = 1 << 0;
-pub const PMOV_FLAG_COLLIDE_WITH_STRUCTURE: u32 = 1 << 1;
-pub const PMOV_FLAG_COLLIDE_WITH_MEDIA: u32 = 1 << 2;
-pub const PMOV_FLAG_COLLIDE_WITH_SCENERY: u32 = 1 << 3;
-pub const PMOV_FLAG_COLLIDE_WITH_VEHICLES: u32 = 1 << 4;
-pub const PMOV_FLAG_COLLIDE_WITH_BIPEDS: u32 = 1 << 5;
-pub const PMOV_FLAG_SWARM: u32 = 1 << 6;
-pub const PMOV_FLAG_WIND: u32 = 1 << 7;
+/// dispatch (that's `ParticleMovementType` per controller). Shared with
+/// `effect`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum ParticleMovementFlags {
+    #[strum(serialize = "physics")] Physics = 0,
+    #[strum(serialize = "collide with structure")] CollideWithStructure = 1,
+    #[strum(serialize = "collide with media")] CollideWithMedia = 2,
+    #[strum(serialize = "collide with scenery")] CollideWithScenery = 3,
+    #[strum(serialize = "collide with vehicles")] CollideWithVehicles = 4,
+    #[strum(serialize = "collide with bipeds")] CollideWithBipeds = 5,
+    #[strum(serialize = "swarm")] Swarm = 6,
+    #[strum(serialize = "wind")] Wind = 7,
+}
 
 /// `particle_movement_type` — per-controller dispatch. Selects which
 /// inner physics integrator the engine runs against the controller's
-/// parameter set.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u16)]
-pub enum ControllerType {
-    Physics = 0,
-    Collider = 1,
-    Swarm = 2,
-    Wind = 3,
-}
-
-impl ControllerType {
-    pub fn from_index(i: i64) -> Option<Self> {
-        Some(match i {
-            0 => Self::Physics,
-            1 => Self::Collider,
-            2 => Self::Swarm,
-            3 => Self::Wind,
-            _ => return None,
-        })
-    }
+/// parameter set. Shared with `effect`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum ParticleMovementType {
+    #[default]
+    #[strum(serialize = "physics")] Physics = 0,
+    #[strum(serialize = "collider")] Collider = 1,
+    #[strum(serialize = "swarm")] Swarm = 2,
+    #[strum(serialize = "wind")] Wind = 3,
 }
 
 /// One `particle_controller_parameters` entry — a parameter slot on
@@ -107,9 +108,8 @@ pub struct ControllerParameter {
 /// authored with a specific type + parameter set.
 #[derive(Debug, Clone, Default)]
 pub struct ParticleController {
-    /// Authored controller type (`particle_movement_type` enum). `None`
-    /// when out of range.
-    pub controller_type: Option<ControllerType>,
+    /// Authored controller type (`particle_movement_type` enum).
+    pub controller_type: Enum<ParticleMovementType, i16>,
     pub parameters: Vec<ControllerParameter>,
     pub runtime_constant_parameters: i32,
     pub runtime_used_particle_states: i32,
@@ -121,8 +121,8 @@ pub struct ParticlePhysics {
     /// Optional template tag — engine merges its movements with this
     /// tag's authoring layer (template wins on conflict, AFAICT).
     pub template: Option<String>,
-    /// `particle_movement_flags` (8 bits).
-    pub flags: u32,
+    /// `particle_movement_flags`.
+    pub flags: Flags<ParticleMovementFlags, u32>,
     pub movements: Vec<ParticleController>,
 }
 
@@ -151,7 +151,7 @@ impl ParticlePhysics {
             .unwrap_or_default();
         Self {
             template: s.read_tag_ref_path("template"),
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             movements,
         }
     }
@@ -173,9 +173,7 @@ impl ParticleController {
             })
             .unwrap_or_default();
         Self {
-            controller_type: s
-                .read_int_any("type")
-                .and_then(|i| ControllerType::from_index(i as i64)),
+            controller_type: s.read_enum("type"),
             parameters,
             runtime_constant_parameters: s
                 .read_int_any("runtime m_constant_parameters")
