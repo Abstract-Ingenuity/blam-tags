@@ -8,9 +8,21 @@
 
 use crate::file::TagFile;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::Flags;
 use std::sync::Arc;
 
 const CRATE_GROUP: [u8; 4] = *b"bloc";
+
+/// `crate_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum CrateFlags {
+    #[strum(serialize = "does not block AOE")] DoesNotBlockAoe = 0,
+    #[strum(serialize = "attach texture camera hack")] AttachTextureCameraHack = 1,
+}
 
 #[derive(Debug)]
 pub enum CrateError {
@@ -47,7 +59,7 @@ impl From<crate::object::ObjectDefinitionError> for CrateError {
 pub struct CrateDefinition {
     pub object: Arc<ObjectDefinition>,
     /// `flags` (word_flags).
-    pub flags: u16,
+    pub flags: Flags<CrateFlags, u16>,
     /// `campaign metagame bucket` block — count only.
     pub campaign_metagame_bucket_count: usize,
     /// `self destruction timer:seconds`.
@@ -69,7 +81,7 @@ impl CrateDefinition {
             .unwrap_or(0);
         Ok(Self {
             object,
-            flags: root.read_int_any("flags").unwrap_or(0) as u16,
+            flags: root.try_read_flags("flags").unwrap_or_default(),
             campaign_metagame_bucket_count,
             self_destruction_timer: root.read_int_any("self destruction timer").unwrap_or(0) as i32,
         })

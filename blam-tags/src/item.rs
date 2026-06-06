@@ -12,7 +12,19 @@
 use crate::api::TagStruct;
 use crate::math::Bounds;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::Flags;
 use std::sync::Arc;
+
+/// `item_definition_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum ItemDefinitionFlags {
+    #[strum(serialize = "always maintains z up")] AlwaysMaintainsZUp = 0,
+    #[strum(serialize = "crate style collision filter")] CrateStyleCollisionFilter = 1,
+}
 
 /// Walked `item_struct_definition`. Field order matches schema verbatim
 /// (`item.json:64-95`).
@@ -22,7 +34,7 @@ pub struct ItemDefinition {
     /// any derived weapon / equipment definition.
     pub object: Arc<ObjectDefinition>,
     /// `flags` (long_flags) — item-specific.
-    pub flags: u32,
+    pub flags: Flags<ItemDefinitionFlags, u32>,
 
     // -- NEW hud messages --
     pub pickup_message: String,
@@ -74,7 +86,7 @@ impl ItemDefinition {
     pub fn from_item_struct(object: Arc<ObjectDefinition>, s: &TagStruct<'_>) -> Self {
         Self {
             object,
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             pickup_message: s.read_string_id("pickup message").unwrap_or_default(),
             swap_message: s.read_string_id("swap message").unwrap_or_default(),
             pickup_message_dual: s.read_string_id("pickup message (dual)").unwrap_or_default(),

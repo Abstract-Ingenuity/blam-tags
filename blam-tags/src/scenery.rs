@@ -6,9 +6,48 @@
 
 use crate::file::TagFile;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::{Enum, Flags};
 use std::sync::Arc;
 
 const SCENERY_GROUP: [u8; 4] = *b"scen";
+
+/// `pathfinding_policy_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum PathfindingPolicy {
+    #[default]
+    #[strum(serialize = "Tag Default")] TagDefault = 0,
+    #[strum(serialize = "Pathfinding DYNAMIC")] Dynamic = 1,
+    #[strum(serialize = "Pathfinding CUT-OUT")] CutOut = 2,
+    #[strum(serialize = "Pathfinding STATIC")] Static = 3,
+    #[strum(serialize = "Pathfinding NONE")] None = 4,
+}
+
+/// `scenery_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum SceneryFlags {
+    #[strum(serialize = "not physical")] NotPhysical = 0,
+}
+
+/// `lightmapping_policy_enum`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum LightmappingPolicy {
+    #[default]
+    #[strum(serialize = "Per-Vertex")] PerVertex = 0,
+    #[strum(serialize = "Per-Pixel (not implemented)")] PerPixel = 1,
+    #[strum(serialize = "Dynamic")] Dynamic = 2,
+}
 
 #[derive(Debug)]
 pub enum SceneryError {
@@ -46,11 +85,11 @@ impl From<crate::object::ObjectDefinitionError> for SceneryError {
 pub struct SceneryDefinition {
     pub object: Arc<ObjectDefinition>,
     /// `pathfinding policy` enum.
-    pub pathfinding_policy: i16,
+    pub pathfinding_policy: Enum<PathfindingPolicy, i16>,
     /// `flags` (word_flags).
-    pub flags: u16,
+    pub flags: Flags<SceneryFlags, u16>,
     /// `lightmapping policy` enum.
-    pub lightmapping_policy: i16,
+    pub lightmapping_policy: Enum<LightmappingPolicy, i16>,
 }
 
 impl SceneryDefinition {
@@ -63,9 +102,9 @@ impl SceneryDefinition {
         let root = tag.root();
         Ok(Self {
             object,
-            pathfinding_policy: root.read_int_any("pathfinding policy").unwrap_or(0) as i16,
-            flags: root.read_int_any("flags").unwrap_or(0) as u16,
-            lightmapping_policy: root.read_int_any("lightmapping policy").unwrap_or(0) as i16,
+            pathfinding_policy: root.read_enum("pathfinding policy"),
+            flags: root.try_read_flags("flags").unwrap_or_default(),
+            lightmapping_policy: root.read_enum("lightmapping policy"),
         })
     }
 }
