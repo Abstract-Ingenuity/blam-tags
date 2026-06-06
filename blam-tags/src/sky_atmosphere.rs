@@ -11,6 +11,20 @@
 use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::math::{RealPoint3d, RealRgbColor, RealVector3d};
+use crate::typed_enums::Flags;
+
+/// `atmosphere_flags` (`sky_atm_parameters.json`). Discriminants are the
+/// canonical bit indices.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum AtmosphereFlags {
+    #[strum(serialize = "Enable Atmosphere")] EnableAtmosphere = 0,
+    #[strum(serialize = "Override Real Sun Values")] OverrideRealSunValues = 1,
+    #[strum(serialize = "Patchy Fog")] PatchyFog = 2,
+}
 
 /// Errors from sky_atm_parameters walking.
 #[derive(Debug)]
@@ -39,9 +53,8 @@ const SKY_ATM_GROUP: [u8; 4] = *b"skya";
 /// `atmosphere settings[4]` block.
 #[derive(Debug, Clone, Default)]
 pub struct AtmosphereSettings {
-    /// Bit 0: Enable Atmosphere; bit 1: Override Real Sun Values;
-    /// bit 2: Patchy Fog.
-    pub flags: u16,
+    /// `atmosphere_flags`. Test with `.contains(AtmosphereFlags::*)`.
+    pub flags: Flags<AtmosphereFlags, u16>,
     /// Setting name, e.g. "haze_level", "haze_skydome".
     pub name: String,
     /// Sun pitch above horizon, degrees [0, 90].
@@ -116,7 +129,7 @@ pub struct AtmosphereSettings {
 impl AtmosphereSettings {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            flags: s.read_int_any("Flags").unwrap_or(0) as u16,
+            flags: s.try_read_flags("Flags").unwrap_or_default(),
             name: s.read_string_id("Name").unwrap_or_default(),
             sun_pitch: s.read_real("Pitch [0 to 90]").unwrap_or(45.0),
             sun_heading: s.read_real("Heading [0 to 360]").unwrap_or(0.0),
@@ -147,7 +160,7 @@ impl AtmosphereSettings {
     /// `c_atmosphere_fog_interface::accumulate_atmosphere_settings @
     /// 0x1803AFD90` gates the patchy-fog field accumulation on this bit.
     pub fn has_patchy_fog(&self) -> bool {
-        (self.flags & 0x0004) != 0
+        self.flags.contains(AtmosphereFlags::PatchyFog)
     }
 
     /// Compute world-space sun direction (z-up) from pitch + heading.
@@ -179,7 +192,7 @@ impl AtmosphereSettings {
 
     /// True iff the "Enable Atmosphere" flag is set.
     pub fn is_enabled(&self) -> bool {
-        (self.flags & 0x0001) != 0
+        self.flags.contains(AtmosphereFlags::EnableAtmosphere)
     }
 }
 
