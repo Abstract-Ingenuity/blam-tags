@@ -18,6 +18,7 @@
 use crate::api::TagStruct;
 use crate::fields::TagFieldType;
 use crate::file::TagFile;
+use crate::typed_enums::{Enum, Flags};
 use crate::math::RealRgbColor;
 use crate::tag_function::TagFunction;
 
@@ -44,38 +45,41 @@ impl std::error::Error for LightError {}
 
 const LIGHT_GROUP: [u8; 4] = *b"ligh";
 
-/// `flags & 0x02` — engine `light_definition_flags::shadow_casting`.
-/// Per-instance attenuation flags live on `generic_light_instances` —
-/// this bit is on the TAG.
-pub const LIGHT_FLAG_ALLOW_SHADOWS_AND_GELS: u32 = 1 << 0;
-pub const LIGHT_FLAG_SHADOW_CASTING: u32 = 1 << 1;
-pub const LIGHT_FLAG_FIRST_PERSON_ONLY: u32 = 1 << 2;
-pub const LIGHT_FLAG_THIRD_PERSON_ONLY: u32 = 1 << 3;
-pub const LIGHT_FLAG_NO_SPLITSCREEN: u32 = 1 << 4;
-pub const LIGHT_FLAG_RENDER_WHILE_ACTIVE_CAMO: u32 = 1 << 5;
-pub const LIGHT_FLAG_RENDER_IN_MP_OVERRIDE: u32 = 1 << 6;
-pub const LIGHT_FLAG_MOVE_TO_CAMERA_FIRST_PERSON: u32 = 1 << 7;
-pub const LIGHT_FLAG_NEVER_PRIORITY_CULL: u32 = 1 << 8;
-pub const LIGHT_FLAG_AFFECTED_BY_FLASHLIGHTS: u32 = 1 << 9;
-
-/// `type` enum — engine `light_type_enum_definition`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum LightType {
-    /// Point/spherical light (radial falloff). Engine: 0.
-    #[default]
-    Sphere,
-    /// Spotlight cone (`frustum_field_of_view` defines the cone angle).
-    /// Engine: 1.
-    Frustum,
+/// `light_definition_flags` — one variant per bit. Discriminants are the
+/// canonical bit indices from `definitions/halo3_mcc/light.json`. The
+/// per-light shadow gate keys off [`Self::ShadowCasting`] (this is the
+/// TAG bit; per-instance attenuation flags live on
+/// `generic_light_instances`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum LightDefinitionFlags {
+    #[strum(serialize = "allow shadows and gels")] AllowShadowsAndGels = 0,
+    #[strum(serialize = "shadow casting")] ShadowCasting = 1,
+    #[strum(serialize = "render first person only")] RenderFirstPersonOnly = 2,
+    #[strum(serialize = "render third person only")] RenderThirdPersonOnly = 3,
+    #[strum(serialize = "dont render splitscreen")] DontRenderSplitscreen = 4,
+    #[strum(serialize = "render while active camo")] RenderWhileActiveCamo = 5,
+    #[strum(serialize = "render in multiplayer override")] RenderInMultiplayerOverride = 6,
+    #[strum(serialize = "move to camera in first person")] MoveToCameraInFirstPerson = 7,
+    #[strum(serialize = "never priority cull")] NeverPriorityCull = 8,
+    #[strum(serialize = "affected by game_can_use_flashlights")] AffectedByGameCanUseFlashlights = 9,
 }
 
-impl LightType {
-    fn from_int(i: i64) -> Self {
-        match i {
-            1 => Self::Frustum,
-            _ => Self::Sphere,
-        }
-    }
+/// `type` enum — engine `light_type_enum_definition` (`short_enum`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum LightType {
+    /// Point/spherical light (radial falloff).
+    #[default]
+    #[strum(serialize = "sphere")] Sphere = 0,
+    /// Spotlight cone (`frustum_field_of_view` defines the cone angle).
+    #[strum(serialize = "frustum")] Frustum = 1,
 }
 
 /// Walked `light_struct_definition`. The `light_color_function_struct`
@@ -86,10 +90,11 @@ impl LightType {
 /// a stop-gap; revisit when an animated light shows up.
 #[derive(Debug, Clone, Default)]
 pub struct LightDefinition {
-    /// `light_definition_flags`. Test against `LIGHT_FLAG_*`.
-    pub flags: u32,
+    /// `light_definition_flags`. Test with
+    /// `.contains(LightDefinitionFlags::*)`.
+    pub flags: Flags<LightDefinitionFlags, u32>,
 
-    pub light_type: LightType,
+    pub light_type: Enum<LightType, i16>,
 
     /// World-units distance at which the light is fully attenuated.
     pub maximum_distance: f32,
@@ -138,8 +143,9 @@ impl LightDefinition {
     }
 
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        let flags = s.read_int_any("flags").unwrap_or(0) as u32;
-        let light_type = LightType::from_int(s.read_int_any("type").unwrap_or(0) as i64);
+        let flags: Flags<LightDefinitionFlags, u32> =
+            s.try_read_flags("flags").unwrap_or_default();
+        let light_type: Enum<LightType, i16> = s.read_enum("type");
         let maximum_distance = s.read_real("maximum distance").unwrap_or(0.0);
         let frustum_near_width = s.read_real("frustum near width").unwrap_or(0.0);
         let frustum_height_scale = s.read_real("frustum height scale").unwrap_or(1.0);
@@ -177,7 +183,7 @@ impl LightDefinition {
     /// gate at `c_lights_view::submit_visibility_and_render` predicates
     /// off this bit (NOT the per-instance flags on `generic_light_instances`).
     pub fn casts_shadows(&self) -> bool {
-        (self.flags & LIGHT_FLAG_SHADOW_CASTING) != 0
+        self.flags.contains(LightDefinitionFlags::ShadowCasting)
     }
 
     /// True if the light has a non-empty lens flare attachment.
@@ -189,7 +195,7 @@ impl LightDefinition {
     /// True if this is a frustum-shaped light (cone). The engine's
     /// per-light shadow path requires frustum AND `fov < π`.
     pub fn is_frustum(&self) -> bool {
-        matches!(self.light_type, LightType::Frustum)
+        self.light_type == LightType::Frustum
     }
 }
 

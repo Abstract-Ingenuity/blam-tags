@@ -241,6 +241,16 @@ impl<T: SchemaEnum, U: TagInt> fmt::Debug for Enum<T, U> {
     }
 }
 
+/// `Default` for explicit fallback construction only — NOT a decode
+/// path (decode always goes through [`Enum::resolve`], which panics on
+/// an unresolved value). Requires `T: Default` (mark a `#[default]`
+/// variant). Lets walker structs keep `#[derive(Default)]`.
+impl<T: SchemaEnum + Default, U: TagInt> Default for Enum<T, U> {
+    fn default() -> Self {
+        Enum::from_variant(T::default())
+    }
+}
+
 impl<T: SchemaEnum, U: TagInt> PartialEq<T> for Enum<T, U>
 where
     T: PartialEq,
