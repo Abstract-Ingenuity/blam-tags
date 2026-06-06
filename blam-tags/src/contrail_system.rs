@@ -15,6 +15,7 @@ use crate::effects_properties::EditableProperty;
 use crate::file::TagFile;
 use crate::math::RealVector2d;
 use crate::render_method::{RenderMethod, RenderMethodError};
+use crate::typed_enums::{Enum, Flags};
 
 const CNTL_GROUP: [u8; 4] = *b"cntl";
 
@@ -49,23 +50,30 @@ impl From<RenderMethodError> for ContrailSystemError {
 /// `profile shape` enum — same 3 topologies as beam_system (ribbon /
 /// cross / ngon). HLSL: `contrail_render_hlsl.hlsl:163-169` derives
 /// direction from the next profile in the ring buffer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
 pub enum ContrailProfileShape {
     #[default]
-    Ribbon = 0,
-    Cross = 1,
-    Ngon = 2,
+    #[strum(serialize = "aligned ribbon")] Ribbon = 0,
+    #[strum(serialize = "cross")] Cross = 1,
+    #[strum(serialize = "n-gon")] Ngon = 2,
 }
 
-impl ContrailProfileShape {
-    pub fn from_index(i: i64) -> Self {
-        match i {
-            1 => Self::Cross,
-            2 => Self::Ngon,
-            _ => Self::Ribbon,
-        }
-    }
+/// `contrail_appearance_flags`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum ContrailAppearanceFlags {
+    #[strum(serialize = "tint from lightmap")] TintFromLightmap = 0,
+    #[strum(serialize = "double-sided")] DoubleSided = 1,
+    #[strum(serialize = "profile opacity from scale a")] ProfileOpacityFromScaleA = 2,
+    #[strum(serialize = "random u offset")] RandomUOffset = 3,
+    #[strum(serialize = "random v offset")] RandomVOffset = 4,
 }
 
 /// One contrail definition entry (620B `c_contrail_definition`).
@@ -91,8 +99,8 @@ pub struct ContrailDefinition {
     pub profile_rotation: EditableProperty,
     pub profile_rotation_rate: EditableProperty,
     // ---- appearance ----
-    pub appearance_flags: u16,
-    pub profile_shape: ContrailProfileShape,
+    pub appearance_flags: Flags<ContrailAppearanceFlags, u16>,
+    pub profile_shape: Enum<ContrailProfileShape, i8>,
     pub ngon_sides: i8,
     /// Embedded `c_render_method_shader_contrail` — group_tag stamped `b"rmct"`.
     pub shader: Option<RenderMethod>,
@@ -180,10 +188,8 @@ impl ContrailDefinition {
             profile_offset: read_property(s, "profile offset"),
             profile_rotation: read_property(s, "profile rotation"),
             profile_rotation_rate: read_property(s, "profile rotation rate"),
-            appearance_flags: s.read_int_any("appearance flags").unwrap_or(0) as u16,
-            profile_shape: ContrailProfileShape::from_index(
-                s.read_int_any("profile shape").unwrap_or(0) as i64,
-            ),
+            appearance_flags: s.try_read_flags("appearance flags").unwrap_or_default(),
+            profile_shape: s.read_enum("profile shape"),
             ngon_sides: s.read_int_any("number of n-gon sides").unwrap_or(0) as i8,
             shader,
             uv_tiling: s.read_vec2("uv tiling"),

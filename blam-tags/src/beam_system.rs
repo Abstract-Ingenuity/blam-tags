@@ -14,6 +14,7 @@ use crate::effects_properties::EditableProperty;
 use crate::file::TagFile;
 use crate::math::RealVector2d;
 use crate::render_method::{RenderMethod, RenderMethodError};
+use crate::typed_enums::{Enum, Flags};
 
 const BEAM_GROUP: [u8; 4] = *b"beam";
 
@@ -45,27 +46,30 @@ impl From<RenderMethodError> for BeamSystemError {
     }
 }
 
-/// `profile shape` enum — 3 cross-section topologies (HLSL `_profile_*`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
+/// `beam_profile_shape_enum` — 3 cross-section topologies (HLSL `_profile_*`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
 pub enum BeamProfileShape {
-    #[default]
     /// Billboard-based, camera-facing 2-tri ribbon (HLSL `_profile_ribbon`).
-    Ribbon = 0,
+    #[default]
+    #[strum(serialize = "aligned ribbon")] Ribbon = 0,
     /// World-space + axis-aligned cross (4-tri cross).
-    Cross = 1,
+    #[strum(serialize = "cross")] Cross = 1,
     /// N-sided polygon (n from `number_of_ngon_sides`).
-    Ngon = 2,
+    #[strum(serialize = "n-gon")] Ngon = 2,
 }
 
-impl BeamProfileShape {
-    pub fn from_index(i: i64) -> Self {
-        match i {
-            1 => Self::Cross,
-            2 => Self::Ngon,
-            _ => Self::Ribbon,
-        }
-    }
+/// `beam_appearance_flags`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum BeamAppearanceFlags {
+    #[strum(serialize = "double-sided")] DoubleSided = 0,
 }
 
 /// One beam definition entry (520B `c_beam_definition`).
@@ -74,8 +78,8 @@ pub struct BeamDefinition {
     pub name: String,
     /// Embedded `c_render_method_shader_beam` — group stamped to `b"rmb "`.
     pub shader: Option<RenderMethod>,
-    pub appearance_flags: u16,
-    pub profile_shape: BeamProfileShape,
+    pub appearance_flags: Flags<BeamAppearanceFlags, u16>,
+    pub profile_shape: Enum<BeamProfileShape, i8>,
     /// n for n-gon profile shape (3..=N). Ignored for ribbon/cross.
     pub ngon_sides: i8,
     /// uv tiling — u along length (tiles/world unit), v across (absolute).
@@ -155,10 +159,8 @@ impl BeamDefinition {
                 .or_else(|| s.read_string_id("beam name^"))
                 .unwrap_or_default(),
             shader,
-            appearance_flags: s.read_int_any("appearance flags").unwrap_or(0) as u16,
-            profile_shape: BeamProfileShape::from_index(
-                s.read_int_any("profile shape").unwrap_or(0) as i64,
-            ),
+            appearance_flags: s.try_read_flags("appearance flags").unwrap_or_default(),
+            profile_shape: s.read_enum("profile shape"),
             ngon_sides: s.read_int_any("number of n-gon sides").unwrap_or(0) as i8,
             uv_tiling: s.read_vec2("uv tiling"),
             uv_scrolling: s.read_vec2("uv scrolling"),
