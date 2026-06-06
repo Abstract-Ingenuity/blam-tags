@@ -25,8 +25,30 @@
 use crate::api::{TagBlock, TagStruct};
 use crate::file::TagFile;
 use crate::render_method::{RenderMethod, RenderMethodError};
+use crate::typed_enums::{Enum, Flags};
 
 const DECS_GROUP: [u8; 4] = *b"decs";
+
+/// `decal_system_flags` (long_flags). NB: protomorph's `collide` path
+/// (decal/collide.rs) interprets bits 3/4 as "skip instance/structure
+/// secondary" — same wire bits, a different runtime reading of the
+/// authoring names `force quad` / `force planar`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum DecalSystemFlags {
+    #[strum(serialize = "random rotation")] RandomRotation = 0,
+    #[strum(serialize = "random u mirror")] RandomUMirror = 1,
+    #[strum(serialize = "random v mirror")] RandomVMirror = 2,
+    #[strum(serialize = "force quad (use with care)")] ForceQuad = 3,
+    #[strum(serialize = "force planar")] ForcePlanar = 4,
+    #[strum(serialize = "restrict to single material")] RestrictToSingleMaterial = 5,
+    #[strum(serialize = "use primary collision only")] UsePrimaryCollisionOnly = 6,
+    #[strum(serialize = "don't collide with structure")] DontCollideWithStructure = 7,
+    #[strum(serialize = "don't collide with instances")] DontCollideWithInstances = 8,
+}
 
 #[derive(Debug)]
 pub enum DecalSystemError {
@@ -59,27 +81,24 @@ impl From<RenderMethodError> for DecalSystemError {
 /// `_pass_post_albedo` (0) / `_pass_post_static_lighting` (1) — which
 /// render pass `c_decal_system::render_all` should draw this definition
 /// during. See umbrella plan for state-setup deltas between the two.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i32)]
 pub enum DecalPass {
     /// Schema "pre-lighting"; engine `_pass_post_albedo`. Writes to
     /// `_surface_post_HDR` (RT1) during the albedo pass — used for
     /// surface stains, posters, weathering that participate in the
     /// downstream lighting pass like the BSP underneath.
     #[default]
+    #[strum(serialize = "pre-lighting")]
     PreLighting = 0,
     /// Schema "post-lighting"; engine `_pass_post_static_lighting`.
     /// Writes to RT0 (final lit color) — used for additive decals
     /// (laser scorches, blood) that don't want re-lighting.
+    #[strum(serialize = "post-lighting")]
     PostLighting = 1,
-}
-
-impl DecalPass {
-    pub fn from_index(i: i64) -> Self {
-        match i {
-            1 => Self::PostLighting,
-            _ => Self::PreLighting,
-        }
-    }
 }
 
 /// Decal system tag (`decs`) — one palette entry.
@@ -90,7 +109,7 @@ pub struct DecalSystem {
     /// material, primary collision only, don't collide with
     /// structure/instances). Consumed by `c_decal_system::create` +
     /// `collide` + `build_mesh`.
-    pub flags: u32,
+    pub flags: Flags<DecalSystemFlags, u32>,
     /// `max overlapping` — 0 means no limit. Drives the per-cluster
     /// LRU eviction at `add_decal_to_cluster` time.
     pub max_overlapping: i32,
@@ -125,7 +144,7 @@ impl DecalSystem {
             Vec::new()
         };
         Ok(Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             max_overlapping: s.read_int_any("max overlapping").unwrap_or(0) as i32,
             overlapping_threshold: s.read_real("overlapping threshold").unwrap_or(0.0),
             distance_fade_range: (fade_start, fade_end),
@@ -165,7 +184,7 @@ pub struct DecalDefinition {
     /// `cull angle` (degrees) — projections beyond this are dropped.
     pub cull_angle_degrees: f32,
     /// `runtime pass!` — which c_player_view sub-pass to draw in.
-    pub pass: DecalPass,
+    pub pass: Enum<DecalPass, i32>,
     /// `runtime specular_multiplier!`.
     pub specular_multiplier: f32,
     /// `runtime bitmap aspect!` — width/height ratio precomputed by
@@ -205,11 +224,10 @@ impl DecalDefinition {
         let radius = read_real_bounds(s, "radius");
         let decay_time = read_real_bounds(s, "decay time");
         let lifespan = read_real_bounds(s, "lifespan");
-        let pass = DecalPass::from_index(
-            s.read_int_any("runtime pass")
-                .or_else(|| s.read_int_any("runtime pass!"))
-                .unwrap_or(0) as i64,
-        );
+        let pass = s
+            .try_read_enum("runtime pass")
+            .or_else(|| s.try_read_enum("runtime pass!"))
+            .unwrap_or_default();
         Ok(Self {
             name: s
                 .read_string_id("decal name")
