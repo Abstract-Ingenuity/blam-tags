@@ -23,6 +23,171 @@ use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::math::{RealArgbColor, RealBounds};
 use crate::tag_function::TagFunction;
+use crate::typed_enums::{Enum, Flags};
+
+/// `damage_effect_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum DamageEffectFlags {
+    #[strum(serialize = "don't scale damage by distance")] DontScaleDamageByDistance = 0,
+    #[strum(serialize = "area damage players only")] AreaDamagePlayersOnly = 1,
+}
+
+/// `damage_side_effects` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum DamageSideEffect {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "harmless")] Harmless = 1,
+    #[strum(serialize = "lethal to the unsuspecting")] LethalToTheUnsuspecting = 2,
+    #[strum(serialize = "emp")] Emp = 3,
+}
+
+/// `damage_categories` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum DamageCategory {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "falling")] Falling = 1,
+    #[strum(serialize = "bullet")] Bullet = 2,
+    #[strum(serialize = "grenade")] Grenade = 3,
+    #[strum(serialize = "high explosive")] HighExplosive = 4,
+    #[strum(serialize = "sniper")] Sniper = 5,
+    #[strum(serialize = "melee")] Melee = 6,
+    #[strum(serialize = "flame")] Flame = 7,
+    #[strum(serialize = "mounted weapon")] MountedWeapon = 8,
+    #[strum(serialize = "vehicle")] Vehicle = 9,
+    #[strum(serialize = "plasma")] Plasma = 10,
+    #[strum(serialize = "needle")] Needle = 11,
+    #[strum(serialize = "shotgun")] Shotgun = 12,
+}
+
+/// `damage_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum DamageFlags {
+    #[strum(serialize = "does not hurt owner")] DoesNotHurtOwner = 0,
+    #[strum(serialize = "can cause headshots")] CanCauseHeadshots = 1,
+    #[strum(serialize = "pings resistant units")] PingsResistantUnits = 2,
+    #[strum(serialize = "does not hurt friends")] DoesNotHurtFriends = 3,
+    #[strum(serialize = "does not ping units")] DoesNotPingUnits = 4,
+    #[strum(serialize = "detonates explosives")] DetonatesExplosives = 5,
+    #[strum(serialize = "only hurts shields")] OnlyHurtsShields = 6,
+    #[strum(serialize = "causes flaming death")] CausesFlamingDeath = 7,
+    #[strum(serialize = "damage indicators always point down")] DamageIndicatorsAlwaysPointDown = 8,
+    #[strum(serialize = "skips shields")] SkipsShields = 9,
+    #[strum(serialize = "only hurts one infection form")] OnlyHurtsOneInfectionForm = 10,
+    #[strum(serialize = "transfer dmg always uses min")] TransferDmgAlwaysUsesMin = 11,
+    #[strum(serialize = "infection form pop")] InfectionFormPop = 12,
+    #[strum(serialize = "ignore seat scale for dir. dmg")] IgnoreSeatScaleForDirDmg = 13,
+    #[strum(serialize = "forces hard ping if body dmg")] ForcesHardPingIfBodyDmg = 14,
+    #[strum(serialize = "does not hurt players")] DoesNotHurtPlayers = 15,
+    #[strum(serialize = "does not overcombine")] DoesNotOvercombine = 16,
+    #[strum(serialize = "enables special death")] EnablesSpecialDeath = 17,
+    #[strum(serialize = "cannot cause betrayals")] CannotCauseBetrayals = 18,
+    #[strum(serialize = "uses old EMP behavior")] UsesOldEmpBehavior = 19,
+    #[strum(serialize = "ignores damage resistance")] IgnoresDamageResistance = 20,
+    #[strum(serialize = "force s_kill on death")] ForceSKillOnDeath = 21,
+    #[strum(serialize = "cause magic deceleration")] CauseMagicDeceleration = 22,
+}
+
+/// `global_reverse_transition_functions_enum` (short_enum). Owned here;
+/// imported by `lens_flare`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum GlobalReverseTransitionFunction {
+    #[default]
+    #[strum(serialize = "linear")] Linear = 0,
+    #[strum(serialize = "late")] Late = 1,
+    #[strum(serialize = "very late")] VeryLate = 2,
+    #[strum(serialize = "early")] Early = 3,
+    #[strum(serialize = "very early")] VeryEarly = 4,
+    #[strum(serialize = "cosine")] Cosine = 5,
+    #[strum(serialize = "zero")] Zero = 6,
+    #[strum(serialize = "one")] One = 7,
+}
+
+/// `global_periodic_functions_enum` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum GlobalPeriodicFunction {
+    #[default]
+    #[strum(serialize = "one")] One = 0,
+    #[strum(serialize = "zero")] Zero = 1,
+    #[strum(serialize = "cosine")] Cosine = 2,
+    #[strum(serialize = "cosine (variable period)")] CosineVariablePeriod = 3,
+    #[strum(serialize = "diagonal wave")] DiagonalWave = 4,
+    #[strum(serialize = "diagonal wave (variable period)")] DiagonalWaveVariablePeriod = 5,
+    #[strum(serialize = "slide")] Slide = 6,
+    #[strum(serialize = "slide (variable period)")] SlideVariablePeriod = 7,
+    #[strum(serialize = "noise")] Noise = 8,
+    #[strum(serialize = "jitter")] Jitter = 9,
+    #[strum(serialize = "wander")] Wander = 10,
+    #[strum(serialize = "spark")] Spark = 11,
+}
+
+/// `damage_effect_player_response_types` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum DamageEffectPlayerResponseType {
+    #[default]
+    #[strum(serialize = "shielded")] Shielded = 0,
+    #[strum(serialize = "unshielded")] Unshielded = 1,
+    #[strum(serialize = "all")] All = 2,
+}
+
+/// `screen_flash_types` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum ScreenFlashType {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "lighten")] Lighten = 1,
+    #[strum(serialize = "darken")] Darken = 2,
+    #[strum(serialize = "max")] Max = 3,
+    #[strum(serialize = "min")] Min = 4,
+    #[strum(serialize = "invert")] Invert = 5,
+    #[strum(serialize = "tint")] Tint = 6,
+}
+
+/// `screen_flash_priorities` (short_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum ScreenFlashPriority {
+    #[default]
+    #[strum(serialize = "low")] Low = 0,
+    #[strum(serialize = "medium")] Medium = 1,
+    #[strum(serialize = "high")] High = 2,
+}
 
 const JPT_GROUP: [u8; 4] = *b"jpt!";
 
@@ -46,22 +211,18 @@ impl std::fmt::Display for DamageEffectError {
 
 impl std::error::Error for DamageEffectError {}
 
-/// `player_response_type_enum` — gates which sub-struct in the
-/// `player_responses[]` entry the engine actually evaluates.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct PlayerResponseType(pub i16);
 
 /// `screen_flash_definition_struct` — full-screen color blend feedback.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ScreenFlash {
     /// `type` (short_enum) — flash kind (linear, lit, max, etc.).
-    pub flash_type: i16,
+    pub flash_type: Enum<ScreenFlashType, i16>,
     /// `priority` (short_enum) — display order vs other flashes.
-    pub priority: i16,
+    pub priority: Enum<ScreenFlashPriority, i16>,
     /// Total duration in seconds.
     pub duration_seconds: f32,
     /// `fade_function` (short_enum) — `fade_function_enum`.
-    pub fade_function: i16,
+    pub fade_function: Enum<GlobalReverseTransitionFunction, i16>,
     /// `maximum intensity` (0..1).
     pub maximum_intensity: f32,
     /// `color` (real_argb_color).
@@ -107,7 +268,7 @@ pub struct DamageSoundEffect {
 /// (screen_flash / rumble / sound_effect) actually fires.
 #[derive(Debug, Clone, Default)]
 pub struct PlayerResponse {
-    pub response_type: PlayerResponseType,
+    pub response_type: Enum<DamageEffectPlayerResponseType, i16>,
     pub screen_flash: ScreenFlash,
     pub rumble: Rumble,
     pub sound_effect: DamageSoundEffect,
@@ -120,7 +281,7 @@ pub struct CameraImpulse {
     /// `impulse duration` in seconds.
     pub duration_seconds: f32,
     /// `fade function` (short_enum).
-    pub fade_function: i16,
+    pub fade_function: Enum<GlobalReverseTransitionFunction, i16>,
     /// `rotation` in degrees.
     pub rotation_degrees: f32,
     /// `pushback` in world units (forward motion impulse).
@@ -135,13 +296,13 @@ pub struct CameraShake {
     /// `shake duration` in seconds.
     pub duration_seconds: f32,
     /// `falloff function` (short_enum) — envelopes amplitude over time.
-    pub falloff_function: i16,
+    pub falloff_function: Enum<GlobalReverseTransitionFunction, i16>,
     /// Random per-frame translation amplitude in world units.
     pub random_translation: f32,
     /// Random per-frame rotation amplitude in degrees.
     pub random_rotation_degrees: f32,
     /// `wobble function` (short_enum) — perturbs frequency / phase.
-    pub wobble_function: i16,
+    pub wobble_function: Enum<GlobalPeriodicFunction, i16>,
     /// `wobble function period` in seconds.
     pub wobble_period_seconds: f32,
     /// `wobble weight` (0..1) — 0 = wobble has no effect.
@@ -167,10 +328,10 @@ pub struct DamageEffect {
     // ---- damage math (gameplay) ----
     pub radius: RealBounds,
     pub cutoff_scale: f32,
-    pub effect_flags: u32,
-    pub side_effect: i16,
-    pub category: i16,
-    pub flags: u32,
+    pub effect_flags: Flags<DamageEffectFlags, u32>,
+    pub side_effect: Enum<DamageSideEffect, i16>,
+    pub category: Enum<DamageCategory, i16>,
+    pub flags: Flags<DamageFlags, u32>,
     pub aoe_core_radius: f32,
     pub damage_lower_bound: f32,
     pub damage_upper_bound: RealBounds,
@@ -226,10 +387,10 @@ impl DamageEffect {
         Self {
             radius: s.read_real_bounds("radius"),
             cutoff_scale: s.read_real("cutoff scale").unwrap_or(0.0),
-            effect_flags: s.read_int_any("effect flags").unwrap_or(0) as u32,
-            side_effect: s.read_int_any("side effect").unwrap_or(0) as i16,
-            category: s.read_int_any("category").unwrap_or(0) as i16,
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            effect_flags: s.try_read_flags("effect flags").unwrap_or_default(),
+            side_effect: s.try_read_enum("side effect").unwrap_or_default(),
+            category: s.try_read_enum("category").unwrap_or_default(),
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             aoe_core_radius: s.read_real("AOE core radius").unwrap_or(0.0),
             damage_lower_bound: s.read_real("damage lower bound").unwrap_or(0.0),
             damage_upper_bound: s.read_real_bounds("damage upper bound"),
@@ -254,7 +415,7 @@ impl DamageEffect {
 
             camera_impulse: CameraImpulse {
                 duration_seconds: s.read_real("impulse duration").unwrap_or(0.0),
-                fade_function: s.read_int_any("fade function").unwrap_or(0) as i16,
+                fade_function: s.try_read_enum("fade function").unwrap_or_default(),
                 rotation_degrees: s.read_real("rotation").unwrap_or(0.0),
                 pushback: s.read_real("pushback").unwrap_or(0.0),
                 jitter: s.read_real_bounds("jitter"),
@@ -262,10 +423,10 @@ impl DamageEffect {
 
             camera_shake: CameraShake {
                 duration_seconds: s.read_real("shake duration").unwrap_or(0.0),
-                falloff_function: s.read_int_any("falloff function").unwrap_or(0) as i16,
+                falloff_function: s.try_read_enum("falloff function").unwrap_or_default(),
                 random_translation: s.read_real("random translation").unwrap_or(0.0),
                 random_rotation_degrees: s.read_real("random rotation").unwrap_or(0.0),
-                wobble_function: s.read_int_any("wobble function").unwrap_or(0) as i16,
+                wobble_function: s.try_read_enum("wobble function").unwrap_or_default(),
                 wobble_period_seconds: s.read_real("wobble function period").unwrap_or(0.0),
                 wobble_weight: s.read_real("wobble weight").unwrap_or(0.0),
             },
@@ -299,7 +460,7 @@ fn read_player_responses(s: &TagStruct<'_>) -> Vec<PlayerResponse> {
 
 impl PlayerResponse {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
-        let response_type = PlayerResponseType(s.read_int_any("response type").unwrap_or(0) as i16);
+        let response_type = s.try_read_enum("response type").unwrap_or_default();
         let screen_flash = s
             .field("screen flash")
             .and_then(|f| f.as_struct())
@@ -322,10 +483,10 @@ impl PlayerResponse {
 impl ScreenFlash {
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
-            flash_type: s.read_int_any("type").unwrap_or(0) as i16,
-            priority: s.read_int_any("priority").unwrap_or(0) as i16,
+            flash_type: s.try_read_enum("type").unwrap_or_default(),
+            priority: s.try_read_enum("priority").unwrap_or_default(),
             duration_seconds: s.read_real("duration").unwrap_or(0.0),
-            fade_function: s.read_int_any("fade function").unwrap_or(0) as i16,
+            fade_function: s.try_read_enum("fade function").unwrap_or_default(),
             maximum_intensity: s.read_real("maximum intensity").unwrap_or(0.0),
             color: read_real_argb(s, "color"),
         }
