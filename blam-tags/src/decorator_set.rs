@@ -15,6 +15,7 @@
 use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::math::RealRgbColor;
+use crate::typed_enums::{Enum, Flags};
 
 #[derive(Debug)]
 pub enum DecoratorSetError {
@@ -39,64 +40,65 @@ impl std::error::Error for DecoratorSetError {}
 const DECORATOR_SET_GROUP: [u8; 4] = *b"dctr";
 
 /// `s_decorator_set::e_render_flags` (decorator_tag_definitions.h:32-37).
-pub mod render_flags {
-    /// Render two-sided (no back-face culling). Set on most leafy
-    /// foliage like thistle, ferns.
-    pub const TWO_SIDED: u8 = 1 << 0;
-    /// Gate the 10-sample lightprobe bake with a visibility pre-cast:
-    /// before evaluating each sample, cast a segment from the placement's
-    /// mesh-bounding-sphere center to the sample world position and
-    /// skip samples blocked by BSP geometry. Engine still samples the
-    /// atlas lightprobe per surviving sample — this is NOT a "use tint
-    /// directly" shortcut. Schema annotation: "takes twice as long to
-    /// light." Consumed in `decorators::bake::bake_placement` (Reach
-    /// `light_placement @ 0x82797d00` step 6d).
-    pub const DONT_SAMPLE_LIGHTING_THROUGH_GEOMETRY: u8 = 1 << 1;
+/// `decorator_set_render_flags_definition`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u8)]
+pub enum DecoratorSetRenderFlags {
+    /// Render two-sided (no back-face culling). Set on most leafy foliage.
+    #[strum(serialize = "render two sided")] RenderTwoSided = 0,
+    /// Gate the 10-sample lightprobe bake with a visibility pre-cast
+    /// (schema: "takes twice as long to light"). Consumed in
+    /// `decorators::bake::bake_placement`.
+    #[strum(serialize = "dont sample light through geometry")] DontSampleLightThroughGeometry = 1,
+}
+
+/// `decorator_type_flags_definition`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum DecoratorTypeFlags {
+    #[strum(serialize = "only on ground")] OnlyOnGround = 0,
+    #[strum(serialize = "random rotation")] RandomRotation = 1,
+    #[strum(serialize = "rotate x axis down")] RotateXAxisDown = 2,
+    #[strum(serialize = "align to normal")] AlignToNormal = 3,
+    #[strum(serialize = "align random")] AlignRandom = 4,
 }
 
 /// One of 6 dedicated decorator shader variants. The runtime picks
 /// `decorator_render_<variant>.pixel_shader` based on this enum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
 pub enum RenderShader {
     #[default]
-    WindDynamicLights = 0,
-    DynamicLights = 1,
-    Static = 2,
-    DominantLightOnly = 3,
-    WavyDynamicLights = 4,
+    #[strum(serialize = "wind + dynamic lights")] WindDynamicLights = 0,
+    #[strum(serialize = "still + dynamic lights")] DynamicLights = 1,
+    #[strum(serialize = "still + no lights")] Static = 2,
+    #[strum(serialize = "still + sun light only")] DominantLightOnly = 3,
+    #[strum(serialize = "wavy + dynamic lights")] WavyDynamicLights = 4,
     /// "shaded + dynamic lights" — used by thistle.
-    ShadedDynamicLights = 5,
+    #[strum(serialize = "shaded + dynamic lights")] ShadedDynamicLights = 5,
 }
 
-impl RenderShader {
-    pub fn from_u8(v: u8) -> Self {
-        match v {
-            0 => Self::WindDynamicLights,
-            1 => Self::DynamicLights,
-            2 => Self::Static,
-            3 => Self::DominantLightOnly,
-            4 => Self::WavyDynamicLights,
-            _ => Self::ShadedDynamicLights,
-        }
-    }
-}
-
-/// `s_decorator_set::e_lighting_sample_pattern` (h:48-53).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[repr(u8)]
+/// `decorator_set_lighting_sample_pattern_enum_definition`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
 pub enum LightingSamplePattern {
     /// Default — sample lighting from below the placement (grass-like).
     #[default]
-    Ground = 0,
+    #[strum(serialize = "ground default")] Ground = 0,
     /// Hanging foliage — sample from above (mossy overhangs).
-    Hanging = 1,
-}
-
-impl LightingSamplePattern {
-    pub fn from_u8(v: u8) -> Self {
-        if v == 1 { Self::Hanging } else { Self::Ground }
-    }
+    #[strum(serialize = "hanging")] Hanging = 1,
 }
 
 /// One entry in `decorator_types` — picks a mesh subpart from the
@@ -107,7 +109,7 @@ pub struct DecoratorType {
     pub index: i32,
     /// Block index into the render_model's mesh table.
     pub mesh: i32,
-    pub flags: u32,
+    pub flags: Flags<DecoratorTypeFlags, u32>,
     pub scale_min: f32,
     pub scale_max: f32,
     pub tilt_min: f32,
@@ -132,7 +134,7 @@ impl DecoratorType {
             name: s.read_string_id("name").unwrap_or_default(),
             index: s.read_int_any("index").unwrap_or(0) as i32,
             mesh: s.read_block_index("mesh") as i32,
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             scale_min: s.read_real("scale min").unwrap_or(1.0),
             scale_max: s.read_real("scale max").unwrap_or(1.0),
             tilt_min: s.read_real("tilt min").unwrap_or(0.0),
@@ -165,9 +167,9 @@ pub struct DecoratorSet {
     /// Tag-ref path to the `.bitmap` rendered onto the foliage.
     pub texture_path: String,
 
-    pub render_flags: u8,
-    pub render_shader: RenderShader,
-    pub lighting_sample_pattern: LightingSamplePattern,
+    pub render_flags: Flags<DecoratorSetRenderFlags, u8>,
+    pub render_shader: Enum<RenderShader, i8>,
+    pub lighting_sample_pattern: Enum<LightingSamplePattern, i8>,
 
     /// `translucency` — 0 = opaque, 1 = both sides equal intensity. Only
     /// affects dynamic-light shaders. `_a/_b/_c` are post-processed
@@ -286,11 +288,9 @@ impl DecoratorSet {
                 .read_int_any("render model instance name valid count")
                 .unwrap_or(0) as i32,
             texture_path: s.read_tag_ref_path("texture").unwrap_or_default(),
-            render_flags: s.read_int_any("render flags").unwrap_or(0) as u8,
-            render_shader: RenderShader::from_u8(s.read_int_any("render shader").unwrap_or(0) as u8),
-            lighting_sample_pattern: LightingSamplePattern::from_u8(
-                s.read_int_any("light sampling pattern").unwrap_or(0) as u8,
-            ),
+            render_flags: s.try_read_flags("render flags").unwrap_or_default(),
+            render_shader: s.read_enum("render shader"),
+            lighting_sample_pattern: s.read_enum("light sampling pattern"),
             translucency: s.read_real("translucency").unwrap_or(0.5),
             translucency_a: s.read_real("translucency A").unwrap_or(0.0),
             translucency_b: s.read_real("translucency B").unwrap_or(0.0),
@@ -310,10 +310,11 @@ impl DecoratorSet {
     }
 
     pub fn is_two_sided(&self) -> bool {
-        (self.render_flags & render_flags::TWO_SIDED) != 0
+        self.render_flags.contains(DecoratorSetRenderFlags::RenderTwoSided)
     }
 
     pub fn dont_sample_lighting_through_geometry(&self) -> bool {
-        (self.render_flags & render_flags::DONT_SAMPLE_LIGHTING_THROUGH_GEOMETRY) != 0
+        self.render_flags
+            .contains(DecoratorSetRenderFlags::DontSampleLightThroughGeometry)
     }
 }
