@@ -95,7 +95,13 @@ const NAME_SPECIALS: [char; 6] = ['#', '&', ':', '!', '*', '^'];
 /// `"type^"`, `"N-Gon"` fold to `"allowshadowsandgels"`,
 /// `"shaderflags"`, `"type"`, `"ngon"`.
 fn fold(name: &str) -> String {
+    // Strip Bungie field-name markers first, then any `{alternate name}`
+    // annotation. Enum option strings in the source schema list old /
+    // display alternates after the canonical name as `primary{alternate}`
+    // (e.g. `system age{emitter age}`); only the primary is canonical, and
+    // a tag may embed either form, so cut at the first `{` on both sides.
     let base = name.split(NAME_SPECIALS).next().unwrap_or(name);
+    let base = base.split('{').next().unwrap_or(base);
     base.chars()
         .filter(|c| c.is_ascii_alphanumeric())
         .map(|c| c.to_ascii_lowercase())
@@ -437,6 +443,10 @@ mod tests {
         assert_eq!(ContentFlags::from_schema_name("double-sided#renders both faces"), Some(ContentFlags::DoubleSided));
         assert_eq!(ContentFlags::from_schema_name("additive*"), Some(ContentFlags::Additive));
         assert_eq!(ContentFlags::from_schema_name("subtractive^"), Some(ContentFlags::Subtractive));
+        // `{alternate name}` annotations are stripped before matching, so a
+        // tag embedding either the primary or the full `primary{alt}` form
+        // resolves to the same variant.
+        assert_eq!(ContentFlags::from_schema_name("additive{old additive}"), Some(ContentFlags::Additive));
         assert_eq!(BeamProfileShape::from_schema_name("bogus"), None);
         // index <-> variant
         assert_eq!(BeamProfileShape::Cross.to_index(), 1);
