@@ -31,6 +31,7 @@ use std::io::Write;
 
 use crate::api::{TagBlock, TagStruct};
 use crate::file::TagFile;
+use crate::typed_enums::SchemaEnum;
 
 pub mod dds;
 pub mod decode;
@@ -383,8 +384,12 @@ impl<'a> BitmapImage<'a> {
     /// when the field is missing or out of range — the engine treats
     /// "unknown" as "use default for this format/usage" anyway.
     pub fn curve(&self) -> BitmapCurve {
-        let raw = self.elem.read_int_any("curve").unwrap_or(0).max(0) as u8;
-        BitmapCurve::from_index(raw)
+        // Resolve by embedded schema name (drift-immune); fall back to
+        // Unknown when the field is absent or its name doesn't resolve.
+        self.elem
+            .read_enum_name("curve")
+            .and_then(|n| BitmapCurve::from_schema_name(&n))
+            .unwrap_or(BitmapCurve::Unknown)
     }
 
     /// `true` for cube map textures (six 2D surfaces under one image).

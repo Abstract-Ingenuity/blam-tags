@@ -366,29 +366,20 @@ impl BitmapFormat {
 /// (e.g. `"xRGB (gamma about 2.0){SRGB (gamma 2.2)}"` for `XrgbGamma2`),
 /// so callers should read the underlying integer rather than the
 /// resolved string.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `bitmap_curve_enum` (char_enum). Resolved by embedded schema name
+/// (drift-immune) via the `SchemaEnum` blanket `from_schema_name`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
 pub enum BitmapCurve {
-    Unknown = 0,
+    #[default]
+    #[strum(serialize = "unknown")] Unknown = 0,
     /// xRGB on Xenon, sRGB-equivalent (~γ 2.2) on PC.
-    XrgbGamma2 = 1,
-    Gamma2 = 2,
-    Linear = 3,
-    OffsetLog = 4,
-    Srgb = 5,
-}
-
-impl BitmapCurve {
-    /// Map an integer curve index (as stored in the tag) to the enum.
-    /// Returns `Unknown` for out-of-range values rather than failing —
-    /// the engine treats unknown curves as "use default" anyway.
-    pub fn from_index(index: u8) -> Self {
-        match index {
-            1 => Self::XrgbGamma2,
-            2 => Self::Gamma2,
-            3 => Self::Linear,
-            4 => Self::OffsetLog,
-            5 => Self::Srgb,
-            _ => Self::Unknown,
-        }
-    }
+    #[strum(serialize = "xRGB (gamma about 2.0)")] XrgbGamma2 = 1,
+    #[strum(serialize = "gamma 2.0")] Gamma2 = 2,
+    #[strum(serialize = "linear")] Linear = 3,
+    #[strum(serialize = "offset log")] OffsetLog = 4,
+    #[strum(serialize = "sRGB")] Srgb = 5,
 }
