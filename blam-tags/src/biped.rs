@@ -12,10 +12,84 @@ use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::math::{AngleBounds, Bounds};
 use crate::object::ObjectDefinition;
+use crate::typed_enums::Flags;
 use crate::unit::UnitDefinition;
 use std::sync::Arc;
 
 const BIPED_GROUP: [u8; 4] = *b"bipd";
+
+/// `biped_definition_flags` (long_flags). `unusedN` bits are
+/// schema-hidden (`!`) and not author-meaningful.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum BipedDefinitionFlags {
+    #[strum(serialize = "turns without animating")] TurnsWithoutAnimating = 0,
+    #[strum(serialize = "unused4")] Unused4 = 1,
+    #[strum(serialize = "immune to falling damage")] ImmuneToFallingDamage = 2,
+    #[strum(serialize = "unused0")] Unused0 = 3,
+    #[strum(serialize = "unused1")] Unused1 = 4,
+    #[strum(serialize = "unused2")] Unused2 = 5,
+    #[strum(serialize = "random speed increase")] RandomSpeedIncrease = 6,
+    #[strum(serialize = "unused3")] Unused3 = 7,
+    #[strum(serialize = "spawn death children on destroy")] SpawnDeathChildrenOnDestroy = 8,
+    #[strum(serialize = "stunned by emp damage")] StunnedByEmpDamage = 9,
+    #[strum(serialize = "dead physics when stunned")] DeadPhysicsWhenStunned = 10,
+    #[strum(serialize = "always ragdoll when dead")] AlwaysRagdollWhenDead = 11,
+    #[strum(serialize = "snaps turns")] SnapsTurns = 12,
+}
+
+/// `character_physics_flags` (long_flags). Shared by biped + creature
+/// (both hang `character_physics_struct` off their root).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum CharacterPhysicsFlags {
+    #[strum(serialize = "centered_at_origin")] CenteredAtOrigin = 0,
+    #[strum(serialize = "shape spherical")] ShapeSpherical = 1,
+    #[strum(serialize = "use player physics")] UsePlayerPhysics = 2,
+    #[strum(serialize = "climb any surface")] ClimbAnySurface = 3,
+    #[strum(serialize = "flying")] Flying = 4,
+    #[strum(serialize = "not physical")] NotPhysical = 5,
+    #[strum(serialize = "dead character collision group")] DeadCharacterCollisionGroup = 6,
+    #[strum(serialize = "suppress ground planes on bipeds")] SuppressGroundPlanesOnBipeds = 7,
+}
+
+/// `flying_physics_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum FlyingPhysicsFlags {
+    #[strum(serialize = "use world up")] UseWorldUp = 0,
+}
+
+/// `biped_lock_on_flags_definition` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum BipedLockOnFlags {
+    #[strum(serialize = "locked by human targeting")] LockedByHumanTargeting = 0,
+    #[strum(serialize = "locked by plasma targeting")] LockedByPlasmaTargeting = 1,
+    #[strum(serialize = "always locked by plasma targeting")] AlwaysLockedByPlasmaTargeting = 2,
+}
+
+/// `biped_leap_flags_definition` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum BipedLeapFlags {
+    #[strum(serialize = "force early roll")] ForceEarlyRoll = 0,
+}
 
 #[derive(Debug)]
 pub enum BipedError {
@@ -73,7 +147,7 @@ pub struct BipedFlyingPhysics {
     pub angular_acceleration_maximum: f32,
     /// `crouch velocity modifier:[0,1]`.
     pub crouch_velocity_modifier: f32,
-    pub flags: u32,
+    pub flags: Flags<FlyingPhysicsFlags, u32>,
 }
 
 /// Walked `character_physics_ground_struct` (64 bytes). All
@@ -99,14 +173,14 @@ pub struct BipedGroundPhysics {
 /// Walked `biped_lock_on_data_struct` (size 8).
 #[derive(Debug, Clone, Default)]
 pub struct BipedLockOnData {
-    pub flags: u32,
+    pub flags: Flags<BipedLockOnFlags, u32>,
     pub lock_on_distance: f32,
 }
 
 /// Walked `biped_leaping_data_struct` (size 48).
 #[derive(Debug, Clone, Default)]
 pub struct BipedLeapingData {
-    pub leap_flags: u32,
+    pub leap_flags: Flags<BipedLeapFlags, u32>,
     /// `dampening scale:[0,1]` — 1 = very slow changes.
     pub dampening_scale: f32,
     /// `roll delay:[0,1]` — 1 = roll fast and late.
@@ -152,7 +226,7 @@ pub struct BipedGroundFittingData {
 /// `*_compute_function_value`.
 #[derive(Debug, Clone, Default)]
 pub struct BipedPhysics {
-    pub flags: u32,
+    pub flags: Flags<CharacterPhysicsFlags, u32>,
     pub height_standing: f32,
     pub height_crouching: f32,
     pub radius: f32,
@@ -181,7 +255,7 @@ pub struct BipedDefinition {
     /// `moving turning speed:degrees per second`.
     pub moving_turning_speed: f32,
     /// `flags` (long_flags) — biped-specific.
-    pub flags: u32,
+    pub flags: Flags<BipedDefinitionFlags, u32>,
     /// `stationary turning threshold` (angle).
     pub stationary_turning_threshold: f32,
 
@@ -289,7 +363,7 @@ impl BipedDefinition {
         Ok(Self {
             unit,
             moving_turning_speed: root.read_real("moving turning speed").unwrap_or(0.0),
-            flags: root.read_int_any("flags").unwrap_or(0) as u32,
+            flags: root.try_read_flags("flags").unwrap_or_default(),
             stationary_turning_threshold: root
                 .read_real("stationary turning threshold")
                 .unwrap_or(0.0),
@@ -375,14 +449,14 @@ impl BipedDefinition {
 
 fn parse_lock_on(s: &TagStruct<'_>) -> BipedLockOnData {
     BipedLockOnData {
-        flags: s.read_int_any("flags").unwrap_or(0) as u32,
+        flags: s.try_read_flags("flags").unwrap_or_default(),
         lock_on_distance: s.read_real("lock on distance").unwrap_or(0.0),
     }
 }
 
 fn parse_leaping(s: &TagStruct<'_>) -> BipedLeapingData {
     BipedLeapingData {
-        leap_flags: s.read_int_any("leap flags").unwrap_or(0) as u32,
+        leap_flags: s.try_read_flags("leap flags").unwrap_or_default(),
         dampening_scale: s.read_real("dampening scale").unwrap_or(0.0),
         roll_delay: s.read_real("roll delay").unwrap_or(0.0),
         cannonball_off_axis_scale: s.read_real("cannonball off-axis scale").unwrap_or(0.0),
@@ -437,7 +511,7 @@ impl BipedPhysics {
                 .unwrap_or(0)
         };
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             height_standing: s.read_real("height standing").unwrap_or(0.0),
             height_crouching: s.read_real("height crouching").unwrap_or(0.0),
             radius: s.read_real("radius").unwrap_or(0.0),
@@ -492,6 +566,6 @@ fn parse_flying(s: &TagStruct<'_>) -> BipedFlyingPhysics {
         angular_velocity_maximum: s.read_real("angular velocity maximum").unwrap_or(0.0),
         angular_acceleration_maximum: s.read_real("angular acceleration maximum").unwrap_or(0.0),
         crouch_velocity_modifier: s.read_real("crouch velocity modifier").unwrap_or(0.0),
-        flags: s.read_int_any("flags").unwrap_or(0) as u32,
+        flags: s.try_read_flags("flags").unwrap_or_default(),
     }
 }

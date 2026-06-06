@@ -7,10 +7,64 @@
 use crate::api::TagStruct;
 use crate::file::TagFile;
 use crate::object::ObjectDefinition;
+use crate::typed_enums::{Enum, Flags};
 use crate::unit::UnitDefinition;
 use std::sync::Arc;
 
 const VEHICLE_GROUP: [u8; 4] = *b"vehi";
+
+/// `vehicle_flags` (long_flags) — vehicle_group variant.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum VehicleFlags {
+    #[strum(serialize = "passengers adopt original squad")] PassengersAdoptOriginalSquad = 0,
+    #[strum(serialize = "snap facing to forward (ghosts)")] SnapFacingToForward = 1,
+    #[strum(serialize = "throttle to target (hornets)")] ThrottleToTarget = 2,
+    #[strum(serialize = "stationary fight (tanks)")] StationaryFight = 3,
+    #[strum(serialize = "keep moving")] KeepMoving = 4,
+}
+
+/// `havok_vehicle_physics_definition_flags` (long_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum HavokVehiclePhysicsFlags {
+    #[strum(serialize = "invalid")] Invalid = 0,
+}
+
+/// `player_training_vehicle_type_enum` (char_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum PlayerTrainingVehicleType {
+    #[default]
+    #[strum(serialize = "none")] None = 0,
+    #[strum(serialize = "warthog")] Warthog = 1,
+    #[strum(serialize = "warthog turret")] WarthogTurret = 2,
+    #[strum(serialize = "ghost")] Ghost = 3,
+    #[strum(serialize = "banshee")] Banshee = 4,
+    #[strum(serialize = "tank")] Tank = 5,
+    #[strum(serialize = "wraith")] Wraith = 6,
+}
+
+/// `vehicle_size_enum` (char_enum). Determines seat-size eligibility.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum VehicleSize {
+    #[default]
+    #[strum(serialize = "small")] Small = 0,
+    #[strum(serialize = "large")] Large = 1,
+}
 
 #[derive(Debug)]
 pub enum VehicleError {
@@ -96,7 +150,7 @@ impl VehiclePhysicsTypes {
 /// directly on the engine side, not via compute_function_value.
 #[derive(Debug, Clone, Default)]
 pub struct HavokVehiclePhysics {
-    pub flags: u32,
+    pub flags: Flags<HavokVehiclePhysicsFlags, u32>,
     pub ground_friction: f32,
     pub ground_depth: f32,
     pub ground_damp_factor: f32,
@@ -131,7 +185,7 @@ impl HavokVehiclePhysics {
                 .unwrap_or(0)
         };
         Self {
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             ground_friction: s.read_real("ground friction").unwrap_or(0.0),
             ground_depth: s.read_real("ground depth").unwrap_or(0.0),
             ground_damp_factor: s.read_real("ground damp factor").unwrap_or(0.0),
@@ -171,15 +225,15 @@ impl HavokVehiclePhysics {
 pub struct VehicleDefinition {
     pub unit: Arc<UnitDefinition>,
     /// `flags` (long_flags) — vehicle-specific.
-    pub flags: u32,
+    pub flags: Flags<VehicleFlags, u32>,
     /// `physics types` substruct.
     pub physics_types: VehiclePhysicsTypes,
     /// `havok vehicle physics` substruct.
     pub havok_vehicle_physics: HavokVehiclePhysics,
     /// `player training vehicle type` (char_enum).
-    pub player_training_vehicle_type: i8,
+    pub player_training_vehicle_type: Enum<PlayerTrainingVehicleType, i8>,
     /// `vehicle size` (char_enum). Determines seat-size eligibility.
-    pub vehicle_size: i8,
+    pub vehicle_size: Enum<VehicleSize, i8>,
     /// `minimum flipping angular velocity`.
     pub minimum_flipping_angular_velocity: f32,
     /// `maximum flipping angular velocity`.
@@ -221,13 +275,11 @@ impl VehicleDefinition {
             .unwrap_or_default();
         Ok(Self {
             unit,
-            flags: root.read_int_any("flags").unwrap_or(0) as u32,
+            flags: root.try_read_flags("flags").unwrap_or_default(),
             physics_types,
             havok_vehicle_physics,
-            player_training_vehicle_type: root
-                .read_int_any("player training vehicle type")
-                .unwrap_or(0) as i8,
-            vehicle_size: root.read_int_any("vehicle size").unwrap_or(0) as i8,
+            player_training_vehicle_type: root.read_enum("player training vehicle type"),
+            vehicle_size: root.read_enum("vehicle size"),
             minimum_flipping_angular_velocity: root
                 .read_real("minimum flipping angular velocity")
                 .unwrap_or(0.0),
