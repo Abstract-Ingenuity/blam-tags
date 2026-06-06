@@ -9,6 +9,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tiff = "0.9"
 bcdec_rs = "0.2"
 half = "2"
+num-traits = "0.2"
+num-derive = "0.4"
+strum = { version = "0.27", features = ["derive"] }
 
 [dev-dependencies]
 md5 = "0.7"

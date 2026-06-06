@@ -356,6 +356,103 @@ impl<'a> TagStruct<'a> {
         }
     }
 
+    /// Read the resolved `(bit, name)` pairs of the set bits of a flags
+    /// field, regardless of width. `None` if the field is missing or
+    /// isn't a (non-block) flags field.
+    pub fn read_flag_names(&self, name: &str) -> Option<Vec<(u32, String)>> {
+        match self.field(name)?.value()? {
+            TagFieldData::ByteFlags { names, .. }
+            | TagFieldData::WordFlags { names, .. }
+            | TagFieldData::LongFlags { names, .. } => Some(names),
+            _ => None,
+        }
+    }
+
+    /// Extract `(raw_value_i128, embedded_name)` from an enum field, or
+    /// `None` if the field is absent / not an enum.
+    fn enum_raw_and_name(&self, name: &str) -> Option<(i128, Option<String>)> {
+        match self.field(name)?.value()? {
+            TagFieldData::CharEnum { value, name } => Some((value as i128, name)),
+            TagFieldData::ShortEnum { value, name } => Some((value as i128, name)),
+            TagFieldData::LongEnum { value, name } => Some((value as i128, name)),
+            _ => None,
+        }
+    }
+
+    /// Extract `(raw_value_i128, set_bit_names)` from a flags field, or
+    /// `None` if the field is absent / not a (non-block) flags field.
+    fn flags_raw_and_names(&self, name: &str) -> Option<(i128, Vec<(u32, String)>)> {
+        match self.field(name)?.value()? {
+            TagFieldData::ByteFlags { value, names } => Some((value as i128, names)),
+            TagFieldData::WordFlags { value, names } => Some((value as i128, names)),
+            TagFieldData::LongFlags { value, names } => Some((value as i128, names)),
+            _ => None,
+        }
+    }
+
+    /// Read a single-choice enum field, resolved by schema NAME into the
+    /// canonical typed variant. Panics if the field is absent or its
+    /// value can't be resolved to a `T` — a required enum that won't
+    /// resolve is a real decode error we want surfaced, not buried under
+    /// a silent default. Use [`Self::try_read_enum`] for optional fields.
+    pub fn read_enum<T, U>(&self, name: &str) -> crate::typed_enums::Enum<T, U>
+    where
+        T: crate::typed_enums::SchemaEnum,
+        U: crate::typed_enums::TagInt,
+    {
+        let (raw, embedded) = self.enum_raw_and_name(name).unwrap_or_else(|| {
+            panic!("enum field {name:?}: absent or not an enum field")
+        });
+        crate::typed_enums::Enum::resolve(name, U::from_i128(raw), embedded.as_deref())
+    }
+
+    /// Like [`Self::read_enum`] but returns `None` if the field is
+    /// absent. Still panics if the field is present but its value can't
+    /// be resolved to a `T`.
+    pub fn try_read_enum<T, U>(&self, name: &str) -> Option<crate::typed_enums::Enum<T, U>>
+    where
+        T: crate::typed_enums::SchemaEnum,
+        U: crate::typed_enums::TagInt,
+    {
+        let (raw, embedded) = self.enum_raw_and_name(name)?;
+        Some(crate::typed_enums::Enum::resolve(
+            name,
+            U::from_i128(raw),
+            embedded.as_deref(),
+        ))
+    }
+
+    /// Read a flags field, resolving each set bit by schema NAME into the
+    /// canonical typed set. Panics if the field is absent, or if a set
+    /// named bit can't be resolved to a `T`. (A set bit past the
+    /// schema's name list is preserved in the raw value but not typed.)
+    /// Use [`Self::try_read_flags`] for optional fields.
+    pub fn read_flags<T, U>(&self, name: &str) -> crate::typed_enums::Flags<T, U>
+    where
+        T: crate::typed_enums::SchemaEnum + PartialEq,
+        U: crate::typed_enums::TagInt,
+    {
+        let (raw, names) = self.flags_raw_and_names(name).unwrap_or_else(|| {
+            panic!("flags field {name:?}: absent or not a flags field")
+        });
+        crate::typed_enums::Flags::resolve(name, U::from_i128(raw), &names)
+    }
+
+    /// Like [`Self::read_flags`] but returns `None` if the field is
+    /// absent.
+    pub fn try_read_flags<T, U>(&self, name: &str) -> Option<crate::typed_enums::Flags<T, U>>
+    where
+        T: crate::typed_enums::SchemaEnum + PartialEq,
+        U: crate::typed_enums::TagInt,
+    {
+        let (raw, names) = self.flags_raw_and_names(name)?;
+        Some(crate::typed_enums::Flags::resolve(
+            name,
+            U::from_i128(raw),
+            &names,
+        ))
+    }
+
     /// Read a `tag_reference` field's relative path. Returns `None`
     /// for missing fields, non-reference values, or null/empty refs.
     pub fn read_tag_ref_path(&self, name: &str) -> Option<String> {

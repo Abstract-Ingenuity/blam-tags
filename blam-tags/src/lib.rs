@@ -129,6 +129,7 @@ pub mod rasterizer_globals;
 pub mod structure_bsp;
 pub mod wind;
 pub mod paths;
+pub mod typed_enums;
 
 // Facade re-exports — the recommended surface for editing tags.
 pub use api::{
@@ -145,6 +146,7 @@ pub use fields::{
     TagReferenceData,
 };
 pub use error::TagReadError;
+pub use typed_enums::{Enum, Flags, SchemaEnum, TagInt};
 pub use file::TagFile;
 pub use io::Endian;
 pub use layout::TagLayout;
