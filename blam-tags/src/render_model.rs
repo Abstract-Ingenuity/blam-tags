@@ -1118,50 +1118,77 @@ where
 
         let parts_block = mesh.field("parts").and_then(|f| f.as_block())
             .ok_or(RenderModelError::MissingField("meshes[i]/parts"))?;
+        // Each part owns a contiguous `(subpart start, subpart count)`
+        // slice of the mesh's `subparts` block; each subpart carries its
+        // OWN `(index start, index count)`. The part-level `index start /
+        // count` is a SUMMARY that does NOT always equal the union of its
+        // subpart ranges — a part spanning multiple subparts decodes WRONG
+        // when treated as a single strip/list slice (observed on
+        // bunkerworld's central-floor `ground` cluster part: its triangles
+        // come out scrambled and rasterize to nothing). Decode per-subpart
+        // when a part declares them, matching `ass.rs` (the H3 Blender
+        // toolset's `_mesh_decoder.py::_collect_parts` rule); fall back to
+        // the part's own range when subparts are absent (render_models
+        // without a subparts block).
+        let subparts_block = mesh.field("subparts").and_then(|f| f.as_block());
 
         let mut indices: Vec<u32> = Vec::new();
         let mut parts: Vec<RenderMeshPart> = Vec::with_capacity(parts_block.len());
-        for pi in 0..parts_block.len() {
-            let part = parts_block.element(pi).unwrap();
-            let material_index = part.read_int_any("render method index").unwrap_or(0).max(0) as u16;
-            let part_type = part.read_int_any("part type").unwrap_or(0) as i8;
-            // `index start` / `index count` are schema-typed `short
-            // integer` (i16) but functionally u16 — strips spanning
-            // more than 32 767 indices wrap into negative i16. The
-            // low-16-bit reinterpret recovers the real offset.
-            let start_i = part.read_int_any("index start").unwrap_or(0);
-            let count_i = part.read_int_any("index count").unwrap_or(0);
-            if count_i <= 0 {
-                parts.push(RenderMeshPart {
-                    material_index, index_start: indices.len() as u32, index_count: 0, part_type,
-                });
-                continue;
-            }
-            let start = (start_i as i16 as u16) as usize;
+        // Decode one raw-index range into the triangle-list `indices`,
+        // honoring strip vs list. `start` may be a wrapped i16 (H3
+        // `short integer`, functionally u16 — strips spanning >32 767
+        // indices wrap negative; the low-16-bit reinterpret recovers it).
+        let emit_range = |start_i: i128, count_i: i128, indices: &mut Vec<u32>| {
+            if count_i <= 0 { return; }
+            let start = if start_i < 0 {
+                (start_i as i16 as u16) as usize
+            } else {
+                start_i as usize
+            };
             let count = count_i as usize;
-            if start >= raw_index_list.len() {
-                parts.push(RenderMeshPart {
-                    material_index, index_start: indices.len() as u32, index_count: 0, part_type,
-                });
-                continue;
-            }
+            if start >= raw_index_list.len() { return; }
             let end = (start + count).min(raw_index_list.len());
-            let part_indices = &raw_index_list[start..end];
-
-            let part_index_start = indices.len() as u32;
+            let slice = &raw_index_list[start..end];
             if is_strip {
-                for (a, b, c) in strip_to_list(part_indices) {
+                for (a, b, c) in strip_to_list(slice) {
                     indices.push(a as u32);
                     indices.push(b as u32);
                     indices.push(c as u32);
                 }
             } else {
-                for chunk in part_indices.chunks_exact(3) {
+                for chunk in slice.chunks_exact(3) {
                     indices.push(chunk[0] as u32);
                     indices.push(chunk[1] as u32);
                     indices.push(chunk[2] as u32);
                 }
             }
+        };
+        for pi in 0..parts_block.len() {
+            let part = parts_block.element(pi).unwrap();
+            let material_index = part.read_int_any("render method index").unwrap_or(0).max(0) as u16;
+            let part_type = part.read_int_any("part type").unwrap_or(0) as i8;
+            let part_index_start = indices.len() as u32;
+
+            let sub_start = part.read_int_any("subpart start").unwrap_or(0);
+            let sub_count = part.read_int_any("subpart count").unwrap_or(0);
+            let mut used_subparts = false;
+            if let Some(sps) = subparts_block.as_ref() {
+                if sub_count > 0 {
+                    for off in 0..sub_count as usize {
+                        let Some(sp) = sps.element(sub_start as usize + off) else { break };
+                        let s = sp.read_int_any("index start").unwrap_or(0);
+                        let c = sp.read_int_any("index count").unwrap_or(0);
+                        emit_range(s, c, &mut indices);
+                    }
+                    used_subparts = true;
+                }
+            }
+            if !used_subparts {
+                let start_i = part.read_int_any("index start").unwrap_or(0);
+                let count_i = part.read_int_any("index count").unwrap_or(0);
+                emit_range(start_i, count_i, &mut indices);
+            }
+
             let part_index_count = indices.len() as u32 - part_index_start;
             parts.push(RenderMeshPart {
                 material_index,
