@@ -334,6 +334,18 @@ impl<'a> TagStruct<'a> {
         }
     }
 
+    /// Read a fixed-length `string` (32-byte null-terminated) field —
+    /// e.g. the `name` field on a scenario `object names` entry. Also
+    /// accepts `long_string` for convenience. Returns `None` for missing
+    /// fields or non-string values; an empty string maps to `Some("")`
+    /// so callers can distinguish absent (None) from present-but-empty.
+    pub fn read_string(&self, name: &str) -> Option<String> {
+        match self.field(name)?.value()? {
+            TagFieldData::String(s) | TagFieldData::LongString(s) => Some(s),
+            _ => None,
+        }
+    }
+
     /// Read a `string_id` (or legacy `old_string_id`) field's resolved
     /// string. Returns `None` for missing fields, non-string-id values,
     /// or empty strings.

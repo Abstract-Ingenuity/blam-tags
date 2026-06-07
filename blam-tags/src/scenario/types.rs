@@ -77,6 +77,16 @@ pub struct Scenario {
     pub structure_seams: String,
     pub skies: Vec<SkyReference>,
 
+    /// `object names` — the level-wide named-object table. Object
+    /// placements reference a parent by NAME index
+    /// ([`ParentId::parent_object_name_index`]), and each sky's
+    /// [`SkyReference::name_index`] names its runtime sky object. The
+    /// engine maps name index → runtime object via
+    /// `object_set_object_index_for_name_index` /
+    /// `object_index_from_name_index`; consumers resolve a placement's
+    /// parent by matching `parent_object_name_index` against this table.
+    pub object_names: Vec<ObjectName>,
+
     // ---- Streaming / visibility ----
     pub zone_sets: Vec<ZoneSet>,
 
@@ -187,6 +197,7 @@ impl Scenario {
             structure_bsps: read_block(s, "structure bsps", StructureBspReference::from_struct),
             structure_seams: s.read_tag_ref_path("structure seams").unwrap_or_default(),
             skies: read_block(s, "skies", SkyReference::from_struct),
+            object_names: read_block(s, "object names", ObjectName::from_struct),
 
             zone_sets: read_block(s, "zone sets", ZoneSet::from_struct),
 
@@ -339,6 +350,33 @@ impl SkyReference {
     }
 }
 
+/// `object names[i]` — one entry in the level-wide named-object table
+/// ([`Scenario::object_names`]). `object_type` + `scenario_datum_index`
+/// point at the placed object that owns this name when one exists; both
+/// are `-1` for runtime-created named objects (e.g. the sky, which the
+/// engine spawns via `create_sky_object @0x1803ABC30` and registers under
+/// its [`SkyReference::name_index`]).
+#[derive(Debug, Clone, Default)]
+pub struct ObjectName {
+    /// `name` — the 32-byte name string (e.g. `"skyzor"`).
+    pub name: String,
+    /// `object_type` — object-type block index of the owning placement, or `-1`.
+    pub object_type: i16,
+    /// `scenario_datum_index` — index of the owning placement within its
+    /// type block, or `-1` (runtime-created objects like the sky).
+    pub scenario_datum_index: i16,
+}
+
+impl ObjectName {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            name: s.read_string("name").unwrap_or_default(),
+            object_type: s.read_block_index("object_type"),
+            scenario_datum_index: s.read_block_index("scenario_datum_index"),
+        }
+    }
+}
+
 /// `zone sets[i]` — declares which BSPs / designer zones are active when
 /// this zone set is the current one. Halo 3 streams BSPs by zone set.
 #[derive(Debug, Clone, Default)]
@@ -456,6 +494,10 @@ pub struct PlacementObjectData {
     pub bsp_policy: i32,
     pub editor_folder_index: i16,
     pub can_attach_to_bsp_flags: u16,
+    /// `parent id` — optional attachment of this placement to a parent
+    /// object's marker. `None` when the placement has no parent (the
+    /// common case). See [`ParentId`].
+    pub parent_id: Option<ParentId>,
 }
 
 impl PlacementObjectData {
@@ -471,7 +513,53 @@ impl PlacementObjectData {
             bsp_policy: s.read_int_any("bsp policy").unwrap_or(0) as i32,
             editor_folder_index: s.read_block_index("editor folder"),
             can_attach_to_bsp_flags: s.read_int_any("can attach to bsp flags").unwrap_or(0) as u16,
+            parent_id: s
+                .field("parent id")
+                .and_then(|f| f.as_struct())
+                .map(|st| ParentId::from_struct(&st))
+                .filter(|p| p.has_parent()),
         }
+    }
+}
+
+/// `object data.parent id` — links a placement to a parent object by
+/// NAME index (into [`Scenario::object_names`]) plus the parent marker it
+/// attaches to. Engine path:
+/// `object_placement_data_new_from_scenario_object @0x1808189D0` resolves
+/// `parent_object_name_index` via `object_index_from_name_index`, then
+/// `object_new @0x1807D51D0` calls `object_attach_to_marker @0x1807D7F70`
+/// → `object_attach_to_marker_immediate @0x1807D8050`, which snaps the
+/// child's origin to the parent marker's world matrix and records the
+/// parent node for subsequent node-matrix composition.
+#[derive(Debug, Clone, Default)]
+pub struct ParentId {
+    /// `parent object` — block index into [`Scenario::object_names`];
+    /// `-1` = no parent. Resolved to a runtime object by name.
+    pub parent_object_name_index: i16,
+    /// `parent marker` — string_id of the marker ON THE PARENT this
+    /// object attaches to (e.g. `"waterfall"`). Empty = attach to the
+    /// parent's origin/node 0.
+    pub parent_marker: String,
+    /// `connection marker` — string_id of the marker on THIS object that
+    /// mates with the parent marker (engine `child_marker_name`). Empty =
+    /// align this object's origin to the parent marker.
+    pub connection_marker: String,
+}
+
+impl ParentId {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        Self {
+            parent_object_name_index: s.read_block_index("parent object"),
+            parent_marker: s.read_string_id("parent marker").unwrap_or_default(),
+            connection_marker: s.read_string_id("connection marker").unwrap_or_default(),
+        }
+    }
+
+    /// True when this placement actually references a parent (the name
+    /// index is valid). Placements with no parent decode to `None` on
+    /// [`PlacementObjectData::parent_id`].
+    pub fn has_parent(&self) -> bool {
+        self.parent_object_name_index >= 0
     }
 }
 
