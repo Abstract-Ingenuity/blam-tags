@@ -24,6 +24,10 @@ pub enum AtmosphereFlags {
     #[strum(serialize = "Enable Atmosphere")] EnableAtmosphere = 0,
     #[strum(serialize = "Override Real Sun Values")] OverrideRealSunValues = 1,
     #[strum(serialize = "Patchy Fog")] PatchyFog = 2,
+    /// Historical H3 flag pruned from the MCC schema; still set by older
+    /// sky_atm_parameters tags (e.g. s3d_sky_bridgenew). Supersetted so it
+    /// resolves by name instead of fail-loud panicking.
+    #[strum(serialize = "Raining")] Raining = 3,
 }
 
 /// Errors from sky_atm_parameters walking.

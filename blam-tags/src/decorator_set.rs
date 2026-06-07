@@ -53,6 +53,9 @@ pub enum DecoratorSetRenderFlags {
     /// (schema: "takes twice as long to light"). Consumed in
     /// `decorators::bake::bake_placement`.
     #[strum(serialize = "dont sample light through geometry")] DontSampleLightThroughGeometry = 1,
+    /// Historical H3 flag pruned from the MCC schema (still set by older
+    /// tags, e.g. s3d_powerhouse decorators). Supersetted so it resolves.
+    #[strum(serialize = "don't render on low settings")] DontRenderOnLowSettings = 2,
 }
 
 /// `decorator_type_flags_definition`.
@@ -289,7 +292,9 @@ impl DecoratorSet {
                 .unwrap_or(0) as i32,
             texture_path: s.read_tag_ref_path("texture").unwrap_or_default(),
             render_flags: s.try_read_flags("render flags").unwrap_or_default(),
-            render_shader: s.read_enum("render shader"),
+            // Absent in the oldest decorator_sets (isolation, zanzibar) —
+            // read optionally, defaulting to the first shader variant.
+            render_shader: s.try_read_enum("render shader").unwrap_or_default(),
             // Added after the 2007 schema rev — absent in launch-era
             // decorator_sets (e.g. riverworld's wildgrass/thistle), so read
             // optionally and default to `ground default` (engine's behavior
