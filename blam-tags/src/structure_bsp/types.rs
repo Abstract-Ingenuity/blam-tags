@@ -64,6 +64,55 @@ pub enum CameraFxPaletteFlags {
     #[strum(serialize = "override bloom intensity")] OverrideBloomIntensity = 4,
 }
 
+/// `surface_flags` (byte_flags) — per collision surface. Verified against
+/// `collision_bsp_test_vector_recursive @ dllcache 0x180513f80`: the
+/// raycast filters on `Invisible` (bit 1) and `Breakable` (bit 3); the
+/// decal "decalable" test rejects the `0x3B` set (TwoSided / Invisible /
+/// Breakable / Invalid / Conveyor). NOTE: bit 0 is `TwoSided`, NOT bit 3 —
+/// older comments calling bit 3 "two-sided" were wrong (it is `Breakable`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u8)]
+pub enum CollisionSurfaceFlags {
+    #[strum(serialize = "two sided")] TwoSided = 0,
+    #[strum(serialize = "invisible")] Invisible = 1,
+    #[strum(serialize = "climbable")] Climbable = 2,
+    #[strum(serialize = "breakable")] Breakable = 3,
+    #[strum(serialize = "invalid")] Invalid = 4,
+    #[strum(serialize = "conveyor")] Conveyor = 5,
+    #[strum(serialize = "slip")] Slip = 6,
+}
+
+/// `leaf_flags` (byte_flags SMALL / word_flags LARGE). Bit 0 is the
+/// "contains double-sided surfaces" content marker the engine reads in
+/// `collision_bsp_test_vector_recursive` to build a leaf's contents code.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum CollisionLeafFlags {
+    #[strum(serialize = "contains double-sided surfaces")] ContainsDoubleSidedSurfaces = 0,
+}
+
+/// `structure_bsp_cluster_portal_flags_definition` (long_flags) — per
+/// cluster portal. Drives portal visibility / AI sound occlusion.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u32)]
+pub enum StructureBspClusterPortalFlags {
+    #[strum(serialize = "ai can't hear through this shit")] AiCantHearThroughThis = 0,
+    #[strum(serialize = "one-way")] OneWay = 1,
+    #[strum(serialize = "door")] Door = 2,
+    #[strum(serialize = "no-way")] NoWay = 3,
+    #[strum(serialize = "one-way-reversed")] OneWayReversed = 4,
+    #[strum(serialize = "no one can hear through this")] NoOneCanHearThroughThis = 5,
+}
+
 /// `instanced_geometry_flags` (word_flags).
 #[derive(Clone, Copy, PartialEq, Eq, Debug,
          num_derive::FromPrimitive, num_derive::ToPrimitive,
@@ -727,11 +776,11 @@ pub struct Bsp3d {
 /// `flags` is `u16` to cover both schema variants: SMALL uses
 /// `byte_flags` (u8); LARGE uses `word_flags` (u16). Stored canonical
 /// at `u16` so a single walker reads it.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct CollisionLeaf {
-    /// `flags*`. bit 0 = "contains double-sided surfaces" per the
-    /// engine `collision_bsp_test_vector_recursive` contents logic.
-    pub flags: u16,
+    /// `flags*`. `ContainsDoubleSidedSurfaces` (bit 0) per the engine
+    /// `collision_bsp_test_vector_recursive` contents logic.
+    pub flags: Flags<CollisionLeafFlags, u16>,
     /// `bsp2d reference count*`.
     pub bsp2d_reference_count: i16,
     /// `first bsp2d reference*` — block index into
@@ -788,7 +837,7 @@ pub struct CollisionBsp2dNode {
 /// of source format — LARGE schema fields are natively i32, SMALL i16
 /// are sign-extended at parse time; `plane_designator`'s high-bit
 /// negate flag is normalized to bit 31.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct CollisionSurface {
     /// `plane*` — plane_designator. Low 31 bits = plane index;
     /// bit 31 = negate.
@@ -804,9 +853,10 @@ pub struct CollisionSurface {
     pub breakable_surface_set: i16,
     /// `breakable surface*` — index into the breakable set.
     pub breakable_surface: i16,
-    /// `flags*` (byte_flags `surface_flags`). The decal walker reads
-    /// bits 1 and 3 to filter (bit 1: invisible/sky, bit 3: two-sided).
-    pub flags: u8,
+    /// `flags*` (byte_flags `surface_flags`). The collision raycast
+    /// filters on `Invisible` (bit 1) and `Breakable` (bit 3); the decal
+    /// "decalable" test rejects the `0x3B` set.
+    pub flags: Flags<CollisionSurfaceFlags, u8>,
     /// `best plane calculation vertex index *!` — i8, runtime
     /// optimization hint; ignored by the decal port.
     pub best_plane_vertex_index: i8,
@@ -998,7 +1048,7 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d, is_small
             for i in 0..b.len() {
                 if let Some(e) = b.element(i) {
                     out.push(CollisionLeaf {
-                        flags: e.read_int_any("flags").unwrap_or(0) as u16,
+                        flags: e.try_read_flags("flags").unwrap_or_default(),
                         bsp2d_reference_count: e
                             .read_int_any("bsp2d reference count")
                             .unwrap_or(0) as i16,
@@ -1074,7 +1124,7 @@ fn populate_collision_subblocks(entry: &TagStruct<'_>, bsp: &mut Bsp3d, is_small
                         breakable_surface: e
                             .read_int_any("breakable surface")
                             .unwrap_or(-1) as i16,
-                        flags: e.read_int_any("flags").unwrap_or(0) as u8,
+                        flags: e.try_read_flags("flags").unwrap_or_default(),
                         best_plane_vertex_index: e
                             .read_int_any("best plane calculation vertex index ")
                             .unwrap_or(0) as i8,
@@ -1293,7 +1343,9 @@ pub struct BspClusterPortal {
     /// `bounding radius*` — max distance from centroid to any vertex;
     /// fast pre-cull bound for portal visibility.
     pub bounding_radius: f32,
-    pub flags: u32,
+    /// `flags*` (`structure_bsp_cluster_portal_flags_definition`) —
+    /// one-way / door / no-way / AI sound occlusion.
+    pub flags: Flags<StructureBspClusterPortalFlags, u32>,
     /// Portal polygon (3-or-more vertices, 5 max in practice). Order
     /// is wound CCW when viewed from the front cluster.
     pub vertices: Vec<RealPoint3d>,
@@ -1307,7 +1359,7 @@ impl BspClusterPortal {
             plane_index: s.read_int_any("plane index").unwrap_or(-1) as i32,
             centroid: s.read_point3d("centroid"),
             bounding_radius: s.read_real("bounding radius").unwrap_or(0.0),
-            flags: s.read_int_any("flags").unwrap_or(0) as u32,
+            flags: s.try_read_flags("flags").unwrap_or_default(),
             vertices: s
                 .field("vertices")
                 .and_then(|f| f.as_block())
