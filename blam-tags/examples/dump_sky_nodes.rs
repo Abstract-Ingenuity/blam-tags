@@ -7,9 +7,10 @@ fn main() {
     });
     let tag = TagFile::read(&path).unwrap();
     let m = RenderModel::from_tag(&tag).unwrap();
+    let meshes = RenderModel::derive_render_meshes(&tag).unwrap();
 
     println!("=== {} ===", path);
-    println!("nodes: {}   meshes: {}   materials: {}", m.nodes.len(), m.meshes.len(), m.materials.len());
+    println!("nodes: {}   meshes: {}   materials: {}", m.nodes.len(), meshes.len(), m.materials.len());
     println!("default_node_orientations: {}", m.default_node_orientations.len());
     println!("\n--- NODES ---");
     for (i, n) in m.nodes.iter().enumerate() {
@@ -17,12 +18,12 @@ fn main() {
         let q = n.default_rotation;
         println!(
             "[{i:2}] {:<24} parent={:3} trans=({:9.3},{:9.3},{:9.3}) rot=({:.4},{:.4},{:.4},{:.4})",
-            n.name, n.parent_index, t.x, t.y, t.z, q.i, q.j, q.k, q.w
+            n.name, n.parent_node, t.x, t.y, t.z, q.i, q.j, q.k, q.w
         );
     }
 
     println!("\n--- MESHES (rigid_node + vertex bbox) ---");
-    for (mi, mesh) in m.meshes.iter().enumerate() {
+    for (mi, mesh) in meshes.iter().enumerate() {
         let mut mn = [f32::INFINITY; 3];
         let mut mx = [f32::NEG_INFINITY; 3];
         for v in &mesh.vertices {

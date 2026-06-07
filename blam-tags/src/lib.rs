@@ -161,9 +161,9 @@ pub use ass::{
     AssObjectPayload, AssTriangle, AssVertex,
 };
 pub use render_model::{
-    extract_per_instance_lightmap_uvs, PerInstanceLightmapUvs, RenderMarker, RenderMaterial,
-    RenderMesh, RenderMeshPart, RenderModel, RenderModelError, RenderNode, RenderPermutation,
-    RenderRegion, RenderVertex,
+    extract_per_instance_lightmap_uvs, Geometry, Marker, MarkerGroup, Material, MaterialProperty,
+    Mesh, Node, Part, PerInstanceLightmapUvs, Permutation, Region, RenderMesh, RenderMeshPart,
+    RenderModel, RenderModelError, RenderVertex, Subpart,
 };
 pub use tag_function::{
     ColorGraphType, FunctionFlags, FunctionType, TagFunction, TagFunctionError,

@@ -1,47 +1,86 @@
-//! Runtime-shaped extraction of `render_model` (mode) tag geometry.
+//! Schema-faithful walker for the `render_model` (mode) tag.
 //!
-//! Sibling to [`crate::jms`], targeting renderer / engine consumers
-//! rather than the JMS text format. Differences from `jms::JmsFile`:
+//! This module mirrors the `definitions/halo3_mcc/render_model.json`
+//! schema **1:1**: every block/struct/field in the schema maps to a
+//! field on the public type tree below, with the same nesting. Type
+//! names are PascalCase with the `_block`/`_struct`/`_definition`
+//! suffixes stripped (`render_model_region_block` -> [`Region`]); field
+//! names are snake_case.
 //!
-//! - **Per-mesh, not material-flattened.** Each `meshes[i]` becomes
-//!   one [`RenderMesh`] with its own vertex+index buffer plus a
-//!   `parts` list. Renderers want one draw call per part; the JMS
-//!   path collapses everything into a single per-material vertex pool.
-//! - **Native units, no ×100.** Positions stay in Halo world units;
-//!   the consumer scales to whatever its scene units are.
-//! - **Triangle list, not strip.** Strips are decoded once at
-//!   extraction time so consumers don't carry the restart-sentinel
-//!   logic.
-//! - **Unflipped UVs.** V is left as-stored. Engines using either
-//!   convention can flip (or not) at upload time.
-//! - **Local-space node transforms.** Parent-relative TRS is preserved
-//!   so the consumer can either chain-to-world for a static bind pose
-//!   or feed the locals into a runtime animation system.
-//! - **Fixed-size 4-bone skin.** `node_indices`/`node_weights` are
-//!   `[u8; 4]`/`[f32; 4]` zero-padded — what GPU vertex layouts
-//!   universally expect.
-//! - **Variant/permutation selection deferred.** All meshes are
-//!   extracted; the consumer filters via [`RenderRegion`] +
-//!   [`RenderPermutation`] (or via the `.model` (hlmt) variant block).
+//! On top of the faithful tree, a **render-oriented derived layer**
+//! ([`RenderMesh`] + [`RenderVertex`] + [`RawWaterData`]) is provided
+//! via [`RenderModel::derive_render_meshes`] and the `extract_*` free
+//! functions. The derived layer does what a renderer actually needs and
+//! the raw schema tree does not: decompress vertex positions/texcoords
+//! through the per-mesh compression bounds, decode triangle strips to
+//! triangle lists (per-subpart when a part declares subparts), resolve
+//! the water append-pool sequential indexing, extract the PRT-ambient
+//! per-vertex transfer stream from `per_mesh_prt_data`, and surface the
+//! `has_vertex_color` / `has_prt_vertex_stream` / `has_lightmap_uvs`
+//! engine signals. The derived layer is also reusable on
+//! `scenario_structure_bsp` (sbsp) and the per-BSP lightmap tag, since
+//! all three share the `s_render_geometry` schema.
 //!
 //! Targets H3 / Reach MCC tags where every render mesh stores its
-//! buffers inline under `render geometry/per mesh temporary[i]`. Cache
-//! map files would need a different code path.
+//! buffers inline under `render geometry/per mesh temporary[i]`.
 
 use crate::api::{TagBlock, TagStruct};
 use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::geometry::{read_compression_bounds, strip_to_list, CompressionBounds};
-use crate::math::{RealOrientation, RealPoint2d, RealPoint3d, RealQuaternion, RealVector3d};
+use crate::math::{
+    RealOrientation, RealPlane3d, RealPoint2d, RealPoint3d, RealQuaternion, RealVector3d,
+};
 use crate::typed_enums::{Enum, Flags};
 
-/// `mesh_flags` (byte_flags in the schema; stored here as u32 for the
-/// existing API). Shared global render-geometry mesh flags.
+//================================================================================
+// Typed enums / flags (variants superset the schema option lists).
+//================================================================================
+
+/// `render_model_flags_definition` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum RenderModelFlags {
+    #[strum(serialize = "UNUSED")] Unused = 0,
+    #[strum(serialize = "UNUSED2")] Unused2 = 1,
+    #[strum(serialize = "has node maps")] HasNodeMaps = 2,
+}
+
+/// `render_geometry_flags` (long_flags). All three bits are
+/// runtime-only (`*!`) in the schema.
 #[derive(Clone, Copy, PartialEq, Eq, Debug,
          num_derive::FromPrimitive, num_derive::ToPrimitive,
          strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
 #[strum(ascii_case_insensitive)]
 #[repr(u32)]
+pub enum RenderGeometryFlags {
+    #[strum(serialize = "processed")] Processed = 0,
+    #[strum(serialize = "available")] Available = 1,
+    #[strum(serialize = "version 2")] Version2 = 2,
+}
+
+/// `part_flags` (byte_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u8)]
+pub enum PartFlags {
+    #[strum(serialize = "dislikes photons")] DislikesPhotons = 0,
+    #[strum(serialize = "ignored by lightmapper")] IgnoredByLightmapper = 1,
+    #[strum(serialize = "has transparent sorting plane")] HasTransparentSortingPlane = 2,
+    #[strum(serialize = "is water surface")] IsWaterSurface = 3,
+}
+
+/// `mesh_flags` (byte_flags). Shared global render-geometry mesh flags.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u8)]
 pub enum MeshFlags {
     #[strum(serialize = "mesh has vertex color")] MeshHasVertexColor = 0,
     #[strum(serialize = "use region index for sorting")] UseRegionIndexForSorting = 1,
@@ -50,102 +89,64 @@ pub enum MeshFlags {
     #[strum(serialize = "mesh is unindexed (do not modify)")] MeshIsUnindexed = 4,
 }
 
-/// `part_flags` (byte_flags). Shared global render-geometry part flags.
+/// `compression_flags` (word_flags).
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum CompressionFlags {
+    #[strum(serialize = "compressed position")] CompressedPosition = 0,
+    #[strum(serialize = "compressed texcoord")] CompressedTexcoord = 1,
+}
+
+/// `per_mesh_raw_data_flags` (long_flags).
 #[derive(Clone, Copy, PartialEq, Eq, Debug,
          num_derive::FromPrimitive, num_derive::ToPrimitive,
          strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
 #[strum(ascii_case_insensitive)]
 #[repr(u32)]
-pub enum PartFlags {
-    #[strum(serialize = "dislikes photons")] DislikesPhotons = 0,
-    #[strum(serialize = "ignored by lightmapper")] IgnoredByLightmapper = 1,
-    #[strum(serialize = "has transparent sorting plane")] HasTransparentSortingPlane = 2,
-    #[strum(serialize = "is water surface")] IsWaterSurface = 3,
+pub enum PerMeshRawDataFlags {
+    #[strum(serialize = "indices are triangle strips")] IndicesAreTriangleStrips = 0,
+    #[strum(serialize = "indices are triangle lists")] IndicesAreTriangleLists = 1,
+    #[strum(serialize = "indices are quad lists")] IndicesAreQuadLists = 2,
 }
 
-/// Errors from runtime render_model extraction.
-#[derive(Debug)]
-pub enum RenderModelError {
-    /// A required field was missing from the tag — schema mismatch
-    /// or the field was empty in the instance. Carries the dotted
-    /// field path.
-    MissingField(&'static str),
+/// `mesh_vertex_type_definition` (char_enum) — full 22-option list.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum MeshVertexType {
+    #[default]
+    #[strum(serialize = "world")] World = 0,
+    #[strum(serialize = "rigid")] Rigid = 1,
+    #[strum(serialize = "skinned")] Skinned = 2,
+    #[strum(serialize = "particle_model")] ParticleModel = 3,
+    #[strum(serialize = "flat world")] FlatWorld = 4,
+    #[strum(serialize = "flat rigid")] FlatRigid = 5,
+    #[strum(serialize = "flat skinned")] FlatSkinned = 6,
+    #[strum(serialize = "screen")] Screen = 7,
+    #[strum(serialize = "debug")] Debug = 8,
+    #[strum(serialize = "transparent")] Transparent = 9,
+    #[strum(serialize = "particle")] Particle = 10,
+    #[strum(serialize = "contrail")] Contrail = 11,
+    #[strum(serialize = "light_volume")] LightVolume = 12,
+    #[strum(serialize = "chud_simple")] ChudSimple = 13,
+    #[strum(serialize = "chud_fancy")] ChudFancy = 14,
+    #[strum(serialize = "decorator")] Decorator = 15,
+    #[strum(serialize = "position only")] PositionOnly = 16,
+    #[strum(serialize = "patchy_fog")] PatchyFog = 17,
+    #[strum(serialize = "water")] Water = 18,
+    #[strum(serialize = "ripple")] Ripple = 19,
+    #[strum(serialize = "implicit geometry")] ImplicitGeometry = 20,
+    #[strum(serialize = "beam")] Beam = 21,
 }
 
-impl std::fmt::Display for RenderModelError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MissingField(p) => write!(f, "render_model is missing required field: {p}"),
-        }
-    }
-}
-
-impl std::error::Error for RenderModelError {}
-
-/// One bone in the render_model skeleton, in **parent-relative**
-/// (local) bind-pose. Forward-chain through `parent_index` to get
-/// world-space if you need it. `parent_index = -1` for roots.
-#[derive(Debug, Clone)]
-pub struct RenderNode {
-    pub name: String,
-    pub parent_index: i16,
-    pub default_translation: RealPoint3d,
-    pub default_rotation: RealQuaternion,
-}
-
-/// One entry from the `materials` block. v1 consumers stub a default
-/// material per [`Self::shader_name`]; later passes can resolve
-/// [`Self::shader_path`] to load the real `render_method` tag.
-#[derive(Debug, Clone)]
-pub struct RenderMaterial {
-    /// Shader basename (filename without extension). Stable enough for
-    /// dedupe / default-material keying.
-    pub shader_name: String,
-    /// Full Halo-style relative path to the shader tag (e.g.
-    /// `objects\foo\shaders\foo_diffuse`). Empty if the tag_ref was
-    /// null. NO file extension — caller composes via [`Self::shader_extension`].
-    pub shader_path: String,
-    /// Group tag FOURCC of the referenced shader — `rmsh` (regular
-    /// shader), `rmtr` (terrain), `rmw ` (water), `rmfl` (foliage),
-    /// etc. Determines which file extension to append to
-    /// `shader_path` and which schema to expect when parsing.
-    /// Zero when the tag_ref was null.
-    pub shader_group_tag: u32,
-}
-
-impl RenderMaterial {
-    /// File extension matching [`Self::shader_group_tag`] — e.g.
-    /// `"shader_terrain"` for `rmtr`. Pair with `shader_path` and
-    /// `paths::resolve_tag_path` to locate the on-disk tag file.
-    pub fn shader_extension(&self) -> &'static str {
-        crate::paths::group_tag_to_extension(self.shader_group_tag).unwrap_or("shader")
-    }
-}
-
-/// Region — collection of permutations sharing a name (`body`,
-/// `head`, etc.). Variant selection in `.model` (hlmt) picks one
-/// permutation per region; v1 consumers can pick permutation 0.
-#[derive(Debug, Clone)]
-pub struct RenderRegion {
-    pub name: String,
-    pub permutations: Vec<RenderPermutation>,
-}
-
-/// One choice within a region (intact / damaged / color variant /
-/// etc.). Resolves to a contiguous slice of meshes via
-/// `[mesh_index .. mesh_index + mesh_count)`.
-#[derive(Debug, Clone)]
-pub struct RenderPermutation {
-    pub name: String,
-    pub mesh_index: i16,
-    pub mesh_count: i16,
-}
-
-/// `mesh_transfer_vertex_type_definition` (schema enum on `meshes[i]`,
-/// field name `PRT vertex type*`). Selects which PRT entry point the
-/// engine remaps to at `render_mesh_part_default @ 0x18069EBC0` via
-/// `entry_point_remapping_0[transfer_vector_vertex_type]`.
-/// `mesh_transfer_vertex_type_definition` (char_enum).
+/// `mesh_transfer_vertex_type_definition` (char_enum). Selects which
+/// PRT entry point the engine remaps to at `render_mesh_part_default @
+/// 0x18069EBC0` via `entry_point_remapping_0[transfer_vector_vertex_type]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default,
          num_derive::FromPrimitive, num_derive::ToPrimitive,
          strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
@@ -163,215 +164,113 @@ impl PrtVertexType {
     pub fn is_some(self) -> bool { !matches!(self, Self::None) }
 }
 
-/// One mesh from `render geometry/meshes[i]`. Index in the parent
-/// [`RenderModel::meshes`] vec matches the `mesh_index` stored in
-/// permutations.
-#[derive(Debug, Clone)]
-pub struct RenderMesh {
-    pub vertices: Vec<RenderVertex>,
-    /// Triangle-list indices into [`Self::vertices`]. Strips are
-    /// already decoded.
-    pub indices: Vec<u32>,
-    pub parts: Vec<RenderMeshPart>,
-    /// For rigid meshes (`vertex type = rigid` / `rigid_boned`), the
-    /// single bone all vertices are bound to. `None` for skinned
-    /// meshes whose vertices carry their own per-vertex weights.
-    pub rigid_node_index: Option<i16>,
-    /// `s_per_mesh_raw_data.raw_water_data` — per-mesh extra data for
-    /// water surfaces. `Some` when the mesh contains at least one part
-    /// with `_part_is_water_surface` set; `None` for non-water meshes.
-    /// Per-vertex `local_info` + `base_texcoord` are appended onto the
-    /// regular `vertices` pool (sequential indexing — see
-    /// [`RawWaterData::indices`]).
-    pub water_data: Option<RawWaterData>,
-    /// `meshes[i].PRT vertex type` — author-declared PRT variant. Only
-    /// `Ambient` appears in the sampled MCC H3 corpus.
-    pub prt_vertex_type: Enum<PrtVertexType, i8>,
-    /// True iff `meshes[i].vertex_buffer_indices[3] != 0xFFFF`, i.e. a
-    /// runtime PRT vertex buffer is present. Mirrors the engine check
-    /// at `select_instance_entry_point @ 0x180691340` and
-    /// `render_mesh_part_default @ 0x18069EBC0`. Required (alongside
-    /// `structure_instance.lightmapping_policy == 2`) to activate the
-    /// PRT entry-point path. See
-    /// `project_research_per_mesh_prt_2026_05_11.md`.
-    pub has_prt_vertex_stream: bool,
-    /// Pre-baked PRT Ambient per-vertex transfer scalar (grayscale).
-    /// One `f32` per vertex; matches MCC PC vertex declaration
-    /// `transfer_prt_ambient_only_elements` (`R32_FLOAT` `BLENDWEIGHT1`
-    /// slot 2; Ares `rasterizer_resource_definitions.cpp:46`). Empty
-    /// when the mesh declares no PRT or its `mesh pca data` blob is
-    /// missing / size-mismatched.
-    ///
-    /// Source: `per_mesh_prt_data[i].mesh_pca_data` carries 3 floats
-    /// per vertex (RGB transfer); Reach `create_prt_vertex_buffer @
-    /// 0x82E080F0` averages to grayscale (Reach quantizes to 1 byte;
-    /// MCC keeps the float). When this stream is non-empty AND
-    /// `lightmapping_policy == 2` on the instance, the engine routes
-    /// the draw via `_entry_point_static_lighting_prt_quadratic`
-    /// (remapped to the actual variant by `render_mesh_part_default`).
-    pub prt_ambient_stream: Vec<f32>,
-    /// `mesh->flags & _mesh_has_vertex_color_bit` (Ares
-    /// `geometry_definitions.h:15`). Engine signal that the mesh
-    /// carries the `_vertex_buffer_usage_vert_color` stream; consumed
-    /// by `render_mesh_part_default @ 0x18069EBC0` to remap the entry
-    /// point from `_entry_point_static_lighting_prt_quadratic` to
-    /// `_entry_point_vertex_color_lighting` (idx=14, sky shader path).
-    /// Tag field is `s_mesh.flags` at offset 0x2C.
-    pub has_vertex_color: bool,
-    /// True iff the LBSP's raw_vertices for this mesh carried a
-    /// populated `lightmap texcoord` field (i.e. at least one vertex's
-    /// lightmap UV is non-zero). Engine-equivalent of the runtime check
-    /// `meshes[i].vertex_buffer_indices[1] != 0xFFFF` from
-    /// `geometry_test_collision_result @ dllcache 0x18048C620:749` — at
-    /// runtime the cache-builder allocates the second vertex buffer iff
-    /// the lightmap tag actually carried UVs for this mesh; tag builds
-    /// like Reach (and protomorph) don't have vertex buffers per se, so
-    /// we detect the same condition by inspecting the raw_vertex data.
-    /// Consumed by `c_geometry_sampler::sample`'s cluster branch to
-    /// dispatch into the per-pixel atlas vs. the white-default fallback.
-    pub has_lightmap_uvs: bool,
+/// `mesh_index_buffer_type_definition` (char_enum).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum MeshIndexBufferType {
+    #[default]
+    #[strum(serialize = "DEFAULT")] Default = 0,
+    #[strum(serialize = "line list")] LineList = 1,
+    #[strum(serialize = "line strip")] LineStrip = 2,
+    #[strum(serialize = "triangle list")] TriangleList = 3,
+    #[strum(serialize = "triangle fan")] TriangleFan = 4,
+    #[strum(serialize = "triangle strip")] TriangleStrip = 5,
+    #[strum(serialize = "quad list")] QuadList = 6,
 }
 
-/// Per-mesh water-surface data, fully resolved at parse time. Each
-/// triangle's 3 control points carry (regular_idx, water_idx) pairs
-/// already de-referenced through `raw_indices` and `raw_water_indices`.
-/// Mirrors the cache-build walk in
-/// `?create_mesh_water_vertex_buffer @ 0x82e094e8` (Reach XEX) — see
-/// `reference_water_vertex_buffer_build.md`.
+/// `geometry_material_property_type` (short_enum) — 9 options.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i16)]
+pub enum GeometryMaterialPropertyType {
+    #[default]
+    #[strum(serialize = "lightmap resolution")] LightmapResolution = 0,
+    #[strum(serialize = "lightmap power")] LightmapPower = 1,
+    #[strum(serialize = "lightmap half life")] LightmapHalfLife = 2,
+    #[strum(serialize = "lightmap diffuse scale")] LightmapDiffuseScale = 3,
+    #[strum(serialize = "lightmap photon fidelity")] LightmapPhotonFidelity = 4,
+    #[strum(serialize = "lightmap translucency tint color")] LightmapTranslucencyTintColor = 5,
+    #[strum(serialize = "lightmap transparency override")] LightmapTransparencyOverride = 6,
+    #[strum(serialize = "lightmap additive transparency")] LightmapAdditiveTransparency = 7,
+    #[strum(serialize = "lightmap ignore default res scale")] LightmapIgnoreDefaultResScale = 8,
+}
+
+//================================================================================
+// Error
+//================================================================================
+
+/// Errors from render_model extraction.
+#[derive(Debug)]
+pub enum RenderModelError {
+    /// A required field was missing from the tag — schema mismatch or
+    /// the field was empty in the instance. Carries the dotted field path.
+    MissingField(&'static str),
+}
+
+impl std::fmt::Display for RenderModelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingField(p) => write!(f, "render_model is missing required field: {p}"),
+        }
+    }
+}
+
+impl std::error::Error for RenderModelError {}
+
+//================================================================================
+// Schema-faithful public type tree (mirrors render_model.json 1:1).
+//================================================================================
+
+/// Root `render_model_block_struct`.
 ///
-/// At runtime, control point N's:
-/// - position / texcoord / tangent / binormal / lightmap_uv comes from
-///   `RenderMesh::vertices[control_point.regular_idx]`.
-/// - local_info / water_velocity / base_texcoord comes from
-///   `RawWaterData::vertices[control_point.water_idx]`.
+/// NOTE: the schema's `errors` block (`global_error_report_categories_block`)
+/// is intentionally NOT mirrored here — it is authoring-only error/warning
+/// reporting data with no runtime/render meaning.
 #[derive(Debug, Clone, Default)]
-pub struct RawWaterData {
-    /// One entry per source water triangle. Ordered by source part —
-    /// each part's triangles are contiguous (see [`Self::parts`]).
-    pub triangles: Vec<RawWaterTriangle>,
-    /// `raw water vertices` — per-water-vertex append pool.
-    /// `RawWaterControlPoint::water_idx` indexes into this.
-    pub vertices: Vec<RawWaterAppend>,
-    /// Per-part triangle ranges within [`Self::triangles`]. Each entry
-    /// indexes into [`RenderMesh::parts`] and gives the
-    /// `(triangle_start, triangle_count)` slice — used by the renderer
-    /// to dispatch per-rmw-material draws (different water parts on a
-    /// mesh can carry different rmw materials with different option
-    /// vectors → different pipelines). Engine equivalent: each part is
-    /// its own iteration of `c_water_renderer::render_water_part`.
-    pub parts: Vec<RawWaterPart>,
+pub struct RenderModel {
+    pub name: String,
+    pub flags: Flags<RenderModelFlags, u16>,
+    pub regions: Vec<Region>,
+    pub instance_placements: Vec<InstancePlacement>,
+    pub nodes: Vec<Node>,
+    pub marker_groups: Vec<MarkerGroup>,
+    pub materials: Vec<Material>,
+    pub render_geometry: Geometry,
+    pub sky_lights: Vec<SkyLight>,
+    pub default_lightprobe: Option<DefaultLightprobe>,
+    pub volume_samples: Vec<VolumeSample>,
+    /// `runtime node orientations!` block — tool.exe-baked bind-pose
+    /// snapshot (one [`NodeOrientation`] per node). Empty for extracted
+    /// tags that strip runtime blocks.
+    pub default_node_orientations: Vec<NodeOrientation>,
 }
 
-/// One water-flagged part's triangle range within [`RawWaterData::triangles`].
-#[derive(Debug, Clone, Copy, Default)]
-pub struct RawWaterPart {
-    /// Index into [`RenderMesh::parts`] — gives the rmw material.
-    pub mesh_part_index: u16,
-    /// Start triangle in `RawWaterData::triangles` (inclusive).
-    pub triangle_start: u32,
-    /// Number of triangles in this part.
-    pub triangle_count: u32,
-}
-
-/// One source water triangle — 3 control points each pulling from
-/// two parallel pools.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct RawWaterTriangle {
-    pub control_points: [RawWaterControlPoint; 3],
-}
-
-/// One control point in a water triangle. The two indices reference
-/// parallel pools per the Reach `create_mesh_water_vertex_buffer`
-/// walk: `regular_idx = raw_indices[part.index_start + j]`,
-/// `water_idx = raw_water_indices[mesh.water_indices_start[part_idx] + j]`.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct RawWaterControlPoint {
-    pub regular_idx: u16,
-    pub water_idx: u16,
-}
-
-/// `s_raw_water_append` (36 bytes on disk) — extra per-vertex data for
-/// water surfaces. Three `real_point_3d` fields read by the water VS:
-/// - `local_info` → `s_water_render_vertex.local_info` — feeds foam
-///   height + paint sampling.
-/// - `water_velocity` → flow-direction sampling for animated wave
-///   displacement (Phase A7).
-/// - `base_texcoord` → `s_water_render_vertex.base_tex` — UV for the
-///   watercolor / foam / global_shape textures.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct RawWaterAppend {
-    pub local_info: RealPoint3d,
-    pub water_velocity: RealPoint3d,
-    pub base_texcoord: RealPoint3d,
-}
-
-/// Decompressed vertex from `raw_vertex_block`. UV is **unflipped**
-/// (caller decides V convention). `node_indices`/`node_weights` are
-/// zero-padded to 4; sum of weights is `1.0` for skinned vertices,
-/// or zero-weighted with [`RenderMesh::rigid_node_index`] carrying
-/// the bone for rigid meshes.
-///
-/// `tangent` and `binormal` come from raw_vertex's same-named fields
-/// (`real point 3d`). Both are zero on tags that lack tangent-space
-/// data — callers needing a normal-mapping basis should fall back to
-/// an orthogonal stand-in when this happens.
-#[derive(Debug, Clone, Copy)]
-pub struct RenderVertex {
-    pub position: RealPoint3d,
-    pub texcoord: RealPoint2d,
-    pub normal: RealVector3d,
-    pub tangent: RealVector3d,
-    pub binormal: RealVector3d,
-    pub node_indices: [u8; 4],
-    pub node_weights: [f32; 4],
-    /// `raw_vertex.lightmap texcoord` — the per-vertex lightmap UV.
-    /// Zero in `scenario_structure_bsp` (`render geometry`) — the SBSP
-    /// tag's vertices have this slot present but un-set. The actual
-    /// lightmap UVs live in the per-BSP **lightmap** tag's parallel
-    /// `imported geometry/per_mesh_temporary[i]/raw_vertices[k]`,
-    /// vertex-aligned 1:1 with the SBSP. Callers needing real lightmap
-    /// UVs should walk the lightmap tag's geometry and zip with the
-    /// SBSP vertices on `(mesh_index, vertex_index)`.
-    pub lightmap_texcoord: RealPoint2d,
-    /// `raw_vertex.vert_color` (Ares `RawVertex.vert_color @ 0x54`,
-    /// `render_geometry.rs:155`). Per-vertex baked color used by sky
-    /// `.render_model` meshes — engine binds this as the
-    /// `_vertex_buffer_usage_vert_color` stream
-    /// (geometry_definitions.h:27) for the
-    /// `_entry_point_vertex_color_lighting` (idx=14) draw path. Zero on
-    /// meshes that don't have `_mesh_has_vertex_color_bit` set.
-    pub vert_color: RealVector3d,
-}
-
-/// One draw range within a [`RenderMesh`]. `material_index` indexes
-/// into [`RenderModel::materials`].
-#[derive(Debug, Clone, Copy)]
-pub struct RenderMeshPart {
-    pub material_index: u16,
-    pub index_start: u32,
-    pub index_count: u32,
-    /// `e_geometry_part_type` enum (Ares
-    /// `geometry_definitions_new.h:25`):
-    /// 0=opaque_not_drawn, 1=opaque_shadow_only,
-    /// 2=opaque_shadow_casting, 3=opaque_non_shadowing,
-    /// 4=transparent, 5=lightmap_only.
-    pub part_type: i8,
-}
-
-/// One entry in a `render_model`'s `instance placements` block — a
-/// named transform that the engine resolves by string-id from the
-/// owning content (e.g., `s_decorator_set::render_model_instance_names`
-/// → match name → instance_placement → node_index + per-subpart
-/// transform). Decorator render_models use this to map per-type
-/// `decorator_types[k].mesh` (block index into the decorator_set's
-/// names list) to which subpart of the single concatenated mesh to
-/// draw for that type.
-///
-/// Index in the parent `instance_placements` vec aligns with subpart
-/// index in `meshes[0].parts[0].subparts[]` — i.e.,
-/// `instance_placements[i]` describes subpart `i`'s transform.
+/// `render_model_region_block`.
 #[derive(Debug, Clone)]
-pub struct RenderInstancePlacement {
+pub struct Region {
+    pub name: String,
+    pub permutations: Vec<Permutation>,
+}
+
+/// `render_model_permutation_block`.
+#[derive(Debug, Clone)]
+pub struct Permutation {
+    pub name: String,
+    pub mesh_index: i16,
+    pub mesh_count: i16,
+    /// `instance mask 0-31 / 32-63 / 64-95 / 96-127` long_flags packed
+    /// as a 128-bit mask (each entry is one u32 word).
+    pub instance_mask: [u32; 4],
+}
+
+/// `global_render_model_instance_placement_block`.
+#[derive(Debug, Clone)]
+pub struct InstancePlacement {
     pub name: String,
     pub node_index: i16,
     pub scale: f32,
@@ -381,42 +280,35 @@ pub struct RenderInstancePlacement {
     pub position: RealPoint3d,
 }
 
-/// One sub-strip within a `render_model.meshes[i].parts[j]`. The engine
-/// uses these for decorator multi-type rendering: each subpart is a
-/// triangle-strip slice of the part's index pool, drawn for one
-/// decorator type. Slice = `raw_indices[index_start..index_start +
-/// index_count]`. `budget_vertex_count` is the number of unique
-/// vertices the strip references — diagnostic only at runtime.
-#[derive(Debug, Clone, Copy)]
-pub struct RenderMeshSubpart {
-    pub index_start: u32,
-    pub index_count: u32,
-    pub budget_vertex_count: u16,
-}
-
-/// Per-mesh raw-strip + per-subpart slices, as read straight from the
-/// tag without the per-part `strip_to_list` decoding that
-/// `extract_render_geometry_meshes` applies. Used by decorator loaders
-/// that need per-subpart triangle-list slices (each subpart = one
-/// decorator type's geometry). The vertex pool is shared across all
-/// subparts; `subpart_indices[k]` is a triangle-list decoded from
-/// the strip slice for subpart `k`.
-///
-/// Returned by [`extract_decorator_subparts`].
-#[derive(Debug, Clone, Default)]
-pub struct DecoratorSubpartGeometry {
-    pub vertices: Vec<RenderVertex>,
-    /// Per-subpart triangle-list (each tuple is 3 vertex indices into
-    /// `vertices`). Length = number of subparts = `instance_placements.len()`.
-    pub subpart_indices: Vec<Vec<u32>>,
-}
-
-/// One marker (attachment point). `region_index`/`permutation_index`
-/// are `-1` when the marker is unconstrained. Transform is in
-/// node-local space (relative to [`Self::node_index`]).
+/// `render_model_node_block`. Field order follows the schema's
+/// "Old Mistakes Die Hard" explanation: the on-disk inverse layout is
+/// `inverse forward / left / up / position` then `inverse scale`.
 #[derive(Debug, Clone)]
-pub struct RenderMarker {
+pub struct Node {
     pub name: String,
+    pub parent_node: i16,
+    pub first_child_node: i16,
+    pub next_sibling_node: i16,
+    pub default_translation: RealPoint3d,
+    pub default_rotation: RealQuaternion,
+    pub inverse_forward: RealVector3d,
+    pub inverse_left: RealVector3d,
+    pub inverse_up: RealVector3d,
+    pub inverse_position: RealPoint3d,
+    pub inverse_scale: f32,
+    pub distance_from_parent: f32,
+}
+
+/// `render_model_marker_group_block`.
+#[derive(Debug, Clone)]
+pub struct MarkerGroup {
+    pub name: String,
+    pub markers: Vec<Marker>,
+}
+
+/// `render_model_marker_block`.
+#[derive(Debug, Clone, Copy)]
+pub struct Marker {
     pub region_index: i8,
     pub permutation_index: i8,
     pub node_index: i8,
@@ -425,125 +317,411 @@ pub struct RenderMarker {
     pub scale: f32,
 }
 
-/// Decoded render_model in the shape a renderer consumes. Index in
-/// [`Self::meshes`] aligns 1:1 with `mode/render geometry/meshes[i]`,
-/// so [`RenderPermutation::mesh_index`] is a direct slice into it.
-#[derive(Debug, Clone, Default)]
-pub struct RenderModel {
-    pub nodes: Vec<RenderNode>,
-    /// `runtime node orientations` block (engine
-    /// `render_model_definition.default_node_orientations` @ +0x1C0).
-    /// Tool.exe-baked bind-pose snapshot — one [`RealOrientation`] per
-    /// entry in [`Self::nodes`] (parent-relative TRS). Empty when the
-    /// extracted tag didn't carry the runtime block.
-    ///
-    /// Engine consumers `memcpy` this directly into per-object
-    /// `node_orientations` buffers at spawn time
-    /// (`model_get_node_orientations @ 0x1804e7fc0`). When this field is
-    /// empty (extracted tags strip runtime data), derive the same
-    /// orientation per node by reading `nodes[i].default_translation`
-    /// / `nodes[i].default_rotation` and using `scale = 1.0`.
-    pub default_node_orientations: Vec<RealOrientation>,
-    pub materials: Vec<RenderMaterial>,
-    pub regions: Vec<RenderRegion>,
-    pub meshes: Vec<RenderMesh>,
-    pub markers: Vec<RenderMarker>,
-    /// `instance placements` block — named transforms that decorator
-    /// render_models use as the resolution target for their per-type
-    /// `decorator_types[k].mesh` block index (which goes through
-    /// `s_decorator_set::render_model_instance_names` → string_id →
-    /// match on `instance_placements[i].name`). Empty for non-decorator
-    /// render_models. Index aligns 1:1 with the subparts of
-    /// `meshes[0].parts[0]`.
-    pub instance_placements: Vec<RenderInstancePlacement>,
-    /// `sky lights` block — area-light samples used by sky-tag
-    /// render_models. The LAST entry is conventionally the dominant
-    /// sun (`get_sun_constants_from_sky @ 0x1803adcb0` reads
-    /// `lightgen_lights[count-1]`). Empty for non-sky models.
-    pub sky_lights: Vec<SkyLight>,
-    /// `default lightprobe r/g/b` — SH3 coefficients (9 floats per
-    /// channel; on-disk array is 16, zero-padded). Halo's
-    /// `setup_default_lighting` reads this when the per-instance
-    /// lightmap chain misses. Empty (or all-zero) for non-sky models.
-    pub default_lightprobe: Option<DefaultLightprobe>,
-    /// `render geometry/compression info[0]` — the model's overall
-    /// vertex-position bounds. Engine `light_placement @ tool.exe
-    /// sub_140C4AF00:151` reads this (hardcoded element 0) for the
-    /// decorator bake's mesh extent / radius / r_threshold / sample
-    /// position derivation, regardless of which subpart the
-    /// placement instances. For multi-subpart decorator render_models
-    /// (small / medium / large fern variants), all placements use
-    /// these overall-model bounds — NOT per-subpart vertex AABBs.
-    pub compression_info_0: crate::geometry::CompressionBounds,
+/// `global_geometry_material_block`.
+#[derive(Debug, Clone)]
+pub struct Material {
+    /// `render method` tag_reference — Halo-style relative path (no
+    /// extension). Empty when the tag_ref was null.
+    pub render_method: String,
+    /// Group FOURCC of the `render method` tag_reference (`rmsh`, `rmtr`,
+    /// `rmw `, …). Zero when the tag_ref was null.
+    pub render_method_group: u32,
+    pub properties: Vec<MaterialProperty>,
+    pub imported_material_index: i32,
+    pub breakable_surface_index: i8,
 }
 
-/// One entry from the render_model's `sky lights` block. 28 bytes on
-/// disk: direction (12) + intensity (12) + solid_angle (4). Mirrors
-/// `s_sky_gen_light` in dllcache.
+impl Material {
+    /// File extension matching [`Self::render_method_group`] — e.g.
+    /// `"shader_terrain"` for `rmtr`. Pair with [`Self::render_method`]
+    /// and `paths::resolve_tag_path` to locate the on-disk tag file.
+    pub fn shader_extension(&self) -> &'static str {
+        crate::paths::group_tag_to_extension(self.render_method_group).unwrap_or("shader")
+    }
+
+    /// Shader basename (filename without extension/directory). Stable
+    /// for dedupe / default-material keying.
+    pub fn shader_name(&self) -> String {
+        std::path::Path::new(&self.render_method.replace('\\', "/"))
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("default")
+            .to_owned()
+    }
+}
+
+/// `global_geometry_material_property_block`.
+#[derive(Debug, Clone, Copy)]
+pub struct MaterialProperty {
+    pub property_type: Enum<GeometryMaterialPropertyType, i16>,
+    pub int_value: i16,
+    pub long_value: i32,
+    pub real_value: f32,
+}
+
+/// `global_render_geometry_struct`.
+///
+/// Schema blocks NOT mirrored here (decode skipped; see field docs):
+/// - `user data` (`user_data_block`) — authoring PRT-info user-data blob.
+/// - `per mesh mopp` (`per_mesh_mopp_block`) — collision MOPP codes.
+/// - `per mesh subpart visibility` (`per_mesh_subpart_visibility_block`) —
+///   per-subpart bounding spheres for runtime culling.
+/// - `api resource` (`render_geometry_api_resource_definition`) — the
+///   cache-only packed vertex/index buffer resource (loose tags carry
+///   the raw data under `per mesh temporary` instead).
+#[derive(Debug, Clone, Default)]
+pub struct Geometry {
+    pub flags: Flags<RenderGeometryFlags, u32>,
+    pub meshes: Vec<Mesh>,
+    pub compression_info: Vec<CompressionInfo>,
+    pub part_sorting_position: Vec<SortingPosition>,
+    pub per_mesh_temporary: Vec<PerMeshTemporary>,
+    /// `per mesh node map` — one `Vec<u8>` (node-index list) per mesh.
+    pub per_mesh_node_map: Vec<Vec<u8>>,
+    pub per_mesh_prt_data: Vec<PerMeshPrtData>,
+    pub per_instance_lightmap_texcoords: Vec<PerInstanceLightmapTexcoords>,
+}
+
+/// `global_mesh_block`.
+///
+/// `instance buckets` (`global_instance_bucket_block`) is decoded into
+/// [`Self::instance_buckets`].
+#[derive(Debug, Clone)]
+pub struct Mesh {
+    pub parts: Vec<Part>,
+    pub subparts: Vec<Subpart>,
+    pub vertex_buffer_indices: [u16; 8],
+    pub index_buffer_index: i16,
+    pub index_buffer_tessellation: i16,
+    pub mesh_flags: Flags<MeshFlags, u8>,
+    pub rigid_node_index: i8,
+    pub vertex_type: Enum<MeshVertexType, i8>,
+    pub prt_vertex_type: Enum<PrtVertexType, i8>,
+    pub index_buffer_type: Enum<MeshIndexBufferType, i8>,
+    pub instance_buckets: Vec<InstanceBucket>,
+    pub water_indices_start: Vec<u16>,
+}
+
+/// `global_instance_bucket_block`.
+#[derive(Debug, Clone)]
+pub struct InstanceBucket {
+    pub mesh_index: i16,
+    pub definition_index: i16,
+    pub instances: Vec<u16>,
+}
+
+/// `part_block`.
+#[derive(Debug, Clone)]
+pub struct Part {
+    pub render_method_index: i16,
+    pub transparent_sorting_index: i16,
+    pub index_start: i16,
+    pub index_count: i16,
+    pub subpart_start: i16,
+    pub subpart_count: i16,
+    pub part_type: i8,
+    pub part_flags: Flags<PartFlags, u8>,
+    pub budget_vertex_count: i16,
+}
+
+/// `subpart_block`.
+#[derive(Debug, Clone, Copy)]
+pub struct Subpart {
+    pub index_start: i16,
+    pub index_count: i16,
+    pub part_index: i16,
+    pub budget_vertex_count: i16,
+}
+
+/// `compression_info_block`. `position_bounds` / `texcoord_bounds` are
+/// stored mislabeled in the schema as `real_point_*` pairs — the actual
+/// packing is `[xmin,xmax,ymin] [ymax,zmin,zmax]` for position and
+/// `[xmin,xmax] [ymin,ymax]` for texcoord (see schema WARNING). We read
+/// them verbatim into the two-element arrays as authored.
+#[derive(Debug, Clone)]
+pub struct CompressionInfo {
+    pub flags: Flags<CompressionFlags, u16>,
+    pub position_bounds: [RealPoint3d; 2],
+    pub texcoord_bounds: [RealPoint2d; 2],
+}
+
+/// `sorting_position_block`. `node_weights` is the schema's implicit
+/// 3-element array (4th weight = 1 - sum).
+#[derive(Debug, Clone, Copy)]
+pub struct SortingPosition {
+    pub plane: RealPlane3d,
+    pub position: RealPoint3d,
+    pub radius: f32,
+    pub node_indices: [u8; 4],
+    pub node_weights: [f32; 3],
+}
+
+/// `per_mesh_raw_data_block`.
+#[derive(Debug, Clone, Default)]
+pub struct PerMeshTemporary {
+    pub raw_vertices: Vec<RawVertex>,
+    pub raw_indices: Vec<u16>,
+    pub raw_water_data: Option<RawWaterDataSchema>,
+    pub parameterized_texture_width: i16,
+    pub parameterized_texture_height: i16,
+    pub flags: Flags<PerMeshRawDataFlags, u32>,
+}
+
+/// `raw_vertex_block`. Values are read VERBATIM (no compression-bounds
+/// decompress) — the decompressed/render-ready form lives in the derived
+/// [`RenderVertex`].
+#[derive(Debug, Clone, Copy)]
+pub struct RawVertex {
+    pub position: RealPoint3d,
+    pub texcoord: RealPoint2d,
+    pub normal: RealVector3d,
+    pub binormal: RealVector3d,
+    pub tangent: RealVector3d,
+    pub lightmap_texcoord: RealPoint2d,
+    pub node_indices: [u8; 4],
+    pub node_weights: [f32; 4],
+    pub vertex_color: RealVector3d,
+}
+
+/// `raw_water_block` — schema-faithful form (parallel index + append
+/// pools, unresolved). The renderer-facing resolved form is
+/// [`RawWaterData`].
+#[derive(Debug, Clone, Default)]
+pub struct RawWaterDataSchema {
+    pub indices: Vec<u16>,
+    pub vertices: Vec<RawWaterAppend>,
+}
+
+/// `raw_water_append_block` (36 bytes) — three `real_point_3d` fields
+/// read by the water VS.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawWaterAppend {
+    /// `local_info` — feeds foam height + paint sampling. `.x` is the
+    /// scenario-wide wave amplitude scale; `.y` is per-vertex water depth.
+    pub local_info: RealPoint3d,
+    /// `water_velocity` — flow-direction sampling for animated waves.
+    pub water_velocity: RealPoint3d,
+    /// `base_texcoord` — UV for watercolor / foam / global_shape textures.
+    pub base_texcoord: RealPoint3d,
+}
+
+/// `per_mesh_prt_data_block`.
+///
+/// The nested `per instance prt data` (`per_instance_prt_data_block`)
+/// sub-block is NOT decoded — it carries the same per-instance PCA blob
+/// and is unused by the render path.
+#[derive(Debug, Clone, Default)]
+pub struct PerMeshPrtData {
+    pub mesh_pca_data: Vec<u8>,
+}
+
+/// `per_instance_lightmap_texcoords_block`.
+#[derive(Debug, Clone, Default)]
+pub struct PerInstanceLightmapTexcoords {
+    pub texture_coordinates: Vec<RawVertex>,
+    pub vertex_buffer_index: i16,
+}
+
+/// `sky_lights_block` (28 bytes). Mirrors `s_sky_gen_light`.
 #[derive(Debug, Clone, Copy)]
 pub struct SkyLight {
     /// World-space direction TO the light.
     pub direction: RealVector3d,
-    /// Linear-space radiant intensity per channel (HDR — sun entries
-    /// can be tens of thousands).
+    /// Linear-space radiant intensity per channel (HDR).
     pub intensity: RealVector3d,
-    /// Light's solid angle (steradians). Halo's runtime multiplies
-    /// `intensity * solid_angle * 0.2 * g_render_light_intensity` to
-    /// get the rendered sun radiance.
+    /// Solid angle (steradians).
     pub solid_angle: f32,
 }
 
-/// `default lightprobe r/g/b` — three 9-float SH3 coefficient sets
-/// (the on-disk arrays are 16 floats; we drop the trailing zero pad).
-/// Read by `setup_default_lighting` as the deepest sky-probe fallback.
-#[derive(Debug, Clone, Default)]
+/// The three `default lightprobe r/g/b` arrays (16 `default_lightprobe`
+/// structs each, each holding one `coefficient` real). We keep the full
+/// 16-coefficient on-disk form (the trailing 7 past SH3's 9 are zero).
+#[derive(Debug, Clone)]
 pub struct DefaultLightprobe {
-    pub r: [f32; 9],
-    pub g: [f32; 9],
-    pub b: [f32; 9],
+    pub r: [f32; 16],
+    pub g: [f32; 16],
+    pub b: [f32; 16],
 }
 
+/// `volume_samples_block`.
+#[derive(Debug, Clone)]
+pub struct VolumeSample {
+    pub position: RealVector3d,
+    /// `radiance transfer matrix` — 9x9 = 81 reals.
+    pub radiance_transfer: [f32; 81],
+}
+
+/// `default_node_orientations_block` (the `runtime node orientations!`
+/// block). One parent-relative TRS per node.
+#[derive(Debug, Clone, Copy)]
+pub struct NodeOrientation {
+    pub rotation: RealQuaternion,
+    pub translation: RealPoint3d,
+    pub scale: f32,
+}
+
+//================================================================================
+// Render-oriented derived layer (decompressed, strip-decoded, water/PRT
+// resolved). Reusable on render_model / sbsp / lightmap render geometry.
+//================================================================================
+
+/// One mesh from `render geometry/meshes[i]`, decoded for a renderer:
+/// vertices decompressed through the compression bounds, strips decoded
+/// to triangle lists. Index in the parent vec aligns 1:1 with the tag's
+/// `meshes[i]` order.
+#[derive(Debug, Clone)]
+pub struct RenderMesh {
+    pub vertices: Vec<RenderVertex>,
+    /// Triangle-list indices into [`Self::vertices`]. Strips already
+    /// decoded; per-subpart ranges honored when a part declares subparts.
+    pub indices: Vec<u32>,
+    pub parts: Vec<RenderMeshPart>,
+    /// For rigid meshes, the single bone all vertices bind to. `None` for
+    /// skinned meshes whose vertices carry per-vertex weights.
+    pub rigid_node_index: Option<i16>,
+    /// Resolved water data (`None` for non-water meshes).
+    pub water_data: Option<RawWaterData>,
+    /// `meshes[i].PRT vertex type` — author-declared PRT variant.
+    pub prt_vertex_type: Enum<PrtVertexType, i8>,
+    /// True iff `vertex_buffer_indices[3] != 0xFFFF` (runtime PRT vertex
+    /// buffer present).
+    pub has_prt_vertex_stream: bool,
+    /// Pre-baked PRT Ambient per-vertex transfer scalar (grayscale). One
+    /// `f32` per vertex; from `per_mesh_prt_data[i].mesh pca data`
+    /// (3 floats RGB per vertex, averaged). Empty when no PRT data.
+    pub prt_ambient_stream: Vec<f32>,
+    /// `mesh->flags & _mesh_has_vertex_color_bit`.
+    pub has_vertex_color: bool,
+    /// True iff at least one vertex's lightmap UV is non-zero.
+    pub has_lightmap_uvs: bool,
+}
+
+/// Per-mesh water-surface data, resolved at parse time. Each triangle's
+/// 3 control points carry `(regular_idx, water_idx)` pairs already
+/// de-referenced through `raw_indices` / `raw_water_indices`.
+#[derive(Debug, Clone, Default)]
+pub struct RawWaterData {
+    /// One entry per source water triangle, ordered by source part.
+    pub triangles: Vec<RawWaterTriangle>,
+    /// `raw water vertices` append pool — `RawWaterControlPoint::water_idx`
+    /// indexes into this.
+    pub vertices: Vec<RawWaterAppend>,
+    /// Per-part triangle ranges within [`Self::triangles`].
+    pub parts: Vec<RawWaterPart>,
+}
+
+/// One water-flagged part's triangle range within [`RawWaterData::triangles`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawWaterPart {
+    /// Index into [`RenderMesh::parts`] — gives the rmw material.
+    pub mesh_part_index: u16,
+    pub triangle_start: u32,
+    pub triangle_count: u32,
+}
+
+/// One source water triangle — 3 control points pulling from two pools.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawWaterTriangle {
+    pub control_points: [RawWaterControlPoint; 3],
+}
+
+/// One control point in a water triangle. `regular_idx` indexes
+/// [`RenderMesh::vertices`]; `water_idx` indexes [`RawWaterData::vertices`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawWaterControlPoint {
+    pub regular_idx: u16,
+    pub water_idx: u16,
+}
+
+/// Decompressed render vertex. UV is **unflipped**.
+/// `node_indices`/`node_weights` are zero-padded to 4.
+#[derive(Debug, Clone, Copy)]
+pub struct RenderVertex {
+    pub position: RealPoint3d,
+    pub texcoord: RealPoint2d,
+    pub normal: RealVector3d,
+    pub tangent: RealVector3d,
+    pub binormal: RealVector3d,
+    pub node_indices: [u8; 4],
+    pub node_weights: [f32; 4],
+    /// `raw_vertex.lightmap texcoord`.
+    pub lightmap_texcoord: RealPoint2d,
+    /// `raw_vertex.vertex color` — per-vertex baked color (sky meshes).
+    pub vert_color: RealVector3d,
+}
+
+/// One draw range within a [`RenderMesh`]. `material_index` indexes
+/// [`RenderModel::materials`].
+#[derive(Debug, Clone, Copy)]
+pub struct RenderMeshPart {
+    pub material_index: u16,
+    pub index_start: u32,
+    pub index_count: u32,
+    /// `e_geometry_part_type` enum (0=opaque_not_drawn .. 5=lightmap_only).
+    pub part_type: i8,
+}
+
+/// Per-subpart triangle-list geometry, decorator-specific. Each subpart
+/// is strip-decoded independently. Returned by [`extract_decorator_subparts`].
+#[derive(Debug, Clone, Default)]
+pub struct DecoratorSubpartGeometry {
+    pub vertices: Vec<RenderVertex>,
+    /// Per-subpart triangle-list (each `u32` is a vertex index).
+    pub subpart_indices: Vec<Vec<u32>>,
+}
+
+//================================================================================
+// from_tag — schema-faithful walk
+//================================================================================
+
 impl RenderModel {
-    /// Walk a parsed `render_model` (mode) tag and decode every mesh,
-    /// node, material, region, and marker. Variant filtering is the
-    /// caller's job — see [`RenderRegion`] and the `.model` (hlmt)
-    /// variant block.
+    /// Walk a parsed `render_model` (mode) tag into the schema-faithful
+    /// type tree. Use [`Self::derive_render_meshes`] for renderer-ready
+    /// (decompressed, strip-decoded) geometry.
     pub fn from_tag(tag: &TagFile) -> Result<Self, RenderModelError> {
         let root = tag.root();
-        let bounds = read_compression_bounds(&root);
         Ok(Self {
-            nodes: read_nodes(&root)?,
-            default_node_orientations: read_default_node_orientations(&root),
-            materials: read_materials(&root)?,
+            name: root.read_string_id("name").unwrap_or_default(),
+            flags: root.try_read_flags("flags").unwrap_or_default(),
             regions: read_regions(&root)?,
-            meshes: read_meshes(&root, &bounds)?,
-            markers: read_markers(&root)?,
             instance_placements: read_instance_placements(&root),
+            nodes: read_nodes(&root)?,
+            marker_groups: read_marker_groups(&root),
+            materials: read_materials(&root)?,
+            render_geometry: read_geometry(&root)?,
             sky_lights: read_sky_lights(&root),
             default_lightprobe: read_default_lightprobe(&root),
-            compression_info_0: bounds,
+            volume_samples: read_volume_samples(&root),
+            default_node_orientations: read_default_node_orientations(&root),
         })
     }
 
-    /// Bind-pose [`RealOrientation`] per node — what engine
-    /// `model_get_node_orientations @ 0x1804e7fc0` copies into the
-    /// per-object `node_orientations` buffer at spawn.
+    /// Decode every mesh into the renderer-facing [`RenderMesh`] layer
+    /// (decompressed vertices, triangle-list indices, resolved water/PRT).
+    /// Uses the per-mesh `index buffer type` enum for strip-vs-list.
+    pub fn derive_render_meshes(tag: &TagFile) -> Result<Vec<RenderMesh>, RenderModelError> {
+        let root = tag.root();
+        let bounds = read_compression_bounds(&root);
+        read_meshes_per_mesh(&root, |_| bounds, IndexFormatPolicy::PerMeshSchema)
+    }
+
+    /// Bind-pose [`RealOrientation`] per node.
     ///
-    /// Source priority:
-    /// 1. If [`Self::default_node_orientations`] is populated (cache
-    ///    loads carry the tool.exe-baked block verbatim), return that.
-    /// 2. Otherwise derive one entry per node from
-    ///    `nodes[i].default_translation` + `default_rotation` with
-    ///    `scale = 1.0`. This produces the same data tool.exe writes
-    ///    into the runtime block — extracted tags drop the runtime
-    ///    block (it's marked `!` in the schema), so this fallback
-    ///    keeps runtime-consumer code agnostic of the cache vs.
-    ///    extracted source.
-    ///
-    /// Empty when the model has no nodes.
+    /// Returns [`Self::default_node_orientations`] verbatim when populated
+    /// (cache loads carry the tool.exe-baked block), otherwise derives one
+    /// entry per node from `default_translation` + `default_rotation` with
+    /// `scale = 1.0`. Empty when the model has no nodes.
     pub fn node_bind_pose(&self) -> Vec<RealOrientation> {
         if !self.default_node_orientations.is_empty() {
-            return self.default_node_orientations.clone();
+            return self
+                .default_node_orientations
+                .iter()
+                .map(|o| RealOrientation {
+                    rotation: o.rotation,
+                    translation: o.translation,
+                    scale: o.scale,
+                })
+                .collect();
         }
         self.nodes
             .iter()
@@ -556,189 +734,595 @@ impl RenderModel {
     }
 }
 
-/// Walk `instance placements` block. Empty for non-decorator
-/// render_models. Each entry's `name` matches a `string_id` in the
-/// owning decorator_set's `render_model_instance_names` block — that's
-/// the resolution chain `decorator_types[k].mesh → name → instance_placements`.
-fn read_instance_placements(root: &TagStruct<'_>) -> Vec<RenderInstancePlacement> {
+//--------------------------------------------------------------------------------
+// Small typed scalar readers (mirroring the api.rs reader style).
+//--------------------------------------------------------------------------------
+
+fn read_i16(s: &TagStruct<'_>, name: &str) -> i16 {
+    s.read_int_any(name).unwrap_or(0) as i16
+}
+
+fn read_i8(s: &TagStruct<'_>, name: &str) -> i8 {
+    s.read_int_any(name).unwrap_or(0) as i8
+}
+
+fn read_i32(s: &TagStruct<'_>, name: &str) -> i32 {
+    s.read_int_any(name).unwrap_or(0) as i32
+}
+
+/// Read a `long_flags` field as a raw u32 word (for the 128-bit instance
+/// mask, which is four parallel long_flags fields without a typed enum).
+fn read_u32_flags_word(s: &TagStruct<'_>, name: &str) -> u32 {
+    s.read_int_any(name).unwrap_or(0) as u32
+}
+
+/// Read a block of `indices_word_block` (one `word*` per element) into a
+/// flat `Vec<u16>`.
+fn read_word_block(parent: &TagStruct<'_>, field: &str) -> Vec<u16> {
+    let Some(block) = parent.field(field).and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    (0..block.len())
+        .filter_map(|k| block.element(k))
+        .map(|e| e.read_int_any("word").unwrap_or(0) as u16)
+        .collect()
+}
+
+/// Read an N-element `array` of single-field elements into a Vec via a
+/// per-element reader.
+fn read_array_with<T>(
+    parent: &TagStruct<'_>,
+    field: &str,
+    mut read_elem: impl FnMut(&TagStruct<'_>) -> T,
+) -> Vec<T> {
+    let Some(arr) = parent.field(field).and_then(|f| f.as_array()) else {
+        return Vec::new();
+    };
+    (0..arr.len())
+        .filter_map(|k| arr.element(k))
+        .map(|e| read_elem(&e))
+        .collect()
+}
+
+/// First scalar field of a single-field array element, as i128.
+fn elem_scalar_i128(e: &TagStruct<'_>) -> i128 {
+    e.fields()
+        .next()
+        .and_then(|f| f.value())
+        .map(|v| match v {
+            TagFieldData::CharInteger(c) => c as i128,
+            TagFieldData::ShortInteger(s) => s as i128,
+            TagFieldData::LongInteger(l) => l as i128,
+            _ => 0,
+        })
+        .unwrap_or(0)
+}
+
+/// First scalar field of a single-field array element, as f32.
+fn elem_scalar_f32(e: &TagStruct<'_>) -> f32 {
+    e.fields()
+        .next()
+        .and_then(|f| f.value())
+        .and_then(|v| if let TagFieldData::Real(r) = v { Some(r) } else { None })
+        .unwrap_or(0.0)
+}
+
+//--------------------------------------------------------------------------------
+// Block readers
+//--------------------------------------------------------------------------------
+
+fn read_regions(root: &TagStruct<'_>) -> Result<Vec<Region>, RenderModelError> {
+    let block = root
+        .field_path("regions")
+        .and_then(|f| f.as_block())
+        .ok_or(RenderModelError::MissingField("regions"))?;
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let r = block.element(i).unwrap();
+        let name = r.read_string_id("name").unwrap_or_default();
+        let mut permutations = Vec::new();
+        if let Some(perms) = r.field("permutations").and_then(|f| f.as_block()) {
+            for j in 0..perms.len() {
+                let p = perms.element(j).unwrap();
+                permutations.push(Permutation {
+                    name: p.read_string_id("name").unwrap_or_default(),
+                    mesh_index: p.read_int_any("mesh index").unwrap_or(-1) as i16,
+                    mesh_count: p.read_int_any("mesh count").unwrap_or(0) as i16,
+                    instance_mask: [
+                        read_u32_flags_word(&p, "instance mask 0-31"),
+                        read_u32_flags_word(&p, "instance mask 32-63"),
+                        read_u32_flags_word(&p, "instance mask 64-95"),
+                        read_u32_flags_word(&p, "instance mask 96-127"),
+                    ],
+                });
+            }
+        }
+        out.push(Region { name, permutations });
+    }
+    Ok(out)
+}
+
+fn read_instance_placements(root: &TagStruct<'_>) -> Vec<InstancePlacement> {
     let Some(block) = root.field_path("instance placements").and_then(|f| f.as_block()) else {
         return Vec::new();
     };
     let mut out = Vec::with_capacity(block.len());
     for i in 0..block.len() {
-        let Some(elem) = block.element(i) else { continue };
-        out.push(RenderInstancePlacement {
-            name: elem.read_string_id("name").unwrap_or_default(),
-            node_index: elem.read_block_index("node_index"),
-            scale: elem.read_real("scale").unwrap_or(1.0),
-            forward: read_real_vector3d(&elem, "forward").unwrap_or(RealVector3d { i: 1.0, j: 0.0, k: 0.0 }),
-            left: read_real_vector3d(&elem, "left").unwrap_or(RealVector3d { i: 0.0, j: 1.0, k: 0.0 }),
-            up: read_real_vector3d(&elem, "up").unwrap_or(RealVector3d { i: 0.0, j: 0.0, k: 1.0 }),
-            position: elem.read_point3d("position"),
+        let Some(e) = block.element(i) else { continue };
+        out.push(InstancePlacement {
+            name: e.read_string_id("name").unwrap_or_default(),
+            node_index: e.read_block_index("node_index"),
+            scale: e.read_real("scale").unwrap_or(1.0),
+            forward: e.read_vec3("forward"),
+            left: e.read_vec3("left"),
+            up: e.read_vec3("up"),
+            position: e.read_point3d("position"),
         });
     }
     out
 }
 
-/// Decorator-specific extractor: walk `render geometry/meshes[0]/parts[0]/subparts[]`
-/// and produce per-subpart triangle-lists (each strip-decoded
-/// independently of the others, so degenerate-stitching triangles
-/// between subparts don't pollute any one subpart's list). Each
-/// triangle is 3 indices into the shared vertex pool.
-///
-/// Engine equivalent: `c_structure_renderer::render_decorators @
-/// 0x1806901A0`'s per-subpart draw loop. The engine actually does an
-/// unindexed strip draw against a cache-built expanded vertex buffer
-/// (`start_vertex = s × subpart[0].index_count`), but for an indexed
-/// pipeline we slice the index pool by subpart and let the
-/// rasterizer fetch the full vertex buffer through normal indexing.
-///
-/// Returns `None` if the tag isn't shaped like a decorator
-/// render_model (no per-mesh-temporary, no parts, no subparts, etc).
-pub fn extract_decorator_subparts(
-    tag: &TagFile,
-) -> Option<DecoratorSubpartGeometry> {
-    let root = tag.root();
-    let bounds = read_compression_bounds(&root);
-
-    let pmt = root.field_path("render geometry/per mesh temporary").and_then(|f| f.as_block())?;
-    let meshes = root.field_path("render geometry/meshes").and_then(|f| f.as_block())?;
-    if meshes.is_empty() || pmt.is_empty() {
-        return None;
+fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<Node>, RenderModelError> {
+    let block = root
+        .field_path("nodes")
+        .and_then(|f| f.as_block())
+        .ok_or(RenderModelError::MissingField("nodes"))?;
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let n = block.element(i).unwrap();
+        out.push(Node {
+            name: n.read_string_id("name").unwrap_or_default(),
+            parent_node: n.read_block_index("parent node"),
+            first_child_node: n.read_block_index("first child node"),
+            next_sibling_node: n.read_block_index("next sibling node"),
+            default_translation: n.read_point3d("default translation"),
+            default_rotation: n.read_quat("default rotation"),
+            inverse_forward: n.read_vec3("inverse forward"),
+            inverse_left: n.read_vec3("inverse left"),
+            inverse_up: n.read_vec3("inverse up"),
+            inverse_position: n.read_point3d("inverse position"),
+            inverse_scale: n.read_real("inverse scale").unwrap_or(1.0),
+            distance_from_parent: n.read_real("distance from parent").unwrap_or(0.0),
+        });
     }
-
-    // Decorator render_models conventionally have one mesh + one part.
-    // We only walk meshes[0]/parts[0]; other shapes are caller error.
-    let mesh = meshes.element(0)?;
-    let pmt0 = pmt.element(0)?;
-
-    let raw_v = pmt0.field("raw vertices").and_then(|f| f.as_block())?;
-    let raw_i = pmt0.field("raw indices").and_then(|f| f.as_block())?;
-
-    // Decode every raw vertex once (same path as `read_meshes_per_mesh`).
-    let mut vertices: Vec<RenderVertex> = Vec::with_capacity(raw_v.len());
-    for k in 0..raw_v.len() {
-        let v = raw_v.element(k)?;
-        // Decorators are unskinned (single-bone via instance_placements
-        // node_index); per-vertex node_indices are zero — pass None.
-        vertices.push(read_vertex(&v, &bounds, None));
-    }
-    // Flatten raw indices into a u16 pool.
-    let raw_index_list: Vec<u16> = (0..raw_i.len())
-        .filter_map(|k| raw_i.element(k))
-        .map(|e| e.read_int_any("word").unwrap_or(0) as u16)
-        .collect();
-
-    // Walk the mesh's `subparts` block. NOTE: in `render geometry/
-    // meshes[i]`, `subparts` is a SIBLING of `parts` (not nested under
-    // `parts[0]`) — the per-part `subpart_start` / `subpart_count`
-    // fields slice into this mesh-level block. For decorators (one
-    // part per mesh) the whole `subparts` block belongs to that part.
-    // Falls back to one synthetic subpart spanning the whole index
-    // pool when the field is absent (e.g., non-decorator render_models).
-    let mut subpart_indices: Vec<Vec<u32>> = Vec::new();
-    if let Some(subparts) = mesh.field("subparts").and_then(|f| f.as_block()) {
-        for k in 0..subparts.len() {
-            let Some(sp) = subparts.element(k) else { continue };
-            let start = sp.read_int_any("index start").unwrap_or(0) as i32;
-            let count = sp.read_int_any("index count").unwrap_or(0) as i32;
-            let start = (start as i16 as u16) as usize;
-            let count = count.max(0) as usize;
-            if count == 0 {
-                subpart_indices.push(Vec::new());
-                continue;
-            }
-            let end = (start + count).min(raw_index_list.len());
-            let strip = &raw_index_list[start..end];
-            let tris = crate::geometry::strip_to_list(strip);
-            let mut flat = Vec::with_capacity(tris.len() * 3);
-            for (a, b, c) in tris {
-                flat.push(a as u32);
-                flat.push(b as u32);
-                flat.push(c as u32);
-            }
-            subpart_indices.push(flat);
-        }
-    } else {
-        // Single synthetic subpart spanning all indices.
-        let tris = crate::geometry::strip_to_list(&raw_index_list);
-        let mut flat = Vec::with_capacity(tris.len() * 3);
-        for (a, b, c) in tris {
-            flat.push(a as u32); flat.push(b as u32); flat.push(c as u32);
-        }
-        subpart_indices.push(flat);
-    }
-
-    Some(DecoratorSubpartGeometry { vertices, subpart_indices })
+    Ok(out)
 }
 
-/// Walk the `sky lights` block. Field name has a space in the tag
-/// schema; mirrors the `s_sky_gen_light` runtime struct (28 bytes).
+fn read_marker_groups(root: &TagStruct<'_>) -> Vec<MarkerGroup> {
+    let Some(block) = root.field_path("marker groups").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let g = block.element(i).unwrap();
+        let name = g.read_string_id("name").unwrap_or_default();
+        let mut markers = Vec::new();
+        if let Some(inner) = g.field("markers").and_then(|f| f.as_block()) {
+            for j in 0..inner.len() {
+                let m = inner.element(j).unwrap();
+                markers.push(Marker {
+                    region_index: m.read_int_any("region index").unwrap_or(-1) as i8,
+                    permutation_index: m.read_int_any("permutation index").unwrap_or(-1) as i8,
+                    node_index: m.read_int_any("node index").unwrap_or(-1) as i8,
+                    translation: m.read_point3d("translation"),
+                    rotation: m.read_quat("rotation"),
+                    scale: m.read_real("scale").unwrap_or(1.0),
+                });
+            }
+        }
+        out.push(MarkerGroup { name, markers });
+    }
+    out
+}
+
+fn read_materials(root: &TagStruct<'_>) -> Result<Vec<Material>, RenderModelError> {
+    let Some(block) = root.field_path("materials").and_then(|f| f.as_block()) else {
+        // `materials` is `*`-optional in the schema; some tags carry none.
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let m = block.element(i).unwrap();
+        let (group, path) = m
+            .read_tag_ref_with_group("render method")
+            .unwrap_or((0, String::new()));
+        let mut properties = Vec::new();
+        if let Some(props) = m.field("properties").and_then(|f| f.as_block()) {
+            for j in 0..props.len() {
+                let p = props.element(j).unwrap();
+                properties.push(MaterialProperty {
+                    property_type: p.try_read_enum("type").unwrap_or_default(),
+                    int_value: read_i16(&p, "int-value"),
+                    long_value: read_i32(&p, "long-value"),
+                    real_value: p.read_real("real-value").unwrap_or(0.0),
+                });
+            }
+        }
+        out.push(Material {
+            render_method: path,
+            render_method_group: group,
+            properties,
+            imported_material_index: read_i32(&m, "imported material index"),
+            breakable_surface_index: read_i8(&m, "breakable surface index"),
+        });
+    }
+    Ok(out)
+}
+
+fn read_geometry(root: &TagStruct<'_>) -> Result<Geometry, RenderModelError> {
+    let geo = root
+        .field("render geometry")
+        .and_then(|f| f.as_struct())
+        .ok_or(RenderModelError::MissingField("render geometry"))?;
+    Ok(Geometry {
+        flags: geo.try_read_flags("runtime flags").unwrap_or_default(),
+        meshes: read_meshes_schema(&geo),
+        compression_info: read_compression_info(&geo),
+        part_sorting_position: read_sorting_positions(&geo),
+        per_mesh_temporary: read_per_mesh_temporary(&geo),
+        per_mesh_node_map: read_per_mesh_node_map(&geo),
+        per_mesh_prt_data: read_per_mesh_prt_data(&geo),
+        per_instance_lightmap_texcoords: read_per_instance_lightmap_texcoords(&geo),
+    })
+}
+
+fn read_meshes_schema(geo: &TagStruct<'_>) -> Vec<Mesh> {
+    let Some(block) = geo.field("meshes").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let m = block.element(i).unwrap();
+        let mut parts = Vec::new();
+        if let Some(pb) = m.field("parts").and_then(|f| f.as_block()) {
+            for j in 0..pb.len() {
+                let p = pb.element(j).unwrap();
+                parts.push(Part {
+                    render_method_index: p.read_block_index("render method index"),
+                    transparent_sorting_index: p.read_block_index("transparent sorting index"),
+                    index_start: read_i16(&p, "index start"),
+                    index_count: read_i16(&p, "index count"),
+                    subpart_start: read_i16(&p, "subpart start"),
+                    subpart_count: read_i16(&p, "subpart count"),
+                    part_type: read_i8(&p, "part type"),
+                    part_flags: p.try_read_flags("part flags").unwrap_or_default(),
+                    budget_vertex_count: read_i16(&p, "budget vertex count"),
+                });
+            }
+        }
+        let mut subparts = Vec::new();
+        if let Some(sb) = m.field("subparts").and_then(|f| f.as_block()) {
+            for j in 0..sb.len() {
+                let s = sb.element(j).unwrap();
+                subparts.push(Subpart {
+                    index_start: read_i16(&s, "index start"),
+                    index_count: read_i16(&s, "index count"),
+                    part_index: s.read_block_index("part index"),
+                    budget_vertex_count: read_i16(&s, "budget vertex count"),
+                });
+            }
+        }
+        let vbi_vec = read_array_with(&m, "vertex buffer indices", |e| elem_scalar_i128(e) as u16);
+        let mut vertex_buffer_indices = [0u16; 8];
+        for (k, v) in vbi_vec.iter().take(8).enumerate() {
+            vertex_buffer_indices[k] = *v;
+        }
+        let mut instance_buckets = Vec::new();
+        if let Some(ib) = m.field("instance buckets").and_then(|f| f.as_block()) {
+            for j in 0..ib.len() {
+                let b = ib.element(j).unwrap();
+                instance_buckets.push(InstanceBucket {
+                    mesh_index: read_i16(&b, "mesh index"),
+                    definition_index: read_i16(&b, "definition index"),
+                    instances: read_word_block(&b, "instances"),
+                });
+            }
+        }
+        out.push(Mesh {
+            parts,
+            subparts,
+            vertex_buffer_indices,
+            index_buffer_index: read_i16(&m, "index buffer index"),
+            index_buffer_tessellation: read_i16(&m, "index buffer tessellation"),
+            mesh_flags: m.try_read_flags("mesh flags").unwrap_or_default(),
+            rigid_node_index: read_i8(&m, "rigid node index"),
+            vertex_type: m.try_read_enum("vertex type").unwrap_or_default(),
+            prt_vertex_type: m.try_read_enum("PRT vertex type").unwrap_or_default(),
+            index_buffer_type: m.try_read_enum("index buffer type").unwrap_or_default(),
+            instance_buckets,
+            water_indices_start: read_word_block(&m, "water indices start"),
+        });
+    }
+    out
+}
+
+fn read_compression_info(geo: &TagStruct<'_>) -> Vec<CompressionInfo> {
+    let Some(block) = geo.field("compression info").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let c = block.element(i).unwrap();
+        out.push(CompressionInfo {
+            flags: c.try_read_flags("compression flags").unwrap_or_default(),
+            position_bounds: [
+                c.read_point3d("position bounds 0"),
+                c.read_point3d("position bounds 1"),
+            ],
+            texcoord_bounds: [
+                c.read_point2d("texcoord bounds 0"),
+                c.read_point2d("texcoord bounds 1"),
+            ],
+        });
+    }
+    out
+}
+
+fn read_sorting_positions(geo: &TagStruct<'_>) -> Vec<SortingPosition> {
+    let Some(block) = geo.field("part sorting position").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let s = block.element(i).unwrap();
+        let idx_vec = read_array_with(&s, "node indices", |e| elem_scalar_i128(e) as u8);
+        let mut node_indices = [0u8; 4];
+        for (k, v) in idx_vec.iter().take(4).enumerate() {
+            node_indices[k] = *v;
+        }
+        let wt_vec = read_array_with(&s, "node weights", elem_scalar_f32);
+        let mut node_weights = [0f32; 3];
+        for (k, v) in wt_vec.iter().take(3).enumerate() {
+            node_weights[k] = *v;
+        }
+        out.push(SortingPosition {
+            plane: s.read_plane3d("plane"),
+            position: s.read_point3d("position"),
+            radius: s.read_real("radius").unwrap_or(0.0),
+            node_indices,
+            node_weights,
+        });
+    }
+    out
+}
+
+fn read_raw_vertex(v: &TagStruct<'_>) -> RawVertex {
+    let idx_vec = read_array_with(v, "node indices", |e| elem_scalar_i128(e) as u8);
+    let mut node_indices = [0u8; 4];
+    for (k, x) in idx_vec.iter().take(4).enumerate() {
+        node_indices[k] = *x;
+    }
+    let wt_vec = read_array_with(v, "node weights", elem_scalar_f32);
+    let mut node_weights = [0f32; 4];
+    for (k, x) in wt_vec.iter().take(4).enumerate() {
+        node_weights[k] = *x;
+    }
+    RawVertex {
+        position: v.read_point3d("position"),
+        texcoord: v.read_point2d("texcoord"),
+        normal: v.read_point3d("normal").as_vector(),
+        binormal: v.read_point3d("binormal").as_vector(),
+        tangent: v.read_point3d("tangent").as_vector(),
+        lightmap_texcoord: v.read_point2d("lightmap texcoord"),
+        node_indices,
+        node_weights,
+        vertex_color: v.read_point3d("vertex color").as_vector(),
+    }
+}
+
+fn read_per_mesh_temporary(geo: &TagStruct<'_>) -> Vec<PerMeshTemporary> {
+    let Some(block) = geo.field("per mesh temporary").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let p = block.element(i).unwrap();
+        let raw_vertices = p
+            .field("raw vertices")
+            .and_then(|f| f.as_block())
+            .map(|b| {
+                (0..b.len())
+                    .filter_map(|k| b.element(k))
+                    .map(|v| read_raw_vertex(&v))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let raw_indices = read_word_block(&p, "raw indices");
+        let raw_water_data = p
+            .field("raw water data")
+            .and_then(|f| f.as_block())
+            .filter(|b| !b.is_empty())
+            .and_then(|b| b.element(0))
+            .map(|e| RawWaterDataSchema {
+                indices: read_word_block(&e, "raw water indices"),
+                vertices: e
+                    .field("raw water vertices")
+                    .and_then(|f| f.as_block())
+                    .map(|wb| {
+                        (0..wb.len())
+                            .filter_map(|k| wb.element(k))
+                            .map(|w| RawWaterAppend {
+                                local_info: w.read_point3d("local info"),
+                                water_velocity: w.read_point3d("water velocity"),
+                                base_texcoord: w.read_point3d("base texcoord"),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            });
+        out.push(PerMeshTemporary {
+            raw_vertices,
+            raw_indices,
+            raw_water_data,
+            parameterized_texture_width: read_i16(&p, "parameterized texture width"),
+            parameterized_texture_height: read_i16(&p, "parameterized texture height"),
+            flags: p.try_read_flags("flags").unwrap_or_default(),
+        });
+    }
+    out
+}
+
+fn read_per_mesh_node_map(geo: &TagStruct<'_>) -> Vec<Vec<u8>> {
+    let Some(block) = geo.field("per mesh node map").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let e = block.element(i).unwrap();
+        let map = e
+            .field("node map")
+            .and_then(|f| f.as_block())
+            .map(|nb| {
+                (0..nb.len())
+                    .filter_map(|k| nb.element(k))
+                    .map(|n| n.read_int_any("node index").unwrap_or(0) as u8)
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.push(map);
+    }
+    out
+}
+
+fn read_per_mesh_prt_data(geo: &TagStruct<'_>) -> Vec<PerMeshPrtData> {
+    let Some(block) = geo.field("per_mesh_prt_data").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let e = block.element(i).unwrap();
+        let mesh_pca_data = e
+            .field("mesh pca data")
+            .and_then(|f| f.as_data())
+            .map(|b| b.to_vec())
+            .unwrap_or_default();
+        out.push(PerMeshPrtData { mesh_pca_data });
+    }
+    out
+}
+
+fn read_per_instance_lightmap_texcoords(geo: &TagStruct<'_>) -> Vec<PerInstanceLightmapTexcoords> {
+    let Some(block) = geo
+        .field("per_instance_lightmap_texcoords")
+        .and_then(|f| f.as_block())
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let e = block.element(i).unwrap();
+        let texture_coordinates = e
+            .field("texture coordinates")
+            .and_then(|f| f.as_block())
+            .map(|tc| {
+                (0..tc.len())
+                    .filter_map(|k| tc.element(k))
+                    .map(|v| read_raw_vertex(&v))
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.push(PerInstanceLightmapTexcoords {
+            texture_coordinates,
+            vertex_buffer_index: read_i16(&e, "vertex buffer index"),
+        });
+    }
+    out
+}
+
 fn read_sky_lights(root: &TagStruct<'_>) -> Vec<SkyLight> {
     let Some(block) = root.field("sky lights").and_then(|f| f.as_block()) else {
         return Vec::new();
     };
     let mut out = Vec::with_capacity(block.len());
     for i in 0..block.len() {
-        let Some(elem) = block.element(i) else { continue };
-        let direction = read_real_vector3d(&elem, "direction").unwrap_or(RealVector3d { i: 0.0, j: 0.0, k: 1.0 });
-        let intensity = read_real_vector3d(&elem, "intensity").unwrap_or(RealVector3d { i: 0.0, j: 0.0, k: 0.0 });
-        let solid_angle = elem.read_real("solid angle").unwrap_or(0.0);
-        out.push(SkyLight { direction, intensity, solid_angle });
+        let Some(e) = block.element(i) else { continue };
+        out.push(SkyLight {
+            direction: e.read_vec3("direction"),
+            intensity: e.read_vec3("intensity"),
+            solid_angle: e.read_real("solid angle").unwrap_or(0.0),
+        });
     }
     out
 }
 
-/// Read the `default lightprobe r/g/b` arrays, returning `None` when
-/// any channel is missing or empty. The on-disk format is a 16-element
-/// `array` of structs each containing one `coefficient: real` field; we
-/// extract the first 9 and discard the trailing zero pad.
 fn read_default_lightprobe(root: &TagStruct<'_>) -> Option<DefaultLightprobe> {
-    fn read_channel(root: &TagStruct<'_>, name: &str) -> Option<[f32; 9]> {
+    fn read_channel(root: &TagStruct<'_>, name: &str) -> Option<[f32; 16]> {
         let arr = root.field(name)?.as_array()?;
-        let mut out = [0.0f32; 9];
-        let n = arr.len().min(9);
-        for i in 0..n {
-            let elem = arr.element(i)?;
-            out[i] = elem.read_real("coefficient").unwrap_or(0.0);
+        let mut out = [0.0f32; 16];
+        for i in 0..arr.len().min(16) {
+            let e = arr.element(i)?;
+            out[i] = e.read_real("coefficient").unwrap_or(0.0);
         }
         Some(out)
     }
-    let r = read_channel(root, "default lightprobe r")?;
-    let g = read_channel(root, "default lightprobe g")?;
-    let b = read_channel(root, "default lightprobe b")?;
-    Some(DefaultLightprobe { r, g, b })
+    Some(DefaultLightprobe {
+        r: read_channel(root, "default lightprobe r")?,
+        g: read_channel(root, "default lightprobe g")?,
+        b: read_channel(root, "default lightprobe b")?,
+    })
 }
 
-fn read_real_vector3d(s: &TagStruct<'_>, name: &str) -> Option<RealVector3d> {
-    match s.field(name)?.value()? {
-        TagFieldData::RealVector3d(v) => Some(v),
-        _ => None,
+fn read_volume_samples(root: &TagStruct<'_>) -> Vec<VolumeSample> {
+    let Some(block) = root.field("volume samples").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let e = block.element(i).unwrap();
+        let rt = read_array_with(&e, "radiance transfer matrix", elem_scalar_f32);
+        let mut radiance_transfer = [0f32; 81];
+        for (k, v) in rt.iter().take(81).enumerate() {
+            radiance_transfer[k] = *v;
+        }
+        out.push(VolumeSample {
+            position: e.read_vec3("position"),
+            radiance_transfer,
+        });
     }
+    out
+}
+
+fn read_default_node_orientations(root: &TagStruct<'_>) -> Vec<NodeOrientation> {
+    let Some(block) = root.field("runtime node orientations").and_then(|f| f.as_block()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let Some(e) = block.element(i) else { continue };
+        out.push(NodeOrientation {
+            rotation: e.read_quat("rotation"),
+            translation: e.read_point3d("translation"),
+            scale: e.read_real("scale").unwrap_or(1.0),
+        });
+    }
+    out
+}
+
+//================================================================================
+// Derived render-geometry decode (decompress + strip-decode + water/PRT).
+// Reusable on render_model / sbsp / lightmap render geometry.
+//================================================================================
+
+/// Index-buffer interpretation policy. Halo 3 sbsp `render geometry`
+/// stores all index buffers as triangle lists despite the schema's
+/// `index buffer type` enum sometimes claiming "triangle strip". Pass
+/// `PerMeshSchema` for `render_model` (mode) tags.
+#[derive(Debug, Clone, Copy)]
+pub enum IndexFormatPolicy {
+    /// Use the per-mesh `index buffer type` enum (correct for `mode`).
+    PerMeshSchema,
+    /// Force triangle list (correct for `sbsp` / lightmap geometry).
+    ForceTriangleList,
 }
 
 /// Decode every mesh from the `render geometry` block of an arbitrary
-/// root struct — works on `render_model` (mode) tags AND on
-/// `scenario_structure_bsp` (sbsp) tags, since both share the
-/// `s_render_geometry` schema. Returns one [`RenderMesh`] per
-/// `render geometry/meshes[i]`.
-///
-/// Compression bounds are auto-paired: mesh `i` uses
-/// `render geometry/compression info[i]` if it exists, else falls
-/// back to `compression info[0]`. This works for render_model tags
-/// (which generally have one or more bounds entries) and for sbsp
-/// instance meshes (paired 1:1 with their definition's
-/// compression_info entry). For sbsp **cluster** meshes (mesh_index
-/// >= compression_info.len()), use
-/// [`extract_render_geometry_meshes_with_bounds`] and supply the
-/// BSP's `world_bounds_x/y/z` as the cluster mesh bounds.
+/// root struct (`render_model` or `scenario_structure_bsp`). Compression
+/// bounds are auto-paired: mesh `i` uses `compression info[i]` when it
+/// declares compression, else identity.
 pub fn extract_render_geometry_meshes(
     root: &TagStruct<'_>,
 ) -> Result<Vec<RenderMesh>, RenderModelError> {
     extract_render_geometry_meshes_with_bounds(root, |mi| {
-        // compression_info[mi] when in range, else identity. sbsp
-        // cluster meshes that fall through here will be wrong — use
-        // the per-mesh-bounds API instead.
         let bounds = crate::geometry::read_compression_bounds_at(root, mi);
         if bounds.pos_compressed || bounds.uv_compressed {
             bounds
@@ -748,168 +1332,40 @@ pub fn extract_render_geometry_meshes(
     })
 }
 
-/// Same as [`extract_render_geometry_meshes`], but the caller picks
-/// the compression bounds per mesh via a closure. Used by sbsp loaders
-/// to apply `compression_info[i]` to instance meshes (i < N) and the
-/// BSP's `world_bounds_x/y/z` to cluster meshes (i >= N).
+/// As [`extract_render_geometry_meshes`] but the caller picks the
+/// compression bounds per mesh.
 pub fn extract_render_geometry_meshes_with_bounds<F>(
     root: &TagStruct<'_>,
     bounds_for: F,
 ) -> Result<Vec<RenderMesh>, RenderModelError>
 where
-    F: Fn(usize) -> crate::geometry::CompressionBounds,
+    F: Fn(usize) -> CompressionBounds,
 {
     read_meshes_per_mesh(root, bounds_for, IndexFormatPolicy::PerMeshSchema)
 }
 
-/// Index-buffer interpretation policy. Halo 3 sbsp `render geometry`
-/// stores all index buffers as triangle lists despite the schema's
-/// `index buffer type` enum sometimes claiming "triangle strip" — this
-/// is empirically verified by the H3 Blender Toolset's `_mesh_decoder.py`
-/// (face-normal correlation 1.000 for list, ~0.50 for strip on Guardian).
-/// Render_model meshes (mode tags) DO use the schema enum; pass
-/// `PerMeshSchema` for those.
-#[derive(Debug, Clone, Copy)]
-pub enum IndexFormatPolicy {
-    /// Use the per-mesh `index buffer type` enum to choose strip vs list.
-    /// Correct for `render_model` (mode) tags.
-    PerMeshSchema,
-    /// Force triangle list regardless of the schema enum. Correct for
-    /// `scenario_structure_bsp` (sbsp) `render geometry` meshes.
-    ForceTriangleList,
-}
-
 /// sbsp-specific extractor: forces triangle-list interpretation on every
-/// mesh (the schema enum lies about strip-vs-list for sbsp). Caller
-/// supplies per-mesh bounds — `compression_info[def.compression_index]`
-/// for instance defs (mesh_idx < compression_info.len()) and identity
-/// for cluster meshes (mesh_idx >= compression_info.len()).
+/// mesh (the schema enum lies about strip-vs-list for sbsp).
 pub fn extract_sbsp_render_geometry_meshes<F>(
     root: &TagStruct<'_>,
     bounds_for: F,
 ) -> Result<Vec<RenderMesh>, RenderModelError>
 where
-    F: Fn(usize) -> crate::geometry::CompressionBounds,
+    F: Fn(usize) -> CompressionBounds,
 {
     read_meshes_per_mesh(root, bounds_for, IndexFormatPolicy::ForceTriangleList)
 }
 
-fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<RenderNode>, RenderModelError> {
-    let block = root.field_path("nodes").and_then(|f| f.as_block())
-        .ok_or(RenderModelError::MissingField("nodes"))?;
-    let mut out = Vec::with_capacity(block.len());
-    for i in 0..block.len() {
-        let n = block.element(i).unwrap();
-        out.push(RenderNode {
-            name: n.read_string_id("name").unwrap_or_default(),
-            parent_index: n.read_block_index("parent node"),
-            default_translation: n.read_point3d("default translation"),
-            default_rotation: n.read_quat("default rotation"),
-        });
-    }
-    Ok(out)
-}
-
-/// Read the `runtime node orientations` block (engine
-/// `render_model_definition.default_node_orientations`, +0x1C0 in the
-/// runtime struct). Tool.exe bakes one [`RealOrientation`] per node;
-/// the engine `memcpy`s this directly into per-object orientation
-/// buffers via `model_get_node_orientations @ 0x1804e7fc0`.
-///
-/// Schema name has a `!` suffix in the H3 MCC definitions — that's
-/// the convention for tool.exe-resolved runtime data. The block can
-/// legitimately be empty in some extracted tag dumps; callers that
-/// need a bind pose for those should fall back to deriving each
-/// entry from [`RenderNode::default_translation`] /
-/// [`RenderNode::default_rotation`] with `scale = 1.0`.
-fn read_default_node_orientations(root: &TagStruct<'_>) -> Vec<RealOrientation> {
-    let Some(block) = root.field("runtime node orientations").and_then(|f| f.as_block()) else {
-        return Vec::new();
-    };
-    let mut out = Vec::with_capacity(block.len());
-    for i in 0..block.len() {
-        let Some(elem) = block.element(i) else { continue };
-        out.push(RealOrientation {
-            rotation: elem.read_quat("rotation"),
-            translation: elem.read_point3d("translation"),
-            scale: elem.read_real("scale").unwrap_or(1.0),
-        });
-    }
-    out
-}
-
-fn read_materials(root: &TagStruct<'_>) -> Result<Vec<RenderMaterial>, RenderModelError> {
-    let block = root.field_path("materials").and_then(|f| f.as_block())
-        .ok_or(RenderModelError::MissingField("materials"))?;
-    let mut out = Vec::with_capacity(block.len());
-    for i in 0..block.len() {
-        let m = block.element(i).unwrap();
-        let (shader_group_tag, path) = m
-            .read_tag_ref_with_group("render method")
-            .unwrap_or((0, String::new()));
-        let shader_name = std::path::Path::new(&path.replace('\\', "/"))
-            .file_stem().and_then(|s| s.to_str()).unwrap_or("default").to_owned();
-        out.push(RenderMaterial { shader_name, shader_path: path, shader_group_tag });
-    }
-    Ok(out)
-}
-
-fn read_regions(root: &TagStruct<'_>) -> Result<Vec<RenderRegion>, RenderModelError> {
-    let block = root.field_path("regions").and_then(|f| f.as_block())
-        .ok_or(RenderModelError::MissingField("regions"))?;
-    let mut out = Vec::with_capacity(block.len());
-    for i in 0..block.len() {
-        let r = block.element(i).unwrap();
-        let name = r.read_string_id("name").unwrap_or_default();
-        let perms_block = r.field("permutations").and_then(|f| f.as_block());
-        let mut permutations = Vec::new();
-        if let Some(perms) = perms_block {
-            for j in 0..perms.len() {
-                let p = perms.element(j).unwrap();
-                permutations.push(RenderPermutation {
-                    name: p.read_string_id("name").unwrap_or_default(),
-                    mesh_index: p.read_int_any("mesh index").unwrap_or(-1) as i16,
-                    mesh_count: p.read_int_any("mesh count").unwrap_or(0) as i16,
-                });
-            }
-        }
-        out.push(RenderRegion { name, permutations });
-    }
-    Ok(out)
-}
-
-fn read_markers(root: &TagStruct<'_>) -> Result<Vec<RenderMarker>, RenderModelError> {
-    let Some(block) = root.field_path("marker groups").and_then(|f| f.as_block()) else {
-        return Ok(Vec::new());
-    };
-    let mut out = Vec::new();
-    for i in 0..block.len() {
-        let g = block.element(i).unwrap();
-        let group_name = g.read_string_id("name").unwrap_or_default();
-        let inner = match g.field("markers").and_then(|f| f.as_block()) {
-            Some(b) => b, None => continue,
-        };
-        for j in 0..inner.len() {
-            let m = inner.element(j).unwrap();
-            out.push(RenderMarker {
-                name: group_name.clone(),
-                region_index: m.read_int_any("region index").unwrap_or(-1) as i8,
-                permutation_index: m.read_int_any("permutation index").unwrap_or(-1) as i8,
-                node_index: m.read_int_any("node index").unwrap_or(-1) as i8,
-                translation: m.read_point3d("translation"),
-                rotation: m.read_quat("rotation"),
-                scale: m.read_real("scale").unwrap_or(1.0),
-            });
-        }
-    }
-    Ok(out)
-}
-
-fn read_meshes(
+/// Walk the lightmap tag's `imported geometry` (vertex-aligned copy of
+/// the sbsp `render geometry`, carrying the real lightmap UVs).
+pub fn extract_imported_geometry_meshes<F>(
     root: &TagStruct<'_>,
-    bounds: &CompressionBounds,
-) -> Result<Vec<RenderMesh>, RenderModelError> {
-    read_meshes_per_mesh(root, |_| *bounds, IndexFormatPolicy::PerMeshSchema)
+    bounds_for: F,
+) -> Result<Vec<RenderMesh>, RenderModelError>
+where
+    F: Fn(usize) -> CompressionBounds,
+{
+    read_meshes_at_path(root, "imported geometry", bounds_for, IndexFormatPolicy::ForceTriangleList)
 }
 
 fn read_meshes_per_mesh<F>(
@@ -923,77 +1379,6 @@ where
     read_meshes_at_path(root, "render geometry", bounds_for, index_format)
 }
 
-/// Walk a parallel render-geometry block at a configurable path.
-/// `mode`/`sbsp` tags use `"render geometry"`; the per-BSP **lightmap**
-/// tag (`scenario_lightmap_bsp_data`) puts a vertex-aligned 1:1 copy
-/// at `"imported geometry"` — same schema, different field name.
-/// The lightmap copy is what carries non-zero `lightmap texcoord` values.
-pub fn extract_imported_geometry_meshes<F>(
-    root: &TagStruct<'_>,
-    bounds_for: F,
-) -> Result<Vec<RenderMesh>, RenderModelError>
-where
-    F: Fn(usize) -> CompressionBounds,
-{
-    read_meshes_at_path(root, "imported geometry", bounds_for, IndexFormatPolicy::ForceTriangleList)
-}
-
-/// Per-instance lightmap UV streams. One entry per
-/// `s_per_instance_lightmap_texcoords` block in the LIGHTMAP tag's
-/// `imported geometry`. `block_index` is the structure_instance's
-/// `lightmap_texcoord_block_index` (sbsp), `uvs` is per-vertex
-/// lightmap UVs aligned with the corresponding instance-definition
-/// mesh's raw_vertices in the same lightmap tag.
-///
-/// In the loose tag, only the `lightmap texcoord` field of each
-/// `texture coordinates` entry is meaningful — position/normal/etc.
-/// are all zero (it's a UV-only stream). Cache builds repackage these
-/// into a per-instance vertex buffer indexed via
-/// `per_instance_lightmap_texcoords[i].vertex_buffer_index` — that
-/// runtime form is what `select_instance_entry_point @ 0x180691340`
-/// reads via `mesh_get_vertex_buffer(_vertex_buffer_usage_lightmap_uv)`.
-#[derive(Debug, Clone)]
-pub struct PerInstanceLightmapUvs {
-    pub block_index: usize,
-    pub uvs: Vec<RealPoint2d>,
-}
-
-/// Walk the lightmap tag's
-/// `imported geometry/per_instance_lightmap_texcoords[]` block. Each
-/// entry's `texture coordinates` block is one UV stream; only the
-/// `lightmap texcoord` field is read.
-pub fn extract_per_instance_lightmap_uvs(
-    root: &TagStruct<'_>,
-) -> Vec<PerInstanceLightmapUvs> {
-    let Some(block) = root
-        .field_path("imported geometry/per_instance_lightmap_texcoords")
-        .and_then(|f| f.as_block())
-    else {
-        return Vec::new();
-    };
-    let mut out = Vec::with_capacity(block.len());
-    for i in 0..block.len() {
-        let elem = match block.element(i) {
-            Some(e) => e,
-            None => continue,
-        };
-        let Some(tc) = elem.field("texture coordinates").and_then(|f| f.as_block()) else {
-            out.push(PerInstanceLightmapUvs { block_index: i, uvs: Vec::new() });
-            continue;
-        };
-        let mut uvs = Vec::with_capacity(tc.len());
-        for k in 0..tc.len() {
-            let Some(v) = tc.element(k) else {
-                uvs.push(RealPoint2d::default());
-                continue;
-            };
-            uvs.push(v.read_point2d("lightmap texcoord"));
-        }
-        out.push(PerInstanceLightmapUvs { block_index: i, uvs });
-    }
-    out
-}
-
 fn read_meshes_at_path<F>(
     root: &TagStruct<'_>,
     path_prefix: &str,
@@ -1005,19 +1390,15 @@ where
 {
     let pmt_path = format!("{path_prefix}/per mesh temporary");
     let meshes_path = format!("{path_prefix}/meshes");
-    let pmt_block = root.field_path(&pmt_path)
+    let pmt_block = root
+        .field_path(&pmt_path)
         .and_then(|f| f.as_block())
         .ok_or(RenderModelError::MissingField("render geometry/per mesh temporary"))?;
-    let meshes_block = root.field_path(&meshes_path)
+    let meshes_block = root
+        .field_path(&meshes_path)
         .and_then(|f| f.as_block())
         .ok_or(RenderModelError::MissingField("render geometry/meshes"))?;
 
-    // Parallel `per mesh prt data` block — one entry per mesh, holding
-    // the author-time PCA codebook (`mesh pca data*` = 3 floats RGB per
-    // vertex). Reach `create_prt_vertex_buffer @ 0x82E080F0` averages
-    // these to grayscale to produce the runtime slot-2 vertex stream.
-    // Not present on every tag (render_model tags typically empty);
-    // None falls back to "no PRT data on any mesh".
     let prt_path = format!("{path_prefix}/per_mesh_prt_data");
     let prt_data_block = root.field_path(&prt_path).and_then(|f| f.as_block());
 
@@ -1026,22 +1407,19 @@ where
     for mi in 0..count {
         let mesh = meshes_block.element(mi).unwrap();
         let bounds = bounds_for(mi);
-        // Rigid meshes (`vertex type` enum 1=rigid or 5=rigid_boned)
-        // store skin weights only via the mesh-level `rigid node
-        // index`; per-vertex node arrays are typically all zero.
+
+        // Rigid meshes store the single bone via the mesh-level `rigid
+        // node index`; per-vertex node arrays are typically all zero.
         let vt = mesh.field("vertex type").and_then(|f| f.value()).map(|v| match v {
-            TagFieldData::CharEnum { value, .. } => value as i32, _ => -1,
+            TagFieldData::CharEnum { value, .. } => value as i32,
+            _ => -1,
         }).unwrap_or(-1);
         let rigid_node_index = if matches!(vt, 1 | 5) {
             mesh.read_int_any("rigid node index").map(|v| v as i16).filter(|&v| v >= 0)
-        } else { None };
+        } else {
+            None
+        };
 
-        // `PRT vertex type` enum + slot-3 (`_vertex_buffer_usage_prt`)
-        // population. The picker in `select_instance_entry_point @
-        // 0x180691340` activates PRT only when both the instance has
-        // `lightmapping_policy == 2 (single-probe)` AND
-        // `vertex_buffer_indices[3] != 0xFFFF`. We surface the per-mesh
-        // half here; the policy bit comes from sbsp at the caller.
         let prt_vertex_type = mesh.try_read_enum("PRT vertex type").unwrap_or_default();
         let has_prt_vertex_stream = mesh
             .field("vertex buffer indices")
@@ -1055,22 +1433,10 @@ where
             })
             .unwrap_or(false);
 
-        // `s_mesh.flags` byte_flags at offset 0x2C (Ares
-        // `geometry_definitions.h:13-21`). Bit 0 =
-        // `_mesh_has_vertex_color_bit`. Tag schema name: `"mesh flags"`.
-        // Engine `render_mesh_part_default @ 0x18069EBC0` reads this
-        // bit to remap `_entry_point_static_lighting_prt_quadratic` →
-        // `_entry_point_vertex_color_lighting` at draw time.
-        let mesh_flags: Flags<MeshFlags, u32> =
-            mesh.try_read_flags("mesh flags").unwrap_or_default();
+        let mesh_flags: Flags<MeshFlags, u8> = mesh.try_read_flags("mesh flags").unwrap_or_default();
         let has_vertex_color = mesh_flags.contains(MeshFlags::MeshHasVertexColor);
 
-        // No raw_vertex / raw_indices means no inline geometry — emit
-        // an empty mesh placeholder so indexing into `meshes` still
-        // matches the tag's `meshes[i]` order. PRT eligibility is kept
-        // from the schema fields above (the placeholder still reflects
-        // what `meshes[i]` declares).
-        let empty_with_prt = || RenderMesh {
+        let empty_mesh = || RenderMesh {
             vertices: Vec::new(),
             indices: Vec::new(),
             parts: Vec::new(),
@@ -1083,23 +1449,22 @@ where
             has_lightmap_uvs: false,
         };
         let Some(pmt) = pmt_block.element(mi) else {
-            out.push(empty_with_prt());
+            out.push(empty_mesh());
             continue;
         };
         let Some(raw_v) = pmt.field("raw vertices").and_then(|f| f.as_block()) else {
-            out.push(empty_with_prt());
+            out.push(empty_mesh());
             continue;
         };
         let Some(raw_i) = pmt.field("raw indices").and_then(|f| f.as_block()) else {
-            out.push(empty_with_prt());
+            out.push(empty_mesh());
             continue;
         };
 
-        // Decode every raw vertex once (parts will share the pool).
         let mut vertices: Vec<RenderVertex> = Vec::with_capacity(raw_v.len());
         for k in 0..raw_v.len() {
             let v = raw_v.element(k).unwrap();
-            vertices.push(read_vertex(&v, &bounds, rigid_node_index));
+            vertices.push(decode_render_vertex(&v, &bounds, rigid_node_index));
         }
 
         let raw_index_list: Vec<u16> = (0..raw_i.len())
@@ -1116,37 +1481,31 @@ where
                 .unwrap_or(true),
         };
 
-        let parts_block = mesh.field("parts").and_then(|f| f.as_block())
+        let parts_block = mesh
+            .field("parts")
+            .and_then(|f| f.as_block())
             .ok_or(RenderModelError::MissingField("meshes[i]/parts"))?;
-        // Each part owns a contiguous `(subpart start, subpart count)`
-        // slice of the mesh's `subparts` block; each subpart carries its
-        // OWN `(index start, index count)`. The part-level `index start /
-        // count` is a SUMMARY that does NOT always equal the union of its
-        // subpart ranges — a part spanning multiple subparts decodes WRONG
-        // when treated as a single strip/list slice (observed on
-        // bunkerworld's central-floor `ground` cluster part: its triangles
-        // come out scrambled and rasterize to nothing). Decode per-subpart
-        // when a part declares them, matching `ass.rs` (the H3 Blender
-        // toolset's `_mesh_decoder.py::_collect_parts` rule); fall back to
-        // the part's own range when subparts are absent (render_models
-        // without a subparts block).
+        // Decode per-subpart when a part declares them (matching ass.rs /
+        // the H3 toolset rule); part-level `index start/count` is only a
+        // summary and decodes WRONG for multi-subpart parts. Fall back to
+        // the part's own range when subparts are absent.
         let subparts_block = mesh.field("subparts").and_then(|f| f.as_block());
 
         let mut indices: Vec<u32> = Vec::new();
         let mut parts: Vec<RenderMeshPart> = Vec::with_capacity(parts_block.len());
-        // Decode one raw-index range into the triangle-list `indices`,
-        // honoring strip vs list. `start` may be a wrapped i16 (H3
-        // `short integer`, functionally u16 — strips spanning >32 767
-        // indices wrap negative; the low-16-bit reinterpret recovers it).
         let emit_range = |start_i: i128, count_i: i128, indices: &mut Vec<u32>| {
-            if count_i <= 0 { return; }
+            if count_i <= 0 {
+                return;
+            }
             let start = if start_i < 0 {
                 (start_i as i16 as u16) as usize
             } else {
                 start_i as usize
             };
             let count = count_i as usize;
-            if start >= raw_index_list.len() { return; }
+            if start >= raw_index_list.len() {
+                return;
+            }
             let end = (start + count).min(raw_index_list.len());
             let slice = &raw_index_list[start..end];
             if is_strip {
@@ -1200,13 +1559,8 @@ where
 
         let water_data = read_raw_water_data(&mesh, &pmt, &raw_index_list, &parts_block);
 
-        // PRT Ambient bake. Source: `per_mesh_prt_data[mi].mesh pca
-        // data` = 3 little-endian floats RGB per vertex. Output: one
-        // `f32` per vertex = `(R + G + B) / 3`. Mirrors Reach's
-        // `create_prt_vertex_buffer @ 0x82E080F0` but skips the
-        // X360-only `* 255 + 0.5` byte quantization (MCC PC declaration
-        // is `R32_FLOAT`, see Ares
-        // `rasterizer_resource_definitions.cpp:46`).
+        // PRT Ambient bake: `per_mesh_prt_data[mi].mesh pca data` = 3
+        // little-endian floats RGB per vertex, averaged to grayscale.
         let prt_ambient_stream: Vec<f32> = prt_data_block
             .as_ref()
             .and_then(|blk| blk.element(mi))
@@ -1228,6 +1582,7 @@ where
         let has_lightmap_uvs = vertices
             .iter()
             .any(|v| v.lightmap_texcoord.x != 0.0 || v.lightmap_texcoord.y != 0.0);
+
         out.push(RenderMesh {
             vertices,
             indices,
@@ -1244,26 +1599,116 @@ where
     Ok(out)
 }
 
+/// Decorator-specific extractor: per-subpart triangle-lists from
+/// `render geometry/meshes[0]`.
+pub fn extract_decorator_subparts(tag: &TagFile) -> Option<DecoratorSubpartGeometry> {
+    let root = tag.root();
+    let bounds = read_compression_bounds(&root);
+
+    let pmt = root.field_path("render geometry/per mesh temporary").and_then(|f| f.as_block())?;
+    let meshes = root.field_path("render geometry/meshes").and_then(|f| f.as_block())?;
+    if meshes.is_empty() || pmt.is_empty() {
+        return None;
+    }
+
+    let mesh = meshes.element(0)?;
+    let pmt0 = pmt.element(0)?;
+    let raw_v = pmt0.field("raw vertices").and_then(|f| f.as_block())?;
+    let raw_i = pmt0.field("raw indices").and_then(|f| f.as_block())?;
+
+    let mut vertices: Vec<RenderVertex> = Vec::with_capacity(raw_v.len());
+    for k in 0..raw_v.len() {
+        let v = raw_v.element(k)?;
+        vertices.push(decode_render_vertex(&v, &bounds, None));
+    }
+    let raw_index_list: Vec<u16> = (0..raw_i.len())
+        .filter_map(|k| raw_i.element(k))
+        .map(|e| e.read_int_any("word").unwrap_or(0) as u16)
+        .collect();
+
+    let mut subpart_indices: Vec<Vec<u32>> = Vec::new();
+    if let Some(subparts) = mesh.field("subparts").and_then(|f| f.as_block()) {
+        for k in 0..subparts.len() {
+            let Some(sp) = subparts.element(k) else { continue };
+            let start = sp.read_int_any("index start").unwrap_or(0) as i32;
+            let count = sp.read_int_any("index count").unwrap_or(0) as i32;
+            let start = (start as i16 as u16) as usize;
+            let count = count.max(0) as usize;
+            if count == 0 {
+                subpart_indices.push(Vec::new());
+                continue;
+            }
+            let end = (start + count).min(raw_index_list.len());
+            let strip = &raw_index_list[start..end];
+            let tris = strip_to_list(strip);
+            let mut flat = Vec::with_capacity(tris.len() * 3);
+            for (a, b, c) in tris {
+                flat.push(a as u32);
+                flat.push(b as u32);
+                flat.push(c as u32);
+            }
+            subpart_indices.push(flat);
+        }
+    } else {
+        let tris = strip_to_list(&raw_index_list);
+        let mut flat = Vec::with_capacity(tris.len() * 3);
+        for (a, b, c) in tris {
+            flat.push(a as u32);
+            flat.push(b as u32);
+            flat.push(c as u32);
+        }
+        subpart_indices.push(flat);
+    }
+
+    Some(DecoratorSubpartGeometry { vertices, subpart_indices })
+}
+
+/// Per-instance lightmap UV streams from the lightmap tag's
+/// `imported geometry/per_instance_lightmap_texcoords[]`.
+#[derive(Debug, Clone)]
+pub struct PerInstanceLightmapUvs {
+    pub block_index: usize,
+    pub uvs: Vec<RealPoint2d>,
+}
+
+/// Walk the lightmap tag's `per_instance_lightmap_texcoords` block; only
+/// the `lightmap texcoord` field of each `texture coordinates` entry is read.
+pub fn extract_per_instance_lightmap_uvs(root: &TagStruct<'_>) -> Vec<PerInstanceLightmapUvs> {
+    let Some(block) = root
+        .field_path("imported geometry/per_instance_lightmap_texcoords")
+        .and_then(|f| f.as_block())
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let Some(elem) = block.element(i) else { continue };
+        let Some(tc) = elem.field("texture coordinates").and_then(|f| f.as_block()) else {
+            out.push(PerInstanceLightmapUvs { block_index: i, uvs: Vec::new() });
+            continue;
+        };
+        let mut uvs = Vec::with_capacity(tc.len());
+        for k in 0..tc.len() {
+            let Some(v) = tc.element(k) else {
+                uvs.push(RealPoint2d::default());
+                continue;
+            };
+            uvs.push(v.read_point2d("lightmap texcoord"));
+        }
+        out.push(PerInstanceLightmapUvs { block_index: i, uvs });
+    }
+    out
+}
+
 /// Walk water-flagged parts and produce already-resolved per-triangle
 /// `(regular_idx, water_idx)` control-point pairs. Mirrors the cache-build
-/// walk in `?create_mesh_water_vertex_buffer @ 0x82e094e8` (Reach XEX) —
-/// see `reference_water_vertex_buffer_build.md`.
-///
-/// Schema:
-/// - `per_mesh_temporary[i].raw water data` (1-element block) =
-///   `s_raw_water_data` with `raw water indices` + `raw water vertices`.
-/// - `meshes[i].water indices start` (per-part u16 offsets into the
-///   water-index pool — one entry per part).
-/// - `meshes[i].parts[p].part flags` bit 3 = `_part_is_water_surface`.
-/// - `meshes[i].parts[p].index_start` / `index_count` reference
-///   `raw indices` (the regular pool).
+/// walk in `?create_mesh_water_vertex_buffer @ 0x82e094e8`.
 fn read_raw_water_data(
     mesh: &TagStruct<'_>,
     pmt: &TagStruct<'_>,
     raw_index_list: &[u16],
     parts_block: &TagBlock<'_>,
 ) -> Option<RawWaterData> {
-    // 1. raw_water_data block (1 element if water-bearing).
     let block = pmt.field("raw water data").and_then(|f| f.as_block())?;
     if block.is_empty() {
         return None;
@@ -1275,30 +1720,12 @@ fn read_raw_water_data(
         return None;
     }
 
-    // 2. Decode raw_water_indices into a flat u16 array.
     let mut raw_water_indices: Vec<u16> = Vec::with_capacity(water_indices_block.len());
     for k in 0..water_indices_block.len() {
         let Some(e) = water_indices_block.element(k) else { continue };
         raw_water_indices.push(e.read_int_any("word").unwrap_or(0) as u16);
     }
 
-    // 3. Decode raw_water_vertices (the append pool). Per
-    // `s_raw_water_append` schema: 36 bytes total = local_info(rp3d)
-    // + water_velocity(rp3d) + base_texcoord(rp3d). For BSP geometry
-    // the canonical source is the lightmap tag's
-    // `scenario_lightmap_bsp_data.raw_water_append_block` (identical
-    // 36-byte layout to render_model's version).
-    //
-    // Empirical riverworld values (1500+ verts across 11 BSPs):
-    //   local_info.x = 3.178 (constant across ALL vertices) — engine
-    //                  line 447 `displacement *= IN.local_info.x`, so
-    //                  this is the scenario-wide wave amplitude scale
-    //                  (NOT a per-vertex shore taper as initially
-    //                  speculated). Another scenario could pick a
-    //                  different constant.
-    //   local_info.y = water_depth, varies [0, 8.168]. Drives
-    //                  `misc_info.w` → `bank_alpha` shore color fade.
-    //   local_info.z = 0 (unused in PC water_shading_fx).
     let mut vertices: Vec<RawWaterAppend> = Vec::with_capacity(vertices_block.len());
     for k in 0..vertices_block.len() {
         let Some(e) = vertices_block.element(k) else { continue };
@@ -1309,10 +1736,7 @@ fn read_raw_water_data(
         });
     }
 
-    // 4. mesh.water_indices_start — per-part u16 base offsets.
-    let water_starts_block = mesh
-        .field("water indices start")
-        .and_then(|f| f.as_block())?;
+    let water_starts_block = mesh.field("water indices start").and_then(|f| f.as_block())?;
     let mut water_indices_start: Vec<u16> = Vec::with_capacity(water_starts_block.len());
     for k in 0..water_starts_block.len() {
         let Some(e) = water_starts_block.element(k) else { continue };
@@ -1322,30 +1746,15 @@ fn read_raw_water_data(
         return None;
     }
 
-    // 5. Walk parts; for each water-flagged one, emit triangles AND
-    //    record the part's (start, count) range. Per Reach
-    //    `create_mesh_water_vertex_buffer`:
-    //      regular_idx[j] = raw_indices[part.index_start + j]
-    //      water_idx[j]   = raw_water_indices[water_indices_start[p] + j]
-    //    Triangles formed by chunking j in 0..part.index_count by 3.
-    //    Per-part ranges let the renderer dispatch a separate water
-    //    draw per part (different rmw materials on the same mesh =
-    //    different shader pipelines + cbuffers).
     let mut triangles: Vec<RawWaterTriangle> = Vec::new();
     let mut parts: Vec<RawWaterPart> = Vec::new();
     for p in 0..parts_block.len() {
         let Some(part) = parts_block.element(p) else { continue };
-        let part_flags: Flags<PartFlags, u32> =
-            part.try_read_flags("part flags").unwrap_or_default();
-        // `is water surface` per `e_part_flags`
-        // (`Ares/source/geometry/geometry_definitions.h:44-51`).
+        let part_flags: Flags<PartFlags, u8> = part.try_read_flags("part flags").unwrap_or_default();
         if !part_flags.contains(PartFlags::IsWaterSurface) {
             continue;
         }
         let regular_base = part.read_int_any("index start").unwrap_or(0);
-        // `index_start` is schema-typed `short integer` (i16) but
-        // functionally u16 — strips spanning >32767 wrap. Reinterpret
-        // matches the existing protomorph behavior in render_model.
         let regular_base = (regular_base as i16 as u16) as usize;
         let count = part.read_int_any("index count").unwrap_or(0) as usize;
         if count == 0 || count % 3 != 0 {
@@ -1386,7 +1795,7 @@ fn read_raw_water_data(
     Some(RawWaterData { triangles, vertices, parts })
 }
 
-fn read_vertex(
+fn decode_render_vertex(
     v: &TagStruct<'_>,
     bounds: &CompressionBounds,
     rigid_node_index: Option<i16>,
@@ -1394,21 +1803,11 @@ fn read_vertex(
     let raw_pos = v.read_point3d("position");
     let position = bounds.decompress_position(raw_pos);
     let normal = v.read_point3d("normal").as_vector();
-    // raw_vertex stores both tangent + binormal directly (rather than
-    // a packed sign), so we keep both here. Tags without tangent-space
-    // data leave the fields zero — callers should detect that and
-    // synthesize a basis themselves.
     let tangent = v.read_point3d("tangent").as_vector();
     let binormal = v.read_point3d("binormal").as_vector();
     let raw_uv = v.read_point2d("texcoord");
     let texcoord = bounds.decompress_texcoord(raw_uv);
-    // Lightmap UV is stored as a separate field in raw_vertex. SBSP's
-    // copy is zero; only the lightmap tag's parallel geometry has the
-    // real values. Read whatever's here verbatim — caller decides
-    // whether to source from sbsp or lightmap.
     let lightmap_texcoord = v.read_point2d("lightmap texcoord");
-    // `raw_vertex.vert_color` — per-vertex baked color (sky meshes).
-    // Stored as a `real_point3d`; read directly (no compression bounds).
     let vert_color = v.read_point3d("vertex color").as_vector();
 
     let mut node_indices = [0u8; 4];
@@ -1434,9 +1833,6 @@ fn read_vertex(
             }
         }
     }
-    // Rigid-mesh fallback: zero per-vertex weights but a valid
-    // mesh-level `rigid node index` means "every vertex bound to that
-    // bone at weight 1.0".
     if filled == 0 {
         if let Some(node) = rigid_node_index {
             if node >= 0 {
@@ -1464,44 +1860,50 @@ mod tests {
     use super::*;
     use crate::math::{RealOrientation, RealPoint3d, RealQuaternion};
 
-    /// `node_bind_pose` returns the tag block verbatim when populated
-    /// (cache loads carry tool.exe's baked orientations).
+    fn node(tx: RealPoint3d, rot: RealQuaternion) -> Node {
+        Node {
+            name: "root".into(),
+            parent_node: -1,
+            first_child_node: -1,
+            next_sibling_node: -1,
+            default_translation: tx,
+            default_rotation: rot,
+            inverse_forward: RealVector3d { i: 1.0, j: 0.0, k: 0.0 },
+            inverse_left: RealVector3d { i: 0.0, j: 1.0, k: 0.0 },
+            inverse_up: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
+            inverse_position: RealPoint3d::ZERO,
+            inverse_scale: 1.0,
+            distance_from_parent: 0.0,
+        }
+    }
+
+    /// `node_bind_pose` returns the tag block verbatim when populated.
     #[test]
     fn node_bind_pose_prefers_tag_block_when_present() {
-        let baked = RealOrientation {
+        let baked = NodeOrientation {
             rotation: RealQuaternion { i: 0.1, j: 0.2, k: 0.3, w: 0.4 },
             translation: RealPoint3d { x: 1.0, y: 2.0, z: 3.0 },
             scale: 0.5,
         };
         let rm = RenderModel {
-            nodes: vec![RenderNode {
-                name: "root".into(),
-                parent_index: -1,
-                default_translation: RealPoint3d::ZERO,
-                default_rotation: RealQuaternion::IDENTITY,
-            }],
+            nodes: vec![node(RealPoint3d::ZERO, RealQuaternion::IDENTITY)],
             default_node_orientations: vec![baked],
             ..Default::default()
         };
         let pose = rm.node_bind_pose();
         assert_eq!(pose.len(), 1);
-        assert_eq!(pose[0], baked, "tag-block entry must be preserved");
+        assert_eq!(pose[0].rotation, baked.rotation);
+        assert_eq!(pose[0].translation, baked.translation);
+        assert_eq!(pose[0].scale, baked.scale);
     }
 
-    /// `node_bind_pose` derives one entry per node from
-    /// `default_translation/default_rotation` with `scale=1.0` when the
-    /// tag block is empty — the extracted-tag fallback.
+    /// `node_bind_pose` derives from nodes when the tag block is empty.
     #[test]
     fn node_bind_pose_derives_from_nodes_when_tag_block_empty() {
         let tx = RealPoint3d { x: 4.0, y: 5.0, z: 6.0 };
         let rot = RealQuaternion { i: 0.1, j: 0.2, k: 0.3, w: 0.9 };
         let rm = RenderModel {
-            nodes: vec![RenderNode {
-                name: "root".into(),
-                parent_index: -1,
-                default_translation: tx,
-                default_rotation: rot,
-            }],
+            nodes: vec![node(tx, rot)],
             default_node_orientations: Vec::new(),
             ..Default::default()
         };
@@ -1510,5 +1912,13 @@ mod tests {
         assert_eq!(pose[0].rotation, rot);
         assert_eq!(pose[0].translation, tx);
         assert_eq!(pose[0].scale, 1.0, "derived bind-pose scale defaults to 1.0");
+    }
+
+    /// `RealOrientation` import is used by the derived bind-pose path.
+    #[test]
+    fn bind_pose_returns_real_orientation() {
+        let rm = RenderModel::default();
+        let pose: Vec<RealOrientation> = rm.node_bind_pose();
+        assert!(pose.is_empty());
     }
 }

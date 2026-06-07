@@ -8,10 +8,11 @@ fn main() {
     let path = std::env::args().nth(1).expect("usage: dump_render_model <path.render_model>");
     let tag = TagFile::read(&path).expect("failed to read tag");
     let rm = RenderModel::from_tag(&tag).expect("failed to extract render_model");
+    let meshes = RenderModel::derive_render_meshes(&tag).expect("failed to derive render meshes");
     println!("nodes: {}", rm.nodes.len());
     println!("materials: {}", rm.materials.len());
     for (i, m) in rm.materials.iter().enumerate() {
-        println!("  [{i}] {} ({})", m.shader_name, m.shader_path);
+        println!("  [{i}] {} ({})", m.shader_name(), m.render_method);
     }
     println!("regions: {}", rm.regions.len());
     for r in &rm.regions {
@@ -20,10 +21,10 @@ fn main() {
             println!("    perm '{}' meshes [{}, {})", p.name, p.mesh_index, p.mesh_index + p.mesh_count);
         }
     }
-    println!("meshes: {}", rm.meshes.len());
+    println!("meshes: {}", meshes.len());
     let mut total_verts = 0;
     let mut total_tris = 0;
-    for (i, m) in rm.meshes.iter().enumerate() {
+    for (i, m) in meshes.iter().enumerate() {
         total_verts += m.vertices.len();
         total_tris += m.indices.len() / 3;
         println!(
@@ -37,8 +38,9 @@ fn main() {
         rm.default_node_orientations.len(),
     );
     println!("node_bind_pose: {} (derived if tag block empty)", rm.node_bind_pose().len());
-    println!("markers: {}", rm.markers.len());
-    if let Some(v) = rm.meshes.iter().flat_map(|m| m.vertices.iter()).next() {
+    let total_markers: usize = rm.marker_groups.iter().map(|g| g.markers.len()).sum();
+    println!("markers: {}", total_markers);
+    if let Some(v) = meshes.iter().flat_map(|m| m.vertices.iter()).next() {
         println!(
             "sample vertex: pos=({:.3},{:.3},{:.3}) uv=({:.3},{:.3}) normal=({:.3},{:.3},{:.3}) idx={:?} wts={:?}",
             v.position.x, v.position.y, v.position.z,
