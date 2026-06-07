@@ -862,6 +862,16 @@ fn read_instance_placements(root: &TagStruct<'_>) -> Vec<InstancePlacement> {
     out
 }
 
+/// Re-sliced node inverse-bind (corrects the "Old Mistakes Die Hard"
+/// 1-float shift, see [`read_nodes`]).
+struct NodeInverseBind {
+    scale: f32,
+    fwd: RealVector3d,
+    left: RealVector3d,
+    up: RealVector3d,
+    pos: RealPoint3d,
+}
+
 fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<Node>, RenderModelError> {
     let block = root
         .field_path("nodes")
@@ -870,6 +880,21 @@ fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<Node>, RenderModelError> {
     let mut out = Vec::with_capacity(block.len());
     for i in 0..block.len() {
         let n = block.element(i).unwrap();
+        // Flatten the 13 inverse floats in labeled (= on-disk) order, then
+        // re-slice past the 1-float "Old Mistakes Die Hard" shift (see below).
+        let lf = n.read_vec3("inverse forward");
+        let ll = n.read_vec3("inverse left");
+        let lu = n.read_vec3("inverse up");
+        let lp = n.read_point3d("inverse position");
+        let ls = n.read_real("inverse scale").unwrap_or(0.0);
+        let raw = [lf.i, lf.j, lf.k, ll.i, ll.j, ll.k, lu.i, lu.j, lu.k, lp.x, lp.y, lp.z, ls];
+        let inv = NodeInverseBind {
+            scale: if raw[0].abs() > 1e-6 { raw[0] } else { 1.0 },
+            fwd: RealVector3d { i: raw[1], j: raw[2], k: raw[3] },
+            left: RealVector3d { i: raw[4], j: raw[5], k: raw[6] },
+            up: RealVector3d { i: raw[7], j: raw[8], k: raw[9] },
+            pos: RealPoint3d { x: raw[10], y: raw[11], z: raw[12] },
+        };
         out.push(Node {
             name: n.read_string_id("name").unwrap_or_default(),
             parent_node: n.read_block_index("parent node"),
@@ -877,11 +902,22 @@ fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<Node>, RenderModelError> {
             next_sibling_node: n.read_block_index("next sibling node"),
             default_translation: n.read_point3d("default translation"),
             default_rotation: n.read_quat("default rotation"),
-            inverse_forward: n.read_vec3("inverse forward"),
-            inverse_left: n.read_vec3("inverse left"),
-            inverse_up: n.read_vec3("inverse up"),
-            inverse_position: n.read_point3d("inverse position"),
-            inverse_scale: n.read_real("inverse scale").unwrap_or(1.0),
+            // "Old Mistakes Die Hard" (schema explanation on this block): the
+            // inverse-bind fields are stored SHIFTED by one float. The real
+            // layout is [inverse_scale, inverse_forward(3), inverse_left(3),
+            // inverse_up(3), inverse_position(3)] but they're LABELED
+            // [forward, left, up, position, scale]. So labeled `inverse
+            // forward`.i is actually inverse_scale, and labeled `inverse
+            // scale` is actually inverse_position.z. Read all 13 floats in
+            // labeled (= raw) order and re-slice into the true layout. The
+            // engine (model_skinning_matrix_from_real_matrix4x3s) reads the
+            // true layout; these inverse fields are the per-node bind-pose
+            // inverse used to build the skinning palette node_world×inverse.
+            inverse_forward: inv.fwd,
+            inverse_left: inv.left,
+            inverse_up: inv.up,
+            inverse_position: inv.pos,
+            inverse_scale: inv.scale,
             distance_from_parent: n.read_real("distance from parent").unwrap_or(0.0),
         });
     }
