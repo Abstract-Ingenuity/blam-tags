@@ -13,18 +13,34 @@ use std::sync::Arc;
 
 const VEHICLE_GROUP: [u8; 4] = *b"vehi";
 
-/// `vehicle_flags` (long_flags) — vehicle_group variant.
+/// `vehicle_flags` (long_flags) — the `vehicle_group` `flags` field.
+///
+/// NOTE: there are TWO `vehicle_flags` defs in the schema — this one
+/// (`vehicle.json`, the 14 real vehicle tag flags) and a same-named def
+/// in `character.json` (5 AI behaviour flags). The earlier version of
+/// this enum was authored from the character.json def by mistake (flat
+/// def-name dedup collision), which made every real .vehicle tag panic on
+/// "no friction w/driver". These are the correct `vehicle.json` options.
 #[derive(Clone, Copy, PartialEq, Eq, Debug,
          num_derive::FromPrimitive, num_derive::ToPrimitive,
          strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
 #[strum(ascii_case_insensitive)]
 #[repr(u32)]
 pub enum VehicleFlags {
-    #[strum(serialize = "passengers adopt original squad")] PassengersAdoptOriginalSquad = 0,
-    #[strum(serialize = "snap facing to forward (ghosts)")] SnapFacingToForward = 1,
-    #[strum(serialize = "throttle to target (hornets)")] ThrottleToTarget = 2,
-    #[strum(serialize = "stationary fight (tanks)")] StationaryFight = 3,
-    #[strum(serialize = "keep moving")] KeepMoving = 4,
+    #[strum(serialize = "no friction w/driver")] NoFrictionWithDriver = 0,
+    #[strum(serialize = "can trigger automatic opening doors")] CanTriggerAutomaticOpeningDoors = 1,
+    #[strum(serialize = "autoaim when teamless")] AutoaimWhenTeamless = 2,
+    #[strum(serialize = "ai weapon cannot rotate")] AiWeaponCannotRotate = 3,
+    #[strum(serialize = "ai does not require driver")] AiDoesNotRequireDriver = 4,
+    #[strum(serialize = "ai driver enable")] AiDriverEnable = 5,
+    #[strum(serialize = "ai driver flying")] AiDriverFlying = 6,
+    #[strum(serialize = "ai driver can-sidestep")] AiDriverCanSidestep = 7,
+    #[strum(serialize = "ai driver hovering")] AiDriverHovering = 8,
+    #[strum(serialize = "noncombat vehicle")] NoncombatVehicle = 9,
+    #[strum(serialize = "causes collision damage")] CausesCollisionDamage = 10,
+    #[strum(serialize = "huge vehicle physics group")] HugeVehiclePhysicsGroup = 11,
+    #[strum(serialize = "enable wheelie-popping hack")] EnableWheeliePoppingHack = 12,
+    #[strum(serialize = "ai auto turret")] AiAutoTurret = 13,
 }
 
 /// `havok_vehicle_physics_definition_flags` (long_flags).

@@ -22,8 +22,15 @@ use std::sync::Arc;
 #[strum(ascii_case_insensitive)]
 #[repr(u32)]
 pub enum ItemDefinitionFlags {
+    // Full 4-flag H3 layout the .item-bearing tags carry. The MCC JSON
+    // pruned "destroyed by explosions" + "unaffected by gravity", leaving 2
+    // (and shifting "crate style collision filter" from bit 3 to bit 1).
+    // Superset so the historical bits resolve by name. Discriminants follow
+    // the tag's real bit positions.
     #[strum(serialize = "always maintains z up")] AlwaysMaintainsZUp = 0,
-    #[strum(serialize = "crate style collision filter")] CrateStyleCollisionFilter = 1,
+    #[strum(serialize = "destroyed by explosions")] DestroyedByExplosions = 1,
+    #[strum(serialize = "unaffected by gravity")] UnaffectedByGravity = 2,
+    #[strum(serialize = "crate style collision filter")] CrateStyleCollisionFilter = 3,
 }
 
 /// Walked `item_struct_definition`. Field order matches schema verbatim

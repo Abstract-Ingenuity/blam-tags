@@ -290,7 +290,13 @@ impl DecoratorSet {
             texture_path: s.read_tag_ref_path("texture").unwrap_or_default(),
             render_flags: s.try_read_flags("render flags").unwrap_or_default(),
             render_shader: s.read_enum("render shader"),
-            lighting_sample_pattern: s.read_enum("light sampling pattern"),
+            // Added after the 2007 schema rev — absent in launch-era
+            // decorator_sets (e.g. riverworld's wildgrass/thistle), so read
+            // optionally and default to `ground default` (engine's behavior
+            // for the missing field).
+            lighting_sample_pattern: s
+                .try_read_enum("light sampling pattern")
+                .unwrap_or_default(),
             translucency: s.read_real("translucency").unwrap_or(0.5),
             translucency_a: s.read_real("translucency A").unwrap_or(0.0),
             translucency_b: s.read_real("translucency B").unwrap_or(0.0),
