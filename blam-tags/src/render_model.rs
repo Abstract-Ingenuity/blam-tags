@@ -659,6 +659,18 @@ pub struct RenderMeshPart {
     pub index_count: u32,
     /// `e_geometry_part_type` enum (0=opaque_not_drawn .. 5=lightmap_only).
     pub part_type: i8,
+    /// `part_block.transparent sorting index` — index into the geometry's
+    /// `part sorting position` block. `-1` when the part has no authored
+    /// sort position (opaque parts, or transparent parts the tool didn't
+    /// emit one for). Drives the engine's back-to-front transparent sort.
+    pub transparent_sorting_index: i16,
+    /// Resolved [`SortingPosition`] for this part (`None` when
+    /// `transparent_sorting_index < 0` or out of range). The engine feeds
+    /// `position` (centroid) + `plane` to `c_transparency_renderer::add_element`
+    /// as the transparent sort key. Carried here so the render-ready
+    /// [`RenderMesh`] is self-contained — no second walk of the raw
+    /// `Geometry.part_sorting_position` block needed.
+    pub sort_position: Option<SortingPosition>,
 }
 
 /// Per-subpart triangle-list geometry, decorator-specific. Each subpart
@@ -1438,6 +1450,17 @@ where
     let prt_path = format!("{path_prefix}/per_mesh_prt_data");
     let prt_data_block = root.field_path(&prt_path).and_then(|f| f.as_block());
 
+    // Geometry-level transparent sort positions (one `SortingPosition` per
+    // entry). Each transparent part references one by `transparent sorting
+    // index`. Read once here so the per-part loop can resolve + attach it to
+    // the render-ready `RenderMeshPart` (engine feeds these to
+    // `c_transparency_renderer::add_element` as the back-to-front sort key).
+    let sort_positions: Vec<SortingPosition> = root
+        .field_path(path_prefix)
+        .and_then(|f| f.as_struct())
+        .map(|geo| read_sorting_positions(&geo))
+        .unwrap_or_default();
+
     let count = meshes_block.len();
     let mut out = Vec::with_capacity(count);
     for mi in 0..count {
@@ -1585,11 +1608,20 @@ where
             }
 
             let part_index_count = indices.len() as u32 - part_index_start;
+            let transparent_sorting_index =
+                part.read_block_index("transparent sorting index");
+            let sort_position = if transparent_sorting_index >= 0 {
+                sort_positions.get(transparent_sorting_index as usize).copied()
+            } else {
+                None
+            };
             parts.push(RenderMeshPart {
                 material_index,
                 index_start: part_index_start,
                 index_count: part_index_count,
                 part_type,
+                transparent_sorting_index,
+                sort_position,
             });
         }
 

@@ -78,9 +78,9 @@ fn main() {
 fn dump_render_method(rm: &RenderMethod) {
     println!("definition:                {}", rm.definition_path);
     println!("options:                   {:?}", rm.options);
-    println!("flags:                     0x{:04x}", rm.flags);
-    println!("sort_layer:                {}", rm.sort_layer);
-    println!("runtime_flags:             0x{:02x}", rm.runtime_flags);
+    println!("flags:                     {:?}", rm.flags);
+    println!("sort_layer:                {:?}", rm.sort_layer);
+    println!("runtime_flags:             {:?}", rm.runtime_flags);
     println!("custom_fog_setting_index:  {}", rm.custom_fog_setting_index);
     println!("prediction_atom_index:     {}", rm.prediction_atom_index);
     println!("parameters: [{}]", rm.parameters.len());
@@ -215,7 +215,7 @@ fn dump_rmop(rmop: &RenderMethodOption) {
 fn dump_rmt2(rmt2: &RenderMethodTemplate) {
     println!("vertex_shader: {}", rmt2.vertex_shader_path);
     println!("pixel_shader:  {}", rmt2.pixel_shader_path);
-    println!("available_entry_points: 0x{:08x}", rmt2.available_entry_points);
+    println!("available_entry_points: {:?}", rmt2.available_entry_points);
     println!("entry_points: [{}]", rmt2.entry_points.len());
     for (i, ep) in rmt2.entry_points.iter().enumerate() {
         println!("  [{i}] start={} count={}", ep.start(), ep.count());
