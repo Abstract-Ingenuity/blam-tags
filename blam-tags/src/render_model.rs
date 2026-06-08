@@ -592,6 +592,13 @@ pub struct RenderMesh {
     pub prt_ambient_stream: Vec<f32>,
     /// `mesh->flags & _mesh_has_vertex_color_bit`.
     pub has_vertex_color: bool,
+    /// `mesh->flags & _mesh_use_region_index_for_sorting_bit` (MeshFlags bit 1).
+    /// When set, the engine sorts this transparent mesh by REGION INDEX
+    /// (constant `global_origin3d` centroid + `region*0.1` offset) instead of
+    /// its authored sort centroid — keeps co-located transparent layers (e.g.
+    /// a waterfall's liquid/sheet/mist) composited in a fixed, view-independent
+    /// order. Engine `submit_object_mesh_parts @ 0x1806E1BF0` checks `& 2`.
+    pub use_region_index_for_sorting: bool,
     /// True iff at least one vertex's lightmap UV is non-zero.
     pub has_lightmap_uvs: bool,
 }
@@ -1494,6 +1501,8 @@ where
 
         let mesh_flags: Flags<MeshFlags, u8> = mesh.try_read_flags("mesh flags").unwrap_or_default();
         let has_vertex_color = mesh_flags.contains(MeshFlags::MeshHasVertexColor);
+        let use_region_index_for_sorting =
+            mesh_flags.contains(MeshFlags::UseRegionIndexForSorting);
 
         let empty_mesh = || RenderMesh {
             vertices: Vec::new(),
@@ -1505,6 +1514,7 @@ where
             has_prt_vertex_stream,
             prt_ambient_stream: Vec::new(),
             has_vertex_color,
+            use_region_index_for_sorting,
             has_lightmap_uvs: false,
         };
         let Some(pmt) = pmt_block.element(mi) else {
@@ -1661,6 +1671,7 @@ where
             has_prt_vertex_stream,
             prt_ambient_stream,
             has_vertex_color,
+            use_region_index_for_sorting,
             has_lightmap_uvs,
         });
     }
