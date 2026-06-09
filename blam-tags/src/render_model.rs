@@ -572,6 +572,14 @@ pub struct NodeOrientation {
 #[derive(Debug, Clone)]
 pub struct RenderMesh {
     pub vertices: Vec<RenderVertex>,
+    /// The RAW index buffer (triangle list) as stored in the tag, BEFORE the
+    /// per-part/per-subpart reassembly that produces [`Self::indices`]. The
+    /// `structure_surface_to_triangle_mapping.triangle_index` (used by the
+    /// geometry sampler to map a collision hit → render triangle) is a
+    /// position in THIS raw buffer, not in the reassembled `indices` (whose
+    /// positions differ when a mesh's subparts aren't in raw order). Empty for
+    /// strip meshes (where raw positions have no list-triangle meaning).
+    pub raw_indices: Vec<u32>,
     /// Triangle-list indices into [`Self::vertices`]. Strips already
     /// decoded; per-subpart ranges honored when a part declares subparts.
     pub indices: Vec<u32>,
@@ -1506,6 +1514,7 @@ where
 
         let empty_mesh = || RenderMesh {
             vertices: Vec::new(),
+            raw_indices: Vec::new(),
             indices: Vec::new(),
             parts: Vec::new(),
             rigid_node_index,
@@ -1661,8 +1670,16 @@ where
             .iter()
             .any(|v| v.lightmap_texcoord.x != 0.0 || v.lightmap_texcoord.y != 0.0);
 
+        // Raw index buffer for the geometry sampler (triangle-list meshes
+        // only; strips don't have a meaningful raw triangle-index space).
+        let raw_indices: Vec<u32> = if is_strip {
+            Vec::new()
+        } else {
+            raw_index_list.iter().map(|&i| i as u32).collect()
+        };
         out.push(RenderMesh {
             vertices,
+            raw_indices,
             indices,
             parts,
             rigid_node_index,
