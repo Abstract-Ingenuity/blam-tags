@@ -572,16 +572,13 @@ pub struct NodeOrientation {
 #[derive(Debug, Clone)]
 pub struct RenderMesh {
     pub vertices: Vec<RenderVertex>,
-    /// The RAW index buffer (triangle list) as stored in the tag, BEFORE the
-    /// per-part/per-subpart reassembly that produces [`Self::indices`]. The
-    /// `structure_surface_to_triangle_mapping.triangle_index` (used by the
-    /// geometry sampler to map a collision hit → render triangle) is a
-    /// position in THIS raw buffer, not in the reassembled `indices` (whose
-    /// positions differ when a mesh's subparts aren't in raw order). Empty for
-    /// strip meshes (where raw positions have no list-triangle meaning).
-    pub raw_indices: Vec<u32>,
-    /// Triangle-list indices into [`Self::vertices`]. Strips already
-    /// decoded; per-subpart ranges honored when a part declares subparts.
+    /// Triangle-list indices into [`Self::vertices`]. For triangle-list
+    /// (BSP cluster/instance) meshes this is the RAW tag index buffer in its
+    /// original order, so `structure_surface_to_triangle_mapping.triangle_index`
+    /// (the geometry sampler's collision-hit → render-triangle lookup) indexes
+    /// it directly; [`RenderMeshPart::index_start`]/`index_count` are raw spans.
+    /// For strip meshes this is the de-stripped list (no surface mapping uses
+    /// it), with parts reassembled into contiguous draw ranges.
     pub indices: Vec<u32>,
     pub parts: Vec<RenderMeshPart>,
     /// For rigid meshes, the single bone all vertices bind to. `None` for
@@ -1514,7 +1511,6 @@ where
 
         let empty_mesh = || RenderMesh {
             vertices: Vec::new(),
-            raw_indices: Vec::new(),
             indices: Vec::new(),
             parts: Vec::new(),
             rigid_node_index,
@@ -1571,77 +1567,118 @@ where
 
         let mut indices: Vec<u32> = Vec::new();
         let mut parts: Vec<RenderMeshPart> = Vec::with_capacity(parts_block.len());
-        let emit_range = |start_i: i128, count_i: i128, indices: &mut Vec<u32>| {
-            if count_i <= 0 {
-                return;
+        // Normalize an `index start` that may be a wrapped i16 (H3 short).
+        let norm_start = |start_i: i128| -> usize {
+            if start_i < 0 { (start_i as i16 as u16) as usize } else { start_i as usize }
+        };
+
+        if !is_strip {
+            // Triangle-list (BSP cluster/instance) meshes: keep the RAW index
+            // buffer untouched. `structure_surface_to_triangle_mapping
+            // .triangle_index` — which the geometry sampler uses to map a
+            // collision hit → render triangle — is a position in THIS buffer,
+            // so reordering it (the old per-subpart reassembly) made the sampler
+            // resolve wrong triangles. Each part's draw range is its subparts'
+            // contiguous raw span; sum the subpart counts as u32 because the
+            // part-level `index count` is an i16 that overflows on large meshes
+            // (the bug the 2026-06-07 per-subpart pass worked around).
+            indices = raw_index_list.iter().map(|&i| i as u32).collect();
+            let n = indices.len() as u32;
+            for pi in 0..parts_block.len() {
+                let part = parts_block.element(pi).unwrap();
+                let material_index = part.read_int_any("render method index").unwrap_or(0).max(0) as u16;
+                let part_type = part.read_int_any("part type").unwrap_or(0) as i8;
+                let sub_start = part.read_int_any("subpart start").unwrap_or(0);
+                let sub_count = part.read_int_any("subpart count").unwrap_or(0);
+                let (mut index_start, mut index_count) = (0u32, 0u32);
+                let mut from_subparts = false;
+                if let Some(sps) = subparts_block.as_ref() {
+                    if sub_count > 0 {
+                        let mut start = usize::MAX;
+                        let mut total = 0usize;
+                        for off in 0..sub_count as usize {
+                            let Some(sp) = sps.element(sub_start as usize + off) else { break };
+                            let s = norm_start(sp.read_int_any("index start").unwrap_or(0));
+                            let c = sp.read_int_any("index count").unwrap_or(0).max(0) as usize;
+                            start = start.min(s);
+                            total += c;
+                        }
+                        if start != usize::MAX {
+                            index_start = start as u32;
+                            index_count = total as u32;
+                            from_subparts = true;
+                        }
+                    }
+                }
+                if !from_subparts {
+                    index_start = norm_start(part.read_int_any("index start").unwrap_or(0)) as u32;
+                    index_count = part.read_int_any("index count").unwrap_or(0).max(0) as u32;
+                }
+                if index_start > n { index_start = n; }
+                if index_start + index_count > n { index_count = n - index_start; }
+                let transparent_sorting_index = part.read_block_index("transparent sorting index");
+                let sort_position = if transparent_sorting_index >= 0 {
+                    sort_positions.get(transparent_sorting_index as usize).copied()
+                } else { None };
+                parts.push(RenderMeshPart {
+                    material_index, index_start, index_count, part_type,
+                    transparent_sorting_index, sort_position,
+                });
             }
-            let start = if start_i < 0 {
-                (start_i as i16 as u16) as usize
-            } else {
-                start_i as usize
-            };
-            let count = count_i as usize;
-            if start >= raw_index_list.len() {
-                return;
-            }
-            let end = (start + count).min(raw_index_list.len());
-            let slice = &raw_index_list[start..end];
-            if is_strip {
-                for (a, b, c) in strip_to_list(slice) {
+        } else {
+            // Triangle-strip (object render_model) meshes: de-strip per subpart
+            // into a fresh triangle-list buffer. These carry no structure-surface
+            // mapping, so the reassembled order is never indexed by the sampler.
+            let emit_range = |start_i: i128, count_i: i128, indices: &mut Vec<u32>| {
+                if count_i <= 0 { return; }
+                let start = norm_start(start_i);
+                let count = count_i as usize;
+                if start >= raw_index_list.len() { return; }
+                let end = (start + count).min(raw_index_list.len());
+                for (a, b, c) in strip_to_list(&raw_index_list[start..end]) {
                     indices.push(a as u32);
                     indices.push(b as u32);
                     indices.push(c as u32);
                 }
-            } else {
-                for chunk in slice.chunks_exact(3) {
-                    indices.push(chunk[0] as u32);
-                    indices.push(chunk[1] as u32);
-                    indices.push(chunk[2] as u32);
-                }
-            }
-        };
-        for pi in 0..parts_block.len() {
-            let part = parts_block.element(pi).unwrap();
-            let material_index = part.read_int_any("render method index").unwrap_or(0).max(0) as u16;
-            let part_type = part.read_int_any("part type").unwrap_or(0) as i8;
-            let part_index_start = indices.len() as u32;
-
-            let sub_start = part.read_int_any("subpart start").unwrap_or(0);
-            let sub_count = part.read_int_any("subpart count").unwrap_or(0);
-            let mut used_subparts = false;
-            if let Some(sps) = subparts_block.as_ref() {
-                if sub_count > 0 {
-                    for off in 0..sub_count as usize {
-                        let Some(sp) = sps.element(sub_start as usize + off) else { break };
-                        let s = sp.read_int_any("index start").unwrap_or(0);
-                        let c = sp.read_int_any("index count").unwrap_or(0);
-                        emit_range(s, c, &mut indices);
-                    }
-                    used_subparts = true;
-                }
-            }
-            if !used_subparts {
-                let start_i = part.read_int_any("index start").unwrap_or(0);
-                let count_i = part.read_int_any("index count").unwrap_or(0);
-                emit_range(start_i, count_i, &mut indices);
-            }
-
-            let part_index_count = indices.len() as u32 - part_index_start;
-            let transparent_sorting_index =
-                part.read_block_index("transparent sorting index");
-            let sort_position = if transparent_sorting_index >= 0 {
-                sort_positions.get(transparent_sorting_index as usize).copied()
-            } else {
-                None
             };
-            parts.push(RenderMeshPart {
-                material_index,
-                index_start: part_index_start,
-                index_count: part_index_count,
-                part_type,
-                transparent_sorting_index,
-                sort_position,
-            });
+            for pi in 0..parts_block.len() {
+                let part = parts_block.element(pi).unwrap();
+                let material_index = part.read_int_any("render method index").unwrap_or(0).max(0) as u16;
+                let part_type = part.read_int_any("part type").unwrap_or(0) as i8;
+                let part_index_start = indices.len() as u32;
+                let sub_start = part.read_int_any("subpart start").unwrap_or(0);
+                let sub_count = part.read_int_any("subpart count").unwrap_or(0);
+                let mut used_subparts = false;
+                if let Some(sps) = subparts_block.as_ref() {
+                    if sub_count > 0 {
+                        for off in 0..sub_count as usize {
+                            let Some(sp) = sps.element(sub_start as usize + off) else { break };
+                            let s = sp.read_int_any("index start").unwrap_or(0);
+                            let c = sp.read_int_any("index count").unwrap_or(0);
+                            emit_range(s, c, &mut indices);
+                        }
+                        used_subparts = true;
+                    }
+                }
+                if !used_subparts {
+                    let start_i = part.read_int_any("index start").unwrap_or(0);
+                    let count_i = part.read_int_any("index count").unwrap_or(0);
+                    emit_range(start_i, count_i, &mut indices);
+                }
+                let part_index_count = indices.len() as u32 - part_index_start;
+                let transparent_sorting_index = part.read_block_index("transparent sorting index");
+                let sort_position = if transparent_sorting_index >= 0 {
+                    sort_positions.get(transparent_sorting_index as usize).copied()
+                } else { None };
+                parts.push(RenderMeshPart {
+                    material_index,
+                    index_start: part_index_start,
+                    index_count: part_index_count,
+                    part_type,
+                    transparent_sorting_index,
+                    sort_position,
+                });
+            }
         }
 
         let water_data = read_raw_water_data(&mesh, &pmt, &raw_index_list, &parts_block);
@@ -1670,16 +1707,8 @@ where
             .iter()
             .any(|v| v.lightmap_texcoord.x != 0.0 || v.lightmap_texcoord.y != 0.0);
 
-        // Raw index buffer for the geometry sampler (triangle-list meshes
-        // only; strips don't have a meaningful raw triangle-index space).
-        let raw_indices: Vec<u32> = if is_strip {
-            Vec::new()
-        } else {
-            raw_index_list.iter().map(|&i| i as u32).collect()
-        };
         out.push(RenderMesh {
             vertices,
-            raw_indices,
             indices,
             parts,
             rigid_node_index,
