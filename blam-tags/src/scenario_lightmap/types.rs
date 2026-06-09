@@ -227,12 +227,20 @@ impl LightmapInstanceEntry {
     }
 
     pub fn policy(&self) -> LightmapPolicy {
-        if self.lightprobe_texture_array_index >= 0 {
-            LightmapPolicy::PerPixel
-        } else if self.pervertex_block_index >= 0 {
+        // Engine `select_instance_entry_point @ 0x180691340` checks
+        // `pervertex_block_index` FIRST: `if (pervertex == -1) { single-probe,
+        // then per-instance-UV } else { per-vertex }`. So precedence is
+        // PerVertex > SingleProbe > PerPixel. The prior per-pixel-first order
+        // misclassified instances that carry a per-vertex SH block as
+        // per-pixel, so the decorator lighting bake sampled the (lit) atlas
+        // while the BSP render correctly used the dark per-vertex SH —
+        // bright decorators on shadowed instances (ghosttown grass).
+        if self.pervertex_block_index >= 0 {
             LightmapPolicy::PerVertex
         } else if self.probe_block_index >= 0 {
             LightmapPolicy::SingleProbe
+        } else if self.lightprobe_texture_array_index >= 0 {
+            LightmapPolicy::PerPixel
         } else {
             LightmapPolicy::Fallback
         }
