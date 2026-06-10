@@ -880,11 +880,40 @@ impl TagFunction {
         self.as_constant().is_some()
     }
 
-    /// Color-output evaluator. Phase 6 will implement the actual
-    /// gradient interpolation using the `m_colors[4]` block; Phase 1
-    /// returns white as a stub so callers can wire the API now.
-    pub fn evaluate_color(&self, _input: f32, _range: f32) -> RealRgbColor {
-        RealRgbColor { red: 1.0, green: 1.0, blue: 1.0 }
+    /// Color-output evaluator — interpolates the `m_colors[4]` ARGB
+    /// stops (bytes 4-19) by the scalar curve output. `OneColor` returns
+    /// the single stop; `TwoColor`+ walk a piecewise gradient. `Scalar`
+    /// graphs carry no color data → white. Mirrors the engine's
+    /// `c_function_definition::evaluate_color`.
+    pub fn evaluate_color(&self, input: f32, range: f32) -> RealRgbColor {
+        let h = self.header();
+        let unpack = |c: u32| RealRgbColor {
+            red: ((c >> 16) & 0xff) as f32 / 255.0,
+            green: ((c >> 8) & 0xff) as f32 / 255.0,
+            blue: (c & 0xff) as f32 / 255.0,
+        };
+        let n = match h.color_graph_type {
+            ColorGraphType::Scalar => return RealRgbColor { red: 1.0, green: 1.0, blue: 1.0 },
+            ColorGraphType::OneColor => 1usize,
+            ColorGraphType::TwoColor => 2,
+            ColorGraphType::ThreeColor => 3,
+            ColorGraphType::FourColor => 4,
+        };
+        if n == 1 {
+            return unpack(h.colors[0]);
+        }
+        // Position along the gradient from the underlying scalar curve.
+        let t = self.evaluate_legacy(input, range).clamp(0.0, 1.0);
+        let pos = t * (n - 1) as f32;
+        let i = (pos.floor() as usize).min(n - 2);
+        let f = pos - i as f32;
+        let a = unpack(h.colors[i]);
+        let b = unpack(h.colors[i + 1]);
+        RealRgbColor {
+            red: a.red + (b.red - a.red) * f,
+            green: a.green + (b.green - a.green) * f,
+            blue: a.blue + (b.blue - a.blue) * f,
+        }
     }
 }
 

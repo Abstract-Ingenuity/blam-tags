@@ -360,6 +360,20 @@ pub enum ParticleSystemFlags {
     #[strum(serialize = "override near fade (use with caution)")] OverrideNearFade = 11,
     #[strum(serialize = "particles die when effect ends")] ParticlesDieWhenEffectEnds = 12,
     #[strum(serialize = "gpu occlusion (weather only)")] GpuOcclusion = 13,
+    // ---- 2007-era H3 `particle_system_flags` superset ----
+    // Older shipped tags (e.g. levels/multi/riverworld/fx/*) author a
+    // different bit layout for this word_flags whose names are absent
+    // from the MCC json schema above. Name-keyed decode resolves by
+    // name, so we add the divergent names as additional variants (per
+    // the SUPERSET playbook — no raw-bits escape hatch). The MCC names
+    // that already string-match (disabled for debugging / inherit
+    // effect velocity / don't render system / render when zoomed /
+    // force cpu/gpu updating / override near fade / gpu occlusion) reuse
+    // the variants above.
+    #[strum(serialize = "cinematics")] Cinematics = 14,
+    #[strum(serialize = "expensive visibility")] ExpensiveVisibility = 15,
+    #[strum(serialize = "ignore lod (render always)")] IgnoreLodRenderAlways = 16,
+    #[strum(serialize = "die when orphaned")] DieWhenOrphaned = 17,
 }
 
 /// `effect_part_scaleable_values` (long_flags) — which per-part values
@@ -845,9 +859,10 @@ fn read_property(parent: &TagStruct<'_>, name: &str) -> EditableProperty {
 
 // ---------------------------------------------------------------------------
 // `particle_system_definition_block_new` — 92B authored. Outer fields
-// only for P1 (priority/particle ref/location/coord_system/environment/
-// disposition/camera/sort_bias/flags/budgets/LOD/emitters). The
-// per-emitter properties walk happens in P3.
+// (priority/particle ref/location/coord_system/environment/disposition/
+// camera/sort_bias/flags/budgets/LOD) + the full `emitters[]` block —
+// each emitter walks all 18 editable-property curves (incl. the typed
+// vector/point interpolants) via [`ParticleSystemEmitter::from_struct`].
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Default)]

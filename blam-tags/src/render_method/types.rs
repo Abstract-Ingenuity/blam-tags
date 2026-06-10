@@ -416,6 +416,163 @@ impl BitmapComparisonFunction {
     }
 }
 
+/// Runtime rasterizer alpha-blend mode — Bungie `e_alpha_blend_mode`
+/// (`rasterizer.h`). This is the value the rasterizer switches on in
+/// `c_rasterizer::set_alpha_blend_mode_no_cache @ dllcache 0x18066E930`
+/// (decompile-verified 2026-06-10), **not** the authored `blend_mode`
+/// shader-category index — the tool BAKES the category choice into this
+/// enum at the `rmt2` pass `alpha blend mode` field and the rmsh
+/// postprocess `blend mode` field.
+///
+/// The strum names match the `blend_mode` render-method category's
+/// option names, so [`super::RenderMethodChoices::blend_mode`] resolves
+/// the authored choice to this same enum **by name** (drift-proof),
+/// while [`Self::from_index`] decodes the baked `i32`.
+///
+/// Value order cross-checked against the dllcache packed-state words:
+/// options 5 and 7 (`pre_multiplied_alpha`, `multiply_add`) share one
+/// D3D blend word (`1016612034`); 6 (`maximum`) is distinct
+/// (`1049121858`) — confirming `maximum` sits between them at value 6,
+/// not the other way around.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+pub enum AlphaBlendMode {
+    #[default]
+    #[strum(serialize = "opaque")]
+    Opaque = 0,
+    #[strum(serialize = "additive")]
+    Additive = 1,
+    #[strum(serialize = "multiply")]
+    Multiply = 2,
+    #[strum(serialize = "alpha_blend", serialize = "alpha blend")]
+    AlphaBlend = 3,
+    #[strum(serialize = "double_multiply", serialize = "double multiply")]
+    DoubleMultiply = 4,
+    #[strum(serialize = "pre_multiplied_alpha", serialize = "pre multiplied alpha")]
+    PreMultipliedAlpha = 5,
+    #[strum(serialize = "maximum")]
+    Maximum = 6,
+    #[strum(serialize = "multiply_add", serialize = "multiply add")]
+    MultiplyAdd = 7,
+    #[strum(serialize = "add_src_times_dstalpha", serialize = "add src times dstalpha")]
+    AddSrcTimesDstAlpha = 8,
+    #[strum(serialize = "add_src_times_srcalpha", serialize = "add src times srcalpha")]
+    AddSrcTimesSrcAlpha = 9,
+    #[strum(serialize = "inv_alpha_blend", serialize = "inv alpha blend")]
+    InvAlphaBlend = 10,
+    #[strum(serialize = "motion_blur_static", serialize = "motion blur static")]
+    MotionBlurStatic = 11,
+    #[strum(serialize = "motion_blur_inhibit", serialize = "motion blur inhibit")]
+    MotionBlurInhibit = 12,
+}
+
+impl AlphaBlendMode {
+    pub const COUNT: usize = 13;
+
+    /// Decode the BAKED runtime index (rmt2 pass `alpha blend mode` /
+    /// postprocess `blend mode` — plain integers, no embedded name).
+    /// For the AUTHORED category choice, resolve by name via
+    /// [`std::str::FromStr`] / [`super::RenderMethodChoices::blend_mode`]
+    /// instead.
+    pub fn from_index(i: i128) -> Option<Self> {
+        if !(0..Self::COUNT as i128).contains(&i) {
+            return None;
+        }
+        // Safe: enum is `repr(u32)` with sequential 0..13 discriminants.
+        Some(unsafe { std::mem::transmute::<u32, Self>(i as u32) })
+    }
+}
+
+/// The concrete `rm**` subclass. A typed discriminator that replaces
+/// raw-fourcc dispatch on [`RenderMethod::group_tag`].
+///
+/// Standalone-present in the shipped H3 tag set (have on-disk files):
+/// Shader/Terrain/Water/Decal/Halogram/Cortana/Custom/Foliage + base.
+/// Embedded-only (zero standalone tags across H3/Reach/H4 — carried
+/// inside their container tag): Skin/Beam/LightVolume/Particle/Contrail.
+/// The last two have only *nominal* `?rmp`/`?rmc` schema-registry slots
+/// (a `0x3f` sentinel first byte) that never appear on disk; they get
+/// distinct discriminants here instead of being aliased onto another
+/// group's fourcc (the old code stamped Contrail's embedded shader as
+/// `rmct`, colliding with Cortana).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum RenderMethodClass {
+    #[default]
+    Base, // rm
+    Shader,      // rmsh
+    Terrain,     // rmtr
+    Water,       // rmw
+    Decal,       // rmd
+    Halogram,    // rmhg
+    Cortana,     // rmct
+    Custom,      // rmcs
+    Foliage,     // rmfl
+    Skin,        // rmsk (embedded)
+    Beam,        // rmb  (embedded)
+    LightVolume, // rmlv (embedded)
+    Particle,    // embedded (nominal ?rmp)
+    Contrail,    // embedded (nominal ?rmc)
+}
+
+impl RenderMethodClass {
+    /// Resolve from a standalone tag's group fourcc. Returns `None` for
+    /// the embedded-only nominal slots (`?rmp`/`?rmc`) and anything
+    /// unrecognized — embedded subclasses are set by their container
+    /// walker, not by a disk group.
+    pub fn from_group_tag(tag: [u8; 4]) -> Option<Self> {
+        Some(match &tag {
+            b"rm  " => Self::Base,
+            b"rmsh" => Self::Shader,
+            b"rmtr" => Self::Terrain,
+            b"rmw " => Self::Water,
+            b"rmd " => Self::Decal,
+            b"rmhg" => Self::Halogram,
+            b"rmct" => Self::Cortana,
+            b"rmcs" => Self::Custom,
+            b"rmfl" => Self::Foliage,
+            b"rmsk" => Self::Skin,
+            b"rmb " => Self::Beam,
+            b"rmlv" => Self::LightVolume,
+            _ => return None,
+        })
+    }
+
+    /// The standalone on-disk group fourcc when this subclass exists as a
+    /// file; `None` for embedded-only subclasses (Skin/Beam/LightVolume/
+    /// Particle/Contrail).
+    pub fn standalone_group(self) -> Option<[u8; 4]> {
+        Some(match self {
+            Self::Base => *b"rm  ",
+            Self::Shader => *b"rmsh",
+            Self::Terrain => *b"rmtr",
+            Self::Water => *b"rmw ",
+            Self::Decal => *b"rmd ",
+            Self::Halogram => *b"rmhg",
+            Self::Cortana => *b"rmct",
+            Self::Custom => *b"rmcs",
+            Self::Foliage => *b"rmfl",
+            Self::Skin | Self::Beam | Self::LightVolume | Self::Particle | Self::Contrail => {
+                return None
+            }
+        })
+    }
+
+    /// How many `sted` `material name` slots this subclass's outer struct
+    /// carries: 4 for terrain (one per blend channel), 1 for the
+    /// material-bearing shaders, 0 for the rest.
+    fn material_name_count(self) -> usize {
+        match self {
+            Self::Terrain => 4,
+            Self::Shader | Self::Halogram | Self::Cortana | Self::Custom | Self::Foliage
+            | Self::Skin => 1,
+            _ => 0,
+        }
+    }
+}
+
 // =============================================================================
 // TagBlockIndex — bit-packed (start_index : 10, count : 6)
 // =============================================================================
@@ -757,6 +914,18 @@ pub struct RenderMethod {
     /// outer tag context.
     /// See `reference_rmtr_runtime_distinction.md`.
     pub group_tag: u32,
+    /// Typed subclass discriminator. Resolved from `group_tag` by
+    /// [`Self::from_tag`]; [`RenderMethodClass::Base`] for `from_struct`
+    /// callers (embedded walkers set it explicitly). Prefer this over
+    /// matching `group_tag` — it is collision-free where the raw fourccs
+    /// alias (Contrail vs Cortana).
+    pub class: RenderMethodClass,
+    /// `sted` global-material name(s) from the subclass's OUTER struct:
+    /// 4 for terrain (one per blend channel 0-3), 1 for shader/halogram/
+    /// cortana/custom/foliage/skin, empty otherwise. Only populated by
+    /// [`Self::from_tag`] (the outer fields live above the embedded
+    /// `c_render_method` and aren't reachable from `from_struct`).
+    pub material_names: Vec<String>,
 }
 
 // =============================================================================
@@ -771,13 +940,25 @@ const GROUP_RMT2: [u8; 4] = *b"rmt2";
 
 /// Variants of `rm**` that we accept as input to [`RenderMethod::from_tag`].
 /// All embed a `render_method` struct field at the top of their layout.
+///
+/// These are the REAL group fourccs (cross-checked against the shipped
+/// tag set + `_meta.json`). The five embedded-only subclasses
+/// (Skin/Beam/LightVolume/Particle/Contrail — zero standalone files in
+/// H3/Reach/H4) are kept here for `from_tag` robustness; particle and
+/// contrail use their nominal `?rmp`/`?rmc` schema slots (a `0x3f`
+/// leading byte) rather than the previous bogus `rmp `/`rmco` stand-ins
+/// (`rmco` is not a real tag, and the old list aliased contrail onto a
+/// nonexistent group while `contrail_system` stamped it as `rmct` =
+/// cortana). Standalone files of these never exist; the container
+/// walkers build them via `from_struct` and set `class` directly.
 const RENDER_METHOD_GROUPS: &[[u8; 4]] = &[
     GROUP_RM,
-    GROUP_RMSH,                     // shader
+    GROUP_RMSH,                     // rmsh shader
     *b"rmtr", *b"rmw ", *b"rmfl",   // terrain, water, foliage
     *b"rmd ", *b"rmhg", *b"rmsk",   // decal, halogram, skin
-    *b"rmct", *b"rmcs", *b"rmp ",   // cortana, custom, particle
-    *b"rmb ", *b"rmco", *b"rmlv",   // beam, contrail, light_volume
+    *b"rmct", *b"rmcs",             // cortana, custom
+    *b"rmb ", *b"rmlv",             // beam, light_volume (embedded-only)
+    *b"\x3frmp", *b"\x3frmc",       // particle, contrail — nominal ?rmp/?rmc
 ];
 
 fn check_group(tag: &TagFile, allowed: &[[u8; 4]]) -> Result<(), RenderMethodError> {
@@ -806,6 +987,27 @@ impl RenderMethod {
             .unwrap_or(root);
         let mut out = Self::from_struct(&rm)?;
         out.group_tag = group_tag;
+        out.class = RenderMethodClass::from_group_tag(group_tag.to_be_bytes())
+            .unwrap_or_default();
+        // Read the subclass's OUTER `sted` material name(s) — they live
+        // on `root` (the subclass struct), siblings of the embedded
+        // `render_method` field, so they're only reachable here (not in
+        // `from_struct`). Terrain carries 4 (one per blend channel),
+        // the material-bearing shaders 1; others none. Field names are
+        // stored clean (no `#doc` suffix), verified against the H3 tags.
+        let count = out.class.material_name_count();
+        if count == 1 {
+            if let Some(name) = root.read_string_id("material name") {
+                out.material_names.push(name);
+            }
+        } else if count == 4 {
+            for i in 0..4 {
+                let name = root
+                    .read_string_id(&format!("material name {i}"))
+                    .unwrap_or_default();
+                out.material_names.push(name);
+            }
+        }
         Ok(out)
     }
 
@@ -863,6 +1065,8 @@ impl RenderMethod {
             custom_fog_setting_index,
             prediction_atom_index,
             group_tag: 0,  // overridden by from_tag; from_struct callers don't have outer context
+            class: RenderMethodClass::Base, // overridden by from_tag / embedded walkers
+            material_names: Vec::new(),      // outer-struct fields: from_tag only
         })
     }
 }
@@ -1367,4 +1571,70 @@ fn read_constant_table(s: &TagStruct<'_>, field_name: &str) -> Vec<String> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod alpha_blend_mode_tests {
+    use super::AlphaBlendMode;
+    use std::str::FromStr;
+
+    /// The runtime `e_alpha_blend_mode` value order (dllcache
+    /// `set_alpha_blend_mode_no_cache @ 0x18066E930`). Locks `maximum`
+    /// at 6 between `pre_multiplied_alpha` (5) and `multiply_add` (7).
+    #[test]
+    fn runtime_enum_value_order() {
+        for (i, expected) in [
+            (0, AlphaBlendMode::Opaque),
+            (1, AlphaBlendMode::Additive),
+            (2, AlphaBlendMode::Multiply),
+            (3, AlphaBlendMode::AlphaBlend),
+            (4, AlphaBlendMode::DoubleMultiply),
+            (5, AlphaBlendMode::PreMultipliedAlpha),
+            (6, AlphaBlendMode::Maximum),
+            (7, AlphaBlendMode::MultiplyAdd),
+            (8, AlphaBlendMode::AddSrcTimesDstAlpha),
+            (9, AlphaBlendMode::AddSrcTimesSrcAlpha),
+            (10, AlphaBlendMode::InvAlphaBlend),
+            (11, AlphaBlendMode::MotionBlurStatic),
+            (12, AlphaBlendMode::MotionBlurInhibit),
+        ] {
+            assert_eq!(AlphaBlendMode::from_index(i), Some(expected), "index {i}");
+        }
+        assert_eq!(AlphaBlendMode::from_index(13), None);
+        assert_eq!(AlphaBlendMode::from_index(-1), None);
+    }
+
+    /// Names resolve to the runtime value regardless of where the
+    /// authored category lists them — the crux of why positional decode
+    /// is wrong. In `particle.rmdf`, `pre_multiplied_alpha` is the
+    /// 11th `blend_mode` option (category index 10), but it is runtime
+    /// value 5; a positional read would mis-decode it as `inv_alpha_blend`
+    /// (runtime 10). Name resolution must give `PreMultipliedAlpha`.
+    #[test]
+    fn name_beats_category_index() {
+        assert_eq!(
+            AlphaBlendMode::from_str("pre_multiplied_alpha"),
+            Ok(AlphaBlendMode::PreMultipliedAlpha)
+        );
+        // The value at that category index, had we (wrongly) decoded
+        // positionally, is a DIFFERENT mode — proving the divergence.
+        assert_eq!(AlphaBlendMode::from_index(10), Some(AlphaBlendMode::InvAlphaBlend));
+        assert_ne!(
+            AlphaBlendMode::from_str("pre_multiplied_alpha").unwrap(),
+            AlphaBlendMode::from_index(10).unwrap()
+        );
+        // Same story for `maximum` (category 5 in particle.rmdf, runtime 6).
+        assert_eq!(AlphaBlendMode::from_str("maximum"), Ok(AlphaBlendMode::Maximum));
+        assert_eq!(AlphaBlendMode::from_index(5), Some(AlphaBlendMode::PreMultipliedAlpha));
+    }
+
+    /// Both underscore (tag option_name) and space (schema) forms parse,
+    /// case-insensitively.
+    #[test]
+    fn name_aliases() {
+        assert_eq!(AlphaBlendMode::from_str("add_src_times_dstalpha"), Ok(AlphaBlendMode::AddSrcTimesDstAlpha));
+        assert_eq!(AlphaBlendMode::from_str("add src times dstalpha"), Ok(AlphaBlendMode::AddSrcTimesDstAlpha));
+        assert_eq!(AlphaBlendMode::from_str("ALPHA_BLEND"), Ok(AlphaBlendMode::AlphaBlend));
+        assert!(AlphaBlendMode::from_str("nonsense").is_err());
+    }
 }

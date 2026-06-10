@@ -118,12 +118,13 @@ pub enum ObjectDefinitionFlags {
     #[strum(serialize = "does not cause collision damage")] DoesNotCauseCollisionDamage = 5,
     #[strum(serialize = "early mover")] EarlyMover = 6,
     #[strum(serialize = "early mover localized physics")] EarlyMoverLocalizedPhysics = 7,
-    #[strum(serialize = "object scales attachments")] ObjectScalesAttachments = 8,
-    #[strum(serialize = "non physical in map editor")] NonPhysicalInMapEditor = 9,
-    #[strum(serialize = "attach to clusters by dynamic sphere")] AttachToClustersByDynamicSphere = 10,
-    #[strum(serialize = "effects created by this object do not spawn objects in multiplayer")] EffectsDoNotSpawnObjectsInMultiplayer = 11,
-    #[strum(serialize = "does not collide with camera")] DoesNotCollideWithCamera = 12,
-    #[strum(serialize = "damage not blocked by obstructions")] DamageNotBlockedByObstructions = 13,
+    #[strum(serialize = "use static massive lightmap sample")] UseStaticMassiveLightmapSample = 8,
+    #[strum(serialize = "object scales attachments")] ObjectScalesAttachments = 9,
+    #[strum(serialize = "non physical in map editor")] NonPhysicalInMapEditor = 10,
+    #[strum(serialize = "attach to clusters by dynamic sphere")] AttachToClustersByDynamicSphere = 11,
+    #[strum(serialize = "effects created by this object do not spawn objects in multiplayer")] EffectsDoNotSpawnObjectsInMultiplayer = 12,
+    #[strum(serialize = "does not collide with camera")] DoesNotCollideWithCamera = 13,
+    #[strum(serialize = "damage not blocked by obstructions")] DamageNotBlockedByObstructions = 14,
 }
 
 /// `object_definition_secondary_flags` (word_flags).

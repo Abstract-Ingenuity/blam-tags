@@ -147,6 +147,7 @@ impl BeamDefinition {
         let shader = match shader_struct {
             Some(view) => {
                 let mut rm = RenderMethod::from_struct(&view)?;
+                rm.class = crate::render_method::RenderMethodClass::Beam;
                 rm.group_tag = u32::from_be_bytes(*b"rmb ");
                 Some(rm)
             }

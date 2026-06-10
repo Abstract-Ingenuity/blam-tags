@@ -119,6 +119,12 @@ pub struct Scenario {
     pub crate_palette: Vec<TagReferencePalette>,
     pub crates: Vec<ObjectPlacement>,
 
+    /// `effect scenery` — `csfe` objects that ARE a continuously-playing
+    /// effect (the lift columns / man cannon visuals on guardian etc.). The
+    /// object carries the effect via an `effe` attachment, like scenery/crate.
+    pub effect_scenery_palette: Vec<TagReferencePalette>,
+    pub effect_scenery: Vec<ObjectPlacement>,
+
     pub light_palette: Vec<TagReferencePalette>,
     pub lights: Vec<ObjectPlacement>,
 
@@ -231,6 +237,13 @@ impl Scenario {
 
             crate_palette: read_block(s, "crate palette", TagReferencePalette::from_struct),
             crates: read_block(s, "crates", ObjectPlacement::from_struct),
+
+            effect_scenery_palette: read_block(
+                s,
+                "effect scenery palette",
+                TagReferencePalette::from_struct,
+            ),
+            effect_scenery: read_block(s, "effect scenery", ObjectPlacement::from_struct),
 
             // Halo 3 schema names this "light volumes" / "light volumes palette"
             // (light_palette in Ares). Keep both names tried via the helper.

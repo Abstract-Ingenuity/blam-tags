@@ -133,6 +133,7 @@ impl LightVolumeDefinition {
         let shader = match shader_struct {
             Some(view) => {
                 let mut rm = RenderMethod::from_struct(&view)?;
+                rm.class = crate::render_method::RenderMethodClass::LightVolume;
                 rm.group_tag = u32::from_be_bytes(*b"rmlv");
                 Some(rm)
             }

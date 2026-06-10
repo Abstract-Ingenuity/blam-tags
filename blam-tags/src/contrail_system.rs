@@ -157,7 +157,15 @@ impl ContrailDefinition {
         let shader = match shader_struct {
             Some(view) => {
                 let mut rm = RenderMethod::from_struct(&view)?;
-                rm.group_tag = u32::from_be_bytes(*b"rmct");
+                // Embedded contrail shader. NOTE: the old code stamped
+                // `rmct` here, which is CORTANA's real group fourcc
+                // (`_meta.json: rmct -> shader_cortana`) — a collision that
+                // mis-routed contrail shaders onto the cortana path. The
+                // real contrail slot is the embedded-only nominal `?rmc`
+                // (0x3f leading byte; never on disk). Use the typed class
+                // for dispatch and `?rmc` as the collision-free key.
+                rm.class = crate::render_method::RenderMethodClass::Contrail;
+                rm.group_tag = u32::from_be_bytes(*b"\x3frmc");
                 Some(rm)
             }
             None => None,

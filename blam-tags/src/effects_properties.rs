@@ -54,6 +54,15 @@ pub struct EditableProperty {
     /// `runtime m_flags!` (char) — evaluation-mode shortcut bits:
     /// is_constant / is_constant_over_time / is_constant_per_instance.
     pub runtime_flags: u8,
+    /// `Starting interpolant` for TYPED (point3d / vector3d / spherical)
+    /// properties — `None` for scalars. The engine's
+    /// `c_editable_property_type<vector>::evaluate` returns
+    /// `interpolate(starting, ending, function(t))`. For spherical
+    /// (relative_direction) the stored {Radius, Euler(yaw,pitch)} is
+    /// converted to a vector (Radius·dir(yaw,pitch); identity = +X).
+    pub starting_interpolant: Option<crate::math::RealVector3d>,
+    /// `Ending interpolant` — see [`Self::starting_interpolant`].
+    pub ending_interpolant: Option<crate::math::RealVector3d>,
 }
 
 impl EditableProperty {
@@ -66,7 +75,52 @@ impl EditableProperty {
             function: read_mapping_function(s, "Mapping"),
             constant_value: s.read_real("runtime m_constant_value").unwrap_or(0.0),
             runtime_flags: s.read_int_any("runtime m_flags").unwrap_or(0) as u8,
+            starting_interpolant: read_interpolant(s, "Starting interpolant"),
+            ending_interpolant: read_interpolant(s, "Ending interpolant"),
         }
+    }
+}
+
+/// Read a typed property's interpolant vector. Handles both forms:
+/// - `real_point_3d` / `real_vector_3d` (translational_offset,
+///   self_acceleration) — read directly.
+/// - the spherical struct `{Radius, Euler angles 2d (yaw, pitch)}`
+///   (relative_direction) — convert to a vector
+///   `Radius · (cos pitch cos yaw, cos pitch sin yaw, sin pitch)`
+///   (Radius=1, Euler=0 → +X, the engine's emitter-forward identity).
+///
+/// Returns `None` for scalar properties (no interpolant field).
+fn read_interpolant(parent: &TagStruct<'_>, name: &str) -> Option<crate::math::RealVector3d> {
+    use crate::math::RealVector3d;
+    // Spherical: a struct-typed field of this name carrying Radius+Euler
+    // (relative_direction). Convert {Radius, yaw, pitch} → vector.
+    if let Some(inner) = parent
+        .fields()
+        .find(|f| f.name() == name && f.field_type() == TagFieldType::Struct)
+        .and_then(|f| f.as_struct())
+    {
+        if let Some(radius) = inner.read_real("Radius") {
+            let e = inner.read_euler2d("Euler angles");
+            let (cy, sy) = (e.yaw.cos(), e.yaw.sin());
+            let (cp, sp) = (e.pitch.cos(), e.pitch.sin());
+            return Some(RealVector3d {
+                i: radius * cp * cy,
+                j: radius * cp * sy,
+                k: radius * sp,
+            });
+        }
+    }
+    // Direct point3d / vector3d field (translational_offset,
+    // self_acceleration). Use the reader matching the actual type — the
+    // readers are type-strict (fail-loud on mismatch).
+    let ft = parent.fields().find(|f| f.name() == name).map(|f| f.field_type());
+    match ft {
+        Some(TagFieldType::RealPoint3d) => {
+            let p = parent.read_point3d(name);
+            Some(RealVector3d { i: p.x, j: p.y, k: p.z })
+        }
+        Some(TagFieldType::RealVector3d) => Some(parent.read_vec3(name)),
+        _ => None,
     }
 }
 

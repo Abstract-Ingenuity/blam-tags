@@ -177,6 +177,13 @@ pub enum GameStateType {
     #[strum(serialize = "explosion animation")] ExplosionAnimation = 18,
     #[strum(serialize = "explosion rotation")] ExplosionRotation = 19,
     #[strum(serialize = "invalid state --- please set again")] InvalidState = 20,
+    /// SUPERSET (2007-era effect tags, e.g. `s3d_avalanche`). The shipped
+    /// 2007 `game_state_type_enum` carried an extra "inactive (zero)" option
+    /// (a property explicitly pinned to zero) that MCC dropped. Decode is
+    /// by-name, so the discriminant is irrelevant — this variant only needs
+    /// to exist so the 2007 layout's name resolves instead of fail-loud
+    /// panicking. Evaluates to a constant-zero input source.
+    #[strum(serialize = "inactive (zero)")] InactiveZero = 21,
 }
 
 /// `particle_main_flags` (long_flags).
@@ -210,6 +217,23 @@ pub enum ParticleAppearanceFlags {
     #[strum(serialize = "fade when viewed edge-on")] FadeWhenViewedEdgeOn = 7,
     #[strum(serialize = "motion blur")] MotionBlur = 8,
     #[strum(serialize = "double-sided")] DoubleSided = 9,
+    /// SUPERSET (2007-era tags, e.g. cyberdyne's `spark_ember`,
+    /// `fireball_*`). The shipped 2007 particle schema INSERTED "fade near
+    /// camera" at bit 7 (the near-fade appearance bit), shifting
+    /// "fade when viewed edge-on" to bit 8; MCC dropped it and renumbered.
+    /// Decode is by-name, so the bit position is irrelevant — this variant
+    /// only needs to exist so the 2007 layout's bit-7 name resolves instead
+    /// of fail-loud panicking. Verified: all 50 corpus tags carrying it
+    /// share the single layout `…6:intensity affects alpha · 7:fade near
+    /// camera · 8:fade when viewed edge-on`.
+    #[strum(serialize = "fade near camera")] FadeNearCamera = 10,
+    /// SUPERSET (2007-era tags, e.g. `s3d_turf`, `s3d_reactor`). The 2007
+    /// particle appearance schema carried a "tint colors are self-illum"
+    /// bit (route the particle's tint into self-illumination rather than
+    /// diffuse) that MCC dropped. Decode is by-name, so the bit position is
+    /// irrelevant — this variant only needs to exist so the 2007 layout's
+    /// name resolves instead of fail-loud panicking.
+    #[strum(serialize = "tint colors are self-illum")] TintColorsAreSelfIllum = 11,
 }
 
 /// `particle_animation_flags` (long_flags).
@@ -221,6 +245,13 @@ pub enum ParticleAppearanceFlags {
 pub enum ParticleAnimationFlags {
     #[strum(serialize = "frame animation one shot")] FrameAnimationOneShot = 0,
     #[strum(serialize = "can animate backwards")] CanAnimateBackwards = 1,
+    /// SUPERSET (2007-era tags, e.g. `s3d_avalanche`). The 2007 particle
+    /// animation schema carried a "select random sequence" bit (pick a
+    /// random animation sequence per particle) that MCC dropped. Decode is
+    /// by-name, so the bit position is irrelevant — this variant only needs
+    /// to exist so the 2007 layout's name resolves instead of fail-loud
+    /// panicking.
+    #[strum(serialize = "select random sequence")] SelectRandomSequence = 2,
 }
 
 // ---------------------------------------------------------------------------
@@ -257,12 +288,11 @@ impl ParticleAttachment {
 }
 
 // ---------------------------------------------------------------------------
-// `c_particle_property` (32B) — scalar variant.
-//
-// P1 scope: capture state inputs + output modifier + constant value +
-// runtime flags. The `mapping_function` curve walk lives in the
-// protomorph particle property evaluator (P3.T3+) where it actually
-// runs against game_state_type_enum values per frame.
+// `c_particle_property` (32B) — scalar variant. Captures state inputs +
+// output modifier + constant value + runtime flags + the authored
+// `Mapping` curve (identical to `c_editable_property_base`); the GPU
+// property evaluator compiles the curve per-emitter and runs it against
+// game_state_type_enum values each frame.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Default)]
@@ -275,6 +305,11 @@ pub struct ParticlePropertyScalar {
     pub output_modifier: Enum<ParticlePropertyOutputModifier, i8>,
     /// `game_state_type_enum` — feeds the modifier's input.
     pub output_modifier_input: Enum<GameStateType, i8>,
+    /// Authored curve / function blob (the `Mapping` field — IDENTICAL
+    /// two-stage layout to `c_editable_property_base`). `None` when the
+    /// property is constant (engine reads `constant_value`). Present in
+    /// the schema; the GPU property evaluator compiles it per-emitter.
+    pub function: Option<crate::tag_function::TagFunction>,
     /// Fallback constant when the curve is the identity / not authored.
     /// Engine reads this at evaluate time when `m_flags & is_constant`.
     pub constant_value: f32,
@@ -290,6 +325,7 @@ impl ParticlePropertyScalar {
             range_variable: s.try_read_enum("Range Variable").unwrap_or_default(),
             output_modifier: s.try_read_enum("Output Modifier").unwrap_or_default(),
             output_modifier_input: s.try_read_enum("Output Modifier Input").unwrap_or_default(),
+            function: crate::effects_properties::read_mapping_function(s, "Mapping"),
             constant_value: s.read_real("runtime m_constant_value").unwrap_or(0.0),
             runtime_flags: s.read_int_any("runtime m_flags").unwrap_or(0) as u8,
         }
@@ -512,6 +548,11 @@ impl ParticleDefinition {
             .and_then(|f| f.as_struct())
             .and_then(|sub| RenderMethod::from_struct(&sub).ok())
             .map(|mut rm| {
+                // Embedded particle shader — set the typed subclass and a
+                // readable stand-in group_tag. The real schema slot is the
+                // embedded-only nominal `?rmp` (never on disk); `rmp ` is a
+                // collision-free dispatch key for the renderer.
+                rm.class = crate::render_method::RenderMethodClass::Particle;
                 rm.group_tag = u32::from_be_bytes(*b"rmp ");
                 rm
             })
