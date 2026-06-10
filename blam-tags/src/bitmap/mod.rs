@@ -112,6 +112,9 @@ impl From<std::io::Error> for BitmapError {
 /// own data.
 pub struct Bitmap<'a> {
     bitmaps: TagBlock<'a>,
+    /// The `sequences[]` block (sprite-sheet atlas layout), if present.
+    /// Populated for sprite/animated bitmaps; empty for plain textures.
+    sequences: Option<TagBlock<'a>>,
     per_image_pixels: Vec<Vec<u8>>,
     /// Per-image override of the mipmap level count. `None` means
     /// trust the tag's `mipmap count` field. `Some(n)` is used when
@@ -184,7 +187,54 @@ impl<'a> Bitmap<'a> {
             return Err(BitmapError::NotABitmapTag);
         }
 
-        Ok(Self { bitmaps, per_image_pixels, per_image_mip_override })
+        // Sprite-sheet atlas layout. Prefer the processed `sequences[]`
+        // (the runtime atlas tool.exe bakes with the normalized sprite
+        // rects); fall back to `manual sequences[]` (the authored input).
+        let sequences = root
+            .field_path("sequences")
+            .and_then(|f| f.as_block())
+            .filter(|b| !b.is_empty())
+            .or_else(|| {
+                root.field_path("manual sequences").and_then(|f| f.as_block())
+            });
+
+        Ok(Self { bitmaps, sequences, per_image_pixels, per_image_mip_override })
+    }
+
+    /// Decode the sprite-sheet `sequences[]` block: each sequence is a
+    /// run of frames (sprites), each sprite a normalized sub-rect of the
+    /// atlas image. Empty for plain (non-sprite) bitmaps. Used by
+    /// particle sprite-sheet animation to bake per-frame UVs.
+    pub fn sequences(&self) -> Vec<BitmapSequence> {
+        let Some(block) = &self.sequences else { return Vec::new() };
+        let mut out = Vec::with_capacity(block.len());
+        for i in 0..block.len() {
+            let Some(seq) = block.element(i) else { continue };
+            let first_bitmap_index = seq.read_int_any("first bitmap index").unwrap_or(0) as i16;
+            let bitmap_count = seq.read_int_any("bitmap count").unwrap_or(0) as i16;
+            let sprites = seq
+                .field("sprites")
+                .and_then(|f| f.as_block())
+                .map(|sb| {
+                    let mut sprites = Vec::with_capacity(sb.len());
+                    for j in 0..sb.len() {
+                        let Some(sp) = sb.element(j) else { continue };
+                        let reg = sp.read_point2d("registration point");
+                        sprites.push(BitmapSprite {
+                            bitmap_index: sp.read_int_any("bitmap index").unwrap_or(0) as i16,
+                            left: sp.read_real("left").unwrap_or(0.0),
+                            right: sp.read_real("right").unwrap_or(1.0),
+                            top: sp.read_real("top").unwrap_or(0.0),
+                            bottom: sp.read_real("bottom").unwrap_or(1.0),
+                            registration_point: [reg.x, reg.y],
+                        });
+                    }
+                    sprites
+                })
+                .unwrap_or_default();
+            out.push(BitmapSequence { first_bitmap_index, bitmap_count, sprites });
+        }
+        out
     }
 
     /// Number of images in the tag's `bitmaps[]` block.
@@ -211,6 +261,30 @@ impl<'a> Bitmap<'a> {
             mip_override: overrides[i],
         })
     }
+}
+
+/// One `sequences[]` entry — a run of sprite frames. For multi-image
+/// (non-atlas) sprite bitmaps the frames are whole images
+/// (`first_bitmap_index .. + bitmap_count`); for atlas bitmaps the
+/// `sprites` carry the sub-rects.
+#[derive(Debug, Clone)]
+pub struct BitmapSequence {
+    pub first_bitmap_index: i16,
+    pub bitmap_count: i16,
+    pub sprites: Vec<BitmapSprite>,
+}
+
+/// One sprite — a normalized sub-rect of an atlas image plus a
+/// registration (pivot) point. `left/right/top/bottom` are in `[0,1]`
+/// UV space.
+#[derive(Debug, Clone)]
+pub struct BitmapSprite {
+    pub bitmap_index: i16,
+    pub left: f32,
+    pub right: f32,
+    pub top: f32,
+    pub bottom: f32,
+    pub registration_point: [f32; 2],
 }
 
 /// Resolve one image's pixel byte slice plus an optional mip-count
