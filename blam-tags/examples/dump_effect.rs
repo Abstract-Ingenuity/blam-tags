@@ -47,7 +47,7 @@ fn dump_one(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     let efx = EffectDefinition::from_tag(&tag)?;
     println!("=== {} ===", path.display());
     println!(
-        "flags=0x{:08x} priority={:?} loop_start_event={} fixed_seed={} death_delay={}",
+        "flags={:?} priority={:?} loop_start_event={} fixed_seed={} death_delay={}",
         efx.flags,
         efx.priority,
         efx.loop_start_event,
@@ -73,7 +73,7 @@ fn dump_one(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     println!("locations[{}]:", efx.locations.len());
     for (i, loc) in efx.locations.iter().enumerate() {
         println!(
-            "  [{i}] marker='{}' flags=0x{:x} prio={:?}",
+            "  [{i}] marker='{}' flags={:?} prio={:?}",
             loc.marker_name, loc.flags, loc.priority,
         );
     }
@@ -81,7 +81,7 @@ fn dump_one(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     println!("events[{}]:", efx.events.len());
     for (ei, ev) in efx.events.iter().enumerate() {
         println!(
-            "  event[{ei}] name='{}' flags=0x{:x} prio={:?} skip={} delay=[{},{}] duration=[{},{}]",
+            "  event[{ei}] name='{}' flags={:?} prio={:?} skip={} delay=[{},{}] duration=[{},{}]",
             ev.name,
             ev.flags,
             ev.priority,
@@ -99,7 +99,7 @@ fn dump_one(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
             let type_fourcc =
                 std::str::from_utf8(&part.type_group).unwrap_or("????").to_string();
             println!(
-                "    part[{pi}] type={:?}({fourcc}) loc#{} env={:?} mode={:?} flags=0x{:x} target='{type_fourcc}:{}'",
+                "    part[{pi}] type={:?}({fourcc}) loc#{} env={:?} mode={:?} flags={:?} target='{type_fourcc}:{}'",
                 part.part_type,
                 part.location,
                 part.environment,
@@ -122,7 +122,7 @@ fn dump_one(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
 
         for (psi, ps) in ev.particle_systems.iter().enumerate() {
             println!(
-                "    psys[{psi}] particle='{}' loc#{} coord={:?} env={:?} cam={:?} sort={} flags=0x{:x} budget_ms={} lod=[{}..{}]",
+                "    psys[{psi}] particle='{}' loc#{} coord={:?} env={:?} cam={:?} sort={} flags={:?} budget_ms={} lod=[{}..{}]",
                 ps.particle_tag_path,
                 ps.location,
                 ps.coordinate_system,
@@ -136,7 +136,7 @@ fn dump_one(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
             );
             for (emi, em) in ps.emitters.iter().enumerate() {
                 println!(
-                    "      emitter[{emi}] name='{}' shape={} flags=0x{:x} bound=[est={} ovr={}]",
+                    "      emitter[{emi}] name='{}' shape={:?} flags={:?} bound=[est={} ovr={}]",
                     em.name,
                     em.emission_shape,
                     em.flags,
