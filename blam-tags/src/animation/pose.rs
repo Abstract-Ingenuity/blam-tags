@@ -138,6 +138,140 @@ impl AnimationClip {
         }
         Pose { frames }
     }
+
+    /// Compose an **overlay** (delta) animation onto a base/rest pose,
+    /// matching Foundry's `compose_overlay_animation`
+    /// (`managed_blam/animation_resource.py`). Returns
+    /// `(reference, body)`:
+    ///
+    /// - `reference` — the per-bone composition base. For each
+    ///   component, the **static-track** value when the bone is
+    ///   static-flagged for that component, otherwise the supplied
+    ///   `base` (rest pose). This is also the leading frame the JMA
+    ///   writer prepends.
+    /// - `body` — `frame_count` composed frames. An **animated**-flagged
+    ///   component applies its per-frame delta on top of the reference
+    ///   (translation additive, rotation `reference * delta`, scale
+    ///   **multiplicative**); every other component holds the reference
+    ///   value unchanged.
+    ///
+    /// This differs from a plain [`pose`](Self::pose): overlays store
+    /// *deltas from rest* for animated nodes (frame 0 = identity), so we
+    /// must reconstruct the full local pose. Crucially the scale identity
+    /// is `1.0` (multiplicative), not `0.0` — adding it like a
+    /// translation delta double-scales every bone. Static deltas are kept
+    /// as the reference, not added onto `base`.
+    ///
+    /// The caller writes `body` verbatim and uses `reference` as the
+    /// leading frame, yielding `frame_count + 1` on-disk frames — the
+    /// same layout Foundry produces when importing the tag directly.
+    pub fn overlay_pose(
+        &self,
+        skeleton: &Skeleton,
+        base: &[NodeTransform],
+    ) -> (Vec<NodeTransform>, Pose) {
+        let bones = skeleton.len();
+        let frames_n = self.frame_count.max(1) as usize;
+
+        let resolutions: Vec<BoneResolution> = (0..bones)
+            .map(|b| BoneResolution::for_bone(b, self.node_flags.as_ref()))
+            .collect();
+
+        // Per-bone reference: static value where static-flagged, else the
+        // rest pose. Animated/identity components fall back to `base`.
+        let reference: Vec<NodeTransform> = resolutions
+            .iter()
+            .enumerate()
+            .map(|(b, res)| {
+                let base_b = base.get(b).copied().unwrap_or(NodeTransform::IDENTITY);
+                NodeTransform {
+                    rotation: match res.rotation {
+                        TrackSource::Static(_) => pick_rotation(self, res, 0).unwrap_or(base_b.rotation),
+                        _ => base_b.rotation,
+                    },
+                    translation: match res.translation {
+                        TrackSource::Static(_) => pick_translation(self, res, 0).unwrap_or(base_b.translation),
+                        _ => base_b.translation,
+                    },
+                    scale: match res.scale {
+                        TrackSource::Static(_) => pick_scale(self, res, 0).unwrap_or(base_b.scale),
+                        _ => base_b.scale,
+                    },
+                }
+            })
+            .collect();
+
+        let mut frames = Vec::with_capacity(frames_n);
+        for f in 0..frames_n {
+            let mut row = Vec::with_capacity(bones);
+            for (b, res) in resolutions.iter().enumerate() {
+                let r = reference[b];
+                let rotation = match res.rotation {
+                    TrackSource::Animated(_) => {
+                        r.rotation * pick_rotation(self, res, f).unwrap_or(RealQuaternion::IDENTITY)
+                    }
+                    _ => r.rotation,
+                };
+                let translation = match res.translation {
+                    TrackSource::Animated(_) => {
+                        let d = pick_translation(self, res, f).unwrap_or_default();
+                        RealPoint3d { x: r.translation.x + d.x, y: r.translation.y + d.y, z: r.translation.z + d.z }
+                    }
+                    _ => r.translation,
+                };
+                let scale = match res.scale {
+                    TrackSource::Animated(_) => r.scale * pick_scale(self, res, f).unwrap_or(1.0),
+                    _ => r.scale,
+                };
+                row.push(NodeTransform { rotation, translation, scale });
+            }
+            frames.push(row);
+        }
+
+        (reference, Pose { frames })
+    }
+
+    /// Compose a **replacement** animation against a base/rest pose,
+    /// matching Foundry's `compose_replacement_animation` and TagTool's
+    /// `Animation.Replace()`. Returns `frame_count` body frames (the JMA
+    /// writer prepends the rest pose as the leading frame).
+    ///
+    /// Only **animated**-flagged components take the codec value (a full
+    /// pose, not a delta); every other component — including
+    /// *static*-flagged ones — takes the `base` (rest) value. Both
+    /// reference implementations drop static-track data here (they
+    /// condition on the animated flag alone), so this deliberately does
+    /// NOT read [`pose`](Self::pose)'s static-first track value.
+    pub fn replacement_pose(&self, skeleton: &Skeleton, base: &[NodeTransform]) -> Pose {
+        let bones = skeleton.len();
+        let frames_n = self.frame_count.max(1) as usize;
+        let resolutions: Vec<BoneResolution> = (0..bones)
+            .map(|b| BoneResolution::for_bone(b, self.node_flags.as_ref()))
+            .collect();
+
+        let mut frames = Vec::with_capacity(frames_n);
+        for f in 0..frames_n {
+            let mut row = Vec::with_capacity(bones);
+            for (b, res) in resolutions.iter().enumerate() {
+                let base_b = base.get(b).copied().unwrap_or(NodeTransform::IDENTITY);
+                let rotation = match res.rotation {
+                    TrackSource::Animated(_) => pick_rotation(self, res, f).unwrap_or(base_b.rotation),
+                    _ => base_b.rotation,
+                };
+                let translation = match res.translation {
+                    TrackSource::Animated(_) => pick_translation(self, res, f).unwrap_or(base_b.translation),
+                    _ => base_b.translation,
+                };
+                let scale = match res.scale {
+                    TrackSource::Animated(_) => pick_scale(self, res, f).unwrap_or(base_b.scale),
+                    _ => base_b.scale,
+                };
+                row.push(NodeTransform { rotation, translation, scale });
+            }
+            frames.push(row);
+        }
+        Pose { frames }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

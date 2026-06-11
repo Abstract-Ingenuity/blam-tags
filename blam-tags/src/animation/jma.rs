@@ -29,9 +29,13 @@
 //!     - Replacement (JMR): a leading rest-pose frame, then codec
 //!       frames. Tool subtracts the leading frame at re-build time
 //!       to derive deltas.
-//!     - Overlay (JMO): a leading rest-pose frame, then per-frame
-//!       composed `(rest_rotation × codec_delta_rotation,
-//!       rest_translation + codec_delta_translation)`.
+//!     - Overlay (JMO): a leading *reference* frame, then the composed
+//!       full poses. Overlay codec values are deltas-from-rest, so the
+//!       caller composes them onto the rest pose via
+//!       [`AnimationClip::overlay_pose`](super::AnimationClip::overlay_pose)
+//!       (Foundry's `compose_overlay_animation` rules) **before** the
+//!       writer — the writer just emits the result and prepends the
+//!       reference as `defaults`. The writer no longer composes.
 //!
 //!   In all cases the final on-disk frame count is `codec_count + 1`.
 
@@ -106,8 +110,13 @@ impl JmaKind {
         matches!(self, Self::Jma | Self::Jmt | Self::Jmz)
     }
 
-    /// `JMR / JMO` prepend a leading rest-pose frame so Tool's
+    /// `JMR / JMO` prepend a leading reference frame so Tool's
     /// importer can derive deltas/composition cleanly during re-build.
+    /// For `JMR` the leading frame is the rest pose; for `JMO` it is the
+    /// overlay's per-bone *reference* (static value where static-flagged,
+    /// else rest) — both supplied to the writer as `defaults`. Overlay
+    /// composition itself is done before the writer, by
+    /// [`AnimationClip::overlay_pose`](super::AnimationClip::overlay_pose).
     pub fn prepends_rest_pose(self) -> bool {
         matches!(self, Self::Jmo | Self::Jmr)
     }
@@ -117,29 +126,19 @@ impl JmaKind {
     pub fn appends_held_frame(self) -> bool {
         matches!(self, Self::Jmm | Self::Jma | Self::Jmt | Self::Jmz | Self::Jmw)
     }
-
-    /// `JMO` composes per-frame `(rest × codec_delta)` rotations and
-    /// `(rest + codec_delta)` translations. The codec values are
-    /// deltas-from-rest; the writer combines them with the rest pose
-    /// so the on-disk JMA carries world poses Tool can re-import.
-    pub fn composes_overlay(self) -> bool {
-        matches!(self, Self::Jmo)
-    }
 }
 
 impl Pose {
     /// Write this pose as a JMA-family text file (`.JMM/.JMA/.JMT/...`).
     /// See the [module docs](self) for the full layout convention.
     ///
-    /// `defaults` is the per-skeleton-bone rest pose (typically built
-    /// from the render_model's `nodes[]` defaults plus the jmad's
-    /// `additional node data` fallback). It supplies the rest-pose
-    /// values for the leading frame (JMR/JMO), the base pose for
-    /// overlay composition (JMO), and is the source of identity-
-    /// vs-rest ambiguity-resolution callers should configure when
-    /// building the input `Pose` (overlay anims should be built with
-    /// identity defaults so unflagged-bone composition produces the
-    /// rest pose, not double-rest).
+    /// `defaults` supplies the leading frame prepended for JMR/JMO. For
+    /// JMR it is the per-skeleton-bone rest pose (built from the
+    /// render_model's `nodes[]` defaults plus the jmad's `additional node
+    /// data` fallback); for JMO it is the *reference* frame returned by
+    /// [`AnimationClip::overlay_pose`](super::AnimationClip::overlay_pose)
+    /// (which already composed the body `Pose` against the rest pose). The
+    /// writer performs no overlay composition of its own.
     ///
     /// `movement` carries per-frame root deltas in **local space**.
     /// For movement-bearing kinds (JMA/JMT/JMZ) the writer rotates
@@ -214,7 +213,6 @@ impl Pose {
                 let composed = compose_frame_bone(
                     *transform,
                     bone_idx,
-                    defaults,
                     accumulated_translation,
                     accumulated_yaw,
                     kind,
@@ -233,7 +231,6 @@ impl Pose {
                 let composed = compose_frame_bone(
                     *transform,
                     bone_idx,
-                    defaults,
                     accumulated_translation,
                     accumulated_yaw,
                     kind,
@@ -265,39 +262,25 @@ fn advance_movement(
     *accumulated_yaw += local.dyaw;
 }
 
-/// Apply per-bone composition for the given JMA kind. Returns the
-/// transform that should be written to disk (post-conjugate, post-
-/// scale-by-100 are still applied by [`write_transform`]).
+/// Fold accumulated movement into the root bone for the given JMA kind.
+/// Overlay/replacement composition is done upstream (see
+/// [`AnimationClip::pose`](super::AnimationClip::pose) /
+/// [`overlay_pose`](super::AnimationClip::overlay_pose)); this only
+/// applies the movement deltas, which live on the root bone (index 0) of
+/// the movement-bearing base kinds (`JMA / JMT / JMZ`). Returns the
+/// transform to write (post-conjugate / scale-by-100 are still applied
+/// by [`write_transform`]).
 fn compose_frame_bone(
     transform: NodeTransform,
     bone_idx: usize,
-    defaults: &[NodeTransform],
     accumulated_translation: RealPoint3d,
     accumulated_yaw: f32,
     kind: JmaKind,
 ) -> NodeTransform {
     let mut t = transform.translation;
     let mut q = transform.rotation;
-    let mut s = transform.scale;
+    let s = transform.scale;
 
-    if kind.composes_overlay() {
-        // Codec values are deltas from the rest pose; combine with
-        // the bone's rest pose to produce the world pose Tool wants.
-        if let Some(base) = defaults.get(bone_idx).copied() {
-            t = RealPoint3d {
-                x: base.translation.x + transform.translation.x,
-                y: base.translation.y + transform.translation.y,
-                z: base.translation.z + transform.translation.z,
-            };
-            q = base.rotation * transform.rotation;
-            // Overlay scale is additive: TagTool's `Animation.Overlay`
-            // and Foundry's `compose_overlay_animation` agree.
-            s = base.scale + transform.scale;
-        }
-    }
-
-    // Movement folding lives on the root bone (index 0) and runs
-    // after any per-bone composition above.
     if kind.folds_movement() && bone_idx == 0 {
         t = RealPoint3d {
             x: t.x + accumulated_translation.x,

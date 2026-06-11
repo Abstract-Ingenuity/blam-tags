@@ -470,16 +470,26 @@ fn write_jma(
     path: &Path,
 ) -> Result<()> {
     let kind = jma_kind_for(group);
-    // Overlay anims store deltas-from-rest in the codec; unflagged
-    // bones must stay at identity so `compose_overlay` (rest × delta)
-    // produces the rest pose, not double-rest. Other kinds use the
-    // render_model defaults as the rest-pose fallback.
-    let pose_defaults: Option<&[NodeTransform]> = if kind.composes_overlay() {
-        None
-    } else {
-        Some(defaults)
+    // Overlay anims store deltas-from-rest in the codec, so they are
+    // composed onto the rest pose up front (Foundry's
+    // `compose_overlay_animation` rules) — the writer then emits the
+    // composed body verbatim with the per-bone reference as its leading
+    // frame. Every other kind builds the pose against the render_model
+    // defaults as the rest-pose fallback.
+    let (pose, leading): (blam_tags::Pose, Vec<NodeTransform>) = match kind {
+        // Overlay: deltas composed onto the static-or-rest reference.
+        JmaKind::Jmo => {
+            let (reference, body) = clip.overlay_pose(skeleton, defaults);
+            (body, reference)
+        }
+        // Replacement: animated nodes take the codec value, every other
+        // node (incl. static-flagged) takes the rest pose — matching
+        // Foundry's `compose_replacement_animation` and TagTool's
+        // `Replace()`. Leading frame is the rest pose.
+        JmaKind::Jmr => (clip.replacement_pose(skeleton, defaults), defaults.to_vec()),
+        // Base kinds / JMW: full pose against the render_model defaults.
+        _ => (clip.pose(skeleton, Some(defaults)), defaults.to_vec()),
     };
-    let pose = clip.pose(skeleton, pose_defaults);
 
     ensure_parent_dir(path)?;
     let mut writer = BufWriter::new(
@@ -488,7 +498,7 @@ fn write_jma(
     pose.write_jma(
         &mut writer,
         skeleton,
-        defaults,
+        &leading,
         group.node_list_checksum,
         kind,
         actor_name,
