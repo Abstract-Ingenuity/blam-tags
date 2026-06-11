@@ -103,6 +103,7 @@ pub mod equipment;
 pub mod giant;
 pub mod item;
 pub mod light;
+pub mod model;
 pub mod object;
 pub mod particle;
 pub mod projectile;
@@ -160,6 +161,7 @@ pub use ass::{
     AssError, AssFile, AssInstance, AssLight, AssLightKind, AssMaterial, AssObject,
     AssObjectPayload, AssTriangle, AssVertex,
 };
+pub use model::{Model, ModelError, ModelVariant, ModelVariantObject, ModelVariantRegion};
 pub use render_model::{
     extract_per_instance_lightmap_uvs, Geometry, Marker, MarkerGroup, Material, MaterialProperty,
     Mesh, Node, Part, PerInstanceLightmapUvs, Permutation, Region, RenderMesh, RenderMeshPart,
