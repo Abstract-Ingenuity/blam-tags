@@ -1,7 +1,7 @@
 //! Dump the alpha channel of riverworld_rockblend_decal as a PNG to
 //! inspect whether the bitmap has soft falloff or hard edges.
 
-use blam_tags::{Bitmap, TagFile, BitmapFormat};
+use blam_tags::{Bitmap, TagFile};
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

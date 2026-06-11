@@ -1,13 +1,27 @@
 //! Dump all env-mapping-related parameters baked into an rmsh's
 //! ResolvedRenderMethod. Source of truth for what tool.exe baked.
 use blam_tags::file::TagFile;
-use blam_tags::render_method::ResolvedRenderMethod;
+use blam_tags::paths::{derive_tags_root, resolve_tag_path};
+use blam_tags::render_method::{
+    RenderMethod, RenderMethodDefinition, RenderMethodOption, ResolvedRenderMethod,
+};
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = PathBuf::from(std::env::args().nth(1).ok_or("usage: <rmsh path>")?);
     let tag = TagFile::read(&path)?;
-    let rm = ResolvedRenderMethod::resolve(&tag)?;
+    let rmsh = RenderMethod::from_tag(&tag)?;
+    // `resolve` now needs the rmdf (for the category→option chain) and a
+    // loader for each rmop tag; resolve their paths against the tags root
+    // derived from the rmsh's own location.
+    let tags_root = derive_tags_root(&path).ok_or("could not derive tags root from rmsh path")?;
+    let rmdf_path = resolve_tag_path(&tags_root, &rmsh.definition_path, "render_method_definition");
+    let rmdf = RenderMethodDefinition::from_tag(&TagFile::read(&rmdf_path)?)?;
+    let load_rmop = |opt_path: &str| -> Option<RenderMethodOption> {
+        let abs = resolve_tag_path(&tags_root, opt_path, "render_method_option");
+        RenderMethodOption::from_tag(&TagFile::read(&abs).ok()?).ok()
+    };
+    let rm = ResolvedRenderMethod::resolve(&rmsh, &rmdf, load_rmop);
     let env_names = [
         "env_tint_color",
         "env_bias",

@@ -255,6 +255,15 @@ impl<T: SchemaEnum, U: TagInt> fmt::Debug for Enum<T, U> {
     }
 }
 
+/// `Display` = the resolved variant's canonical schema name (the by-name
+/// representation — no raw bits). Lets diagnostics print enum fields
+/// directly with `{}`.
+impl<T: SchemaEnum, U: TagInt> fmt::Display for Enum<T, U> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.variant.schema_name())
+    }
+}
+
 /// `Default` for explicit fallback construction only — NOT a decode
 /// path (decode always goes through [`Enum::resolve`], which panics on
 /// an unresolved value). Requires `T: Default` (mark a `#[default]`
@@ -402,6 +411,21 @@ impl<T: SchemaEnum + PartialEq, U: TagInt> PartialEq for Flags<T, U> {
 impl<T: SchemaEnum + PartialEq, U: TagInt> fmt::Debug for Flags<T, U> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_set().entries(self.set.iter()).finish()
+    }
+}
+
+/// Hex display forwards to the retained raw authored value — for the
+/// round-tripping / diagnostics use the struct doc-comment calls out
+/// (`Debug` already prints the resolved variant names). Lets dump tools
+/// keep `{:x}` / `{:#x}` on a flags field.
+impl<T, U: fmt::LowerHex> fmt::LowerHex for Flags<T, U> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(&self.raw, f)
+    }
+}
+impl<T, U: fmt::UpperHex> fmt::UpperHex for Flags<T, U> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::UpperHex::fmt(&self.raw, f)
     }
 }
 

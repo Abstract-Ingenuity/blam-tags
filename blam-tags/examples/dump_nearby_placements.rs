@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (dx*dx + dy*dy).sqrt() <= radius
     };
 
-    let mut report = |label: &str, list: &[blam_tags::scenario::ObjectPlacement], palette: &[blam_tags::scenario::TagReferencePalette]| {
+    let report = |label: &str, list: &[blam_tags::scenario::ObjectPlacement], palette: &[blam_tags::scenario::TagReferencePalette]| {
         for (i, p) in list.iter().enumerate() {
             let pos = p.object_data.position;
             if near(pos.x, pos.y) {

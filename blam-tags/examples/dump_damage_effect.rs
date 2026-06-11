@@ -51,7 +51,7 @@ fn main() {
     println!();
     println!("player_responses[{}]:", d.player_responses.len());
     for (i, pr) in d.player_responses.iter().enumerate() {
-        println!("  [{}] response_type={}", i, pr.response_type.0);
+        println!("  [{}] response_type={}", i, pr.response_type);
         println!("      screen_flash: type={} prio={} dur={:.3}s fade={} max={:.3} color=({:.3},{:.3},{:.3},{:.3})",
             pr.screen_flash.flash_type, pr.screen_flash.priority,
             pr.screen_flash.duration_seconds, pr.screen_flash.fade_function,

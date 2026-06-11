@@ -587,7 +587,7 @@ impl TagFileBlocks {
 // Helpers
 //================================================================================
 
-fn unexpected_footer(chunk: &'static str, expected: u32, got: u32) -> TagReadError {
+fn unexpected_footer(_chunk: &'static str, expected: u32, got: u32) -> TagReadError {
     TagReadError::BadChunkSignature {
         offset: 0,
         expected: expected.to_be_bytes(),

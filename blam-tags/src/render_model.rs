@@ -73,6 +73,39 @@ pub enum PartFlags {
     #[strum(serialize = "ignored by lightmapper")] IgnoredByLightmapper = 1,
     #[strum(serialize = "has transparent sorting plane")] HasTransparentSortingPlane = 2,
     #[strum(serialize = "is water surface")] IsWaterSurface = 3,
+    #[strum(serialize = "is hologram")] IsHologram = 4,
+}
+
+/// `e_geometry_part_type` (Ares `geometry_definitions_new.h:25`). Stored
+/// per render-geometry part as a `char_integer` (not a schema enum), so
+/// it's decoded value→variant here rather than via the by-name
+/// `Enum<T,U>` machinery. Drives per-part render-pass routing in the
+/// engine's `c_structure_renderer::submit_visibility`:
+///   - `part_is_renderable @ 0x18069eb90` skips `LightmapOnly` parts
+///     entirely (invisible `z_invis_lightquad` surfaces baked only to
+///     feed the offline lightmapper).
+///   - the remainder route by `is_transparent ? Transparent : (type & 3)`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(i8)]
+pub enum GeometryPartType {
+    #[strum(serialize = "opaque not drawn")] OpaqueNotDrawn = 0,
+    #[strum(serialize = "opaque shadow only")] OpaqueShadowOnly = 1,
+    #[strum(serialize = "opaque shadow casting")] OpaqueShadowCasting = 2,
+    #[strum(serialize = "opaque non shadowing")] OpaqueNonShadowing = 3,
+    #[strum(serialize = "transparent")] Transparent = 4,
+    #[strum(serialize = "lightmap only")] LightmapOnly = 5,
+}
+
+impl GeometryPartType {
+    /// Decode the raw `char_integer`. Out-of-spec values (Halo only ever
+    /// emits 0..=5) fall back to `OpaqueNotDrawn` — the safe "has geometry
+    /// but don't draw in the opaque passes" default.
+    pub fn from_raw(v: i8) -> Self {
+        <Self as num_traits::FromPrimitive>::from_i8(v).unwrap_or(Self::OpaqueNotDrawn)
+    }
 }
 
 /// `mesh_flags` (byte_flags). Shared global render-geometry mesh flags.
@@ -419,7 +452,7 @@ pub struct Part {
     pub index_count: i16,
     pub subpart_start: i16,
     pub subpart_count: i16,
-    pub part_type: i8,
+    pub part_type: GeometryPartType,
     pub part_flags: Flags<PartFlags, u8>,
     pub budget_vertex_count: i16,
 }
@@ -669,8 +702,9 @@ pub struct RenderMeshPart {
     pub material_index: u16,
     pub index_start: u32,
     pub index_count: u32,
-    /// `e_geometry_part_type` enum (0=opaque_not_drawn .. 5=lightmap_only).
-    pub part_type: i8,
+    /// `e_geometry_part_type` — drives per-part render-pass routing /
+    /// the `part_is_renderable` gate. See [`GeometryPartType`].
+    pub part_type: GeometryPartType,
     /// `part_block.transparent sorting index` — index into the geometry's
     /// `part sorting position` block. `-1` when the part has no authored
     /// sort position (opaque parts, or transparent parts the tool didn't
@@ -1044,7 +1078,7 @@ fn read_meshes_schema(geo: &TagStruct<'_>) -> Vec<Mesh> {
                     index_count: read_i16(&p, "index count"),
                     subpart_start: read_i16(&p, "subpart start"),
                     subpart_count: read_i16(&p, "subpart count"),
-                    part_type: read_i8(&p, "part type"),
+                    part_type: GeometryPartType::from_raw(read_i8(&p, "part type")),
                     part_flags: p.try_read_flags("part flags").unwrap_or_default(),
                     budget_vertex_count: read_i16(&p, "budget vertex count"),
                 });
@@ -1587,7 +1621,7 @@ where
             for pi in 0..parts_block.len() {
                 let part = parts_block.element(pi).unwrap();
                 let material_index = part.read_int_any("render method index").unwrap_or(0).max(0) as u16;
-                let part_type = part.read_int_any("part type").unwrap_or(0) as i8;
+                let part_type = GeometryPartType::from_raw(part.read_int_any("part type").unwrap_or(0) as i8);
                 let sub_start = part.read_int_any("subpart start").unwrap_or(0);
                 let sub_count = part.read_int_any("subpart count").unwrap_or(0);
                 let (mut index_start, mut index_count) = (0u32, 0u32);
@@ -1644,7 +1678,7 @@ where
             for pi in 0..parts_block.len() {
                 let part = parts_block.element(pi).unwrap();
                 let material_index = part.read_int_any("render method index").unwrap_or(0).max(0) as u16;
-                let part_type = part.read_int_any("part type").unwrap_or(0) as i8;
+                let part_type = GeometryPartType::from_raw(part.read_int_any("part type").unwrap_or(0) as i8);
                 let part_index_start = indices.len() as u32;
                 let sub_start = part.read_int_any("subpart start").unwrap_or(0);
                 let sub_count = part.read_int_any("subpart count").unwrap_or(0);

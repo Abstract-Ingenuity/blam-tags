@@ -28,14 +28,11 @@ fn main() {
     );
     println!("{}", "-".repeat(110));
     for h in &eg.holdbacks {
-        let name = match h.holdback_type {
-            Some(t) => format!("{:?}", t),
-            None => "?".into(),
-        };
+        let name = format!("{:?}", h.holdback_type);
         let p = |pr: EffectPriority| -> (i32, f32, i32) {
             h.priorities
                 .iter()
-                .find(|x| x.priority == Some(pr))
+                .find(|x| x.priority.get() == pr)
                 .map(|x| (x.absolute_count, x.relative_percentage, x.available))
                 .unwrap_or((0, 0.0, 0))
         };
