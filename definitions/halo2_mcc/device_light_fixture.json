@@ -480,7 +480,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",

@@ -178,7 +178,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "cmtb"
   },
   "character_physics_struct": {
    "guid": "00000000000000000000000000000000",
@@ -267,7 +268,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chpy"
   },
   "spheres_block": {
    "guid": "00000000000000000000000000000000",
@@ -586,7 +588,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chgr"
   },
   "character_physics_flying_struct": {
    "guid": "00000000000000000000000000000000",
@@ -645,7 +648,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chfl"
   },
   "character_physics_dead_struct": {
    "guid": "00000000000000000000000000000000",
@@ -660,7 +664,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chdd"
   },
   "character_physics_sentinel_struct": {
    "guid": "00000000000000000000000000000000",
@@ -675,7 +680,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chsn"
   },
   "object_block_struct": {
    "guid": "00000000000000000000000000000000",
@@ -970,7 +976,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",

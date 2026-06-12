@@ -105,7 +105,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "prli"
   },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
@@ -128,7 +129,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",
@@ -181,7 +183,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "scli"
   },
   "ambient_light_struct": {
    "guid": "00000000000000000000000000000000",
@@ -208,7 +211,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "amli"
   },
   "lightmap_shadows_struct": {
    "guid": "00000000000000000000000000000000",
@@ -227,7 +231,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "lmsh"
   }
  },
  "arrays": {},

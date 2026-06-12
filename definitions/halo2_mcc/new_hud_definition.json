@@ -202,7 +202,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "hwis"
   },
   "hud_widget_state_definition_struct": {
    "guid": "00000000000000000000000000000000",
@@ -279,7 +280,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "hwsd"
   },
   "hud_widget_effect_block": {
    "guid": "00000000000000000000000000000000",
@@ -351,7 +353,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "hwef"
   },
   "scalar_function_struct": {
    "guid": "00000000000000000000000000000000",
@@ -370,7 +373,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SCFN"
   },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
@@ -393,7 +397,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",
@@ -535,7 +540,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "nhd2"
   },
   "hud_screen_effect_widgets": {
    "guid": "00000000000000000000000000000000",
@@ -629,7 +635,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sebs"
   }
  },
  "arrays": {},

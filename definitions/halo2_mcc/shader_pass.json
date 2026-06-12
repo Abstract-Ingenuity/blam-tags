@@ -1171,7 +1171,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "shtb"
   },
   "shader_postprocess_pixel_shader": {
    "guid": "00000000000000000000000000000000",
@@ -1637,7 +1638,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "GPUS"
   },
   "texture_stage_state_block": {
    "guid": "00000000000000000000000000000000",
@@ -1804,7 +1806,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "GPUR"
   },
   "extern_reference_block": {
    "guid": "00000000000000000000000000000000",

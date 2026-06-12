@@ -851,7 +851,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ires"
   },
   "instantaneous_response_damage_effect_marker_struct": {
    "guid": "00000000000000000000000000000000",
@@ -865,7 +866,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "irem"
   },
   "g_null_block": {
    "guid": "00000000000000000000000000000000",
@@ -1023,7 +1025,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MTLO"
   },
   "model_region_block": {
    "guid": "00000000000000000000000000000000",

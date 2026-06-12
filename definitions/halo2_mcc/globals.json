@@ -2009,7 +2009,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "masd"
   },
   "sound_response_definition_block": {
    "guid": "00000000000000000000000000000000",
@@ -2916,7 +2917,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "mphp"
   },
   "materials_sweeteners_struct": {
    "guid": "00000000000000000000000000000000",
@@ -2987,7 +2989,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "msst"
   },
   "multiplayer_ui_block": {
    "guid": "00000000000000000000000000000000",

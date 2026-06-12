@@ -389,7 +389,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "nbmi"
   },
   "bitmap_native_mipmap_info_block": {
    "guid": "00000000000000000000000000000000",

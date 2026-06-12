@@ -956,7 +956,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "cbsp"
   },
   "bsp3d_nodes_block": {
    "guid": "00000000000000000000000000000000",

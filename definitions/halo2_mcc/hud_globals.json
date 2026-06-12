@@ -598,7 +598,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "nhgs"
   },
   "hud_dashlights_block": {
    "guid": "00000000000000000000000000000000",
@@ -844,7 +845,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "nhgs"
   }
  },
  "arrays": {},

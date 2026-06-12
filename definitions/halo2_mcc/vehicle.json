@@ -423,7 +423,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "trcv"
   },
   "havok_vehicle_physics_struct": {
    "guid": "00000000000000000000000000000000",
@@ -498,7 +499,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "HVPH"
   },
   "anti_gravity_point_definition_block": {
    "guid": "00000000000000000000000000000000",
@@ -1138,7 +1140,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "uncs"
   },
   "unit_camera_track_block": {
    "guid": "00000000000000000000000000000000",
@@ -1179,7 +1182,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "usas"
   },
   "unit_additional_node_names_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1193,7 +1197,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "uHnd"
   },
   "unit_boarding_melee_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1223,7 +1228,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ubms"
   },
   "campaign_metagame_bucket_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1243,7 +1249,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "cmtb"
   },
   "unit_postures_block": {
    "guid": "00000000000000000000000000000000",
@@ -1559,7 +1566,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "!@#$"
   },
   "unit_lipsync_scales_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1577,7 +1585,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ulYc"
   },
   "object_block_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1872,7 +1881,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",

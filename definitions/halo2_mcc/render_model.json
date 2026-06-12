@@ -709,7 +709,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SINF"
   },
   "render_model_section_data_block": {
    "guid": "00000000000000000000000000000000",
@@ -798,7 +799,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SECT"
   },
   "global_geometry_part_block_new": {
    "guid": "00000000000000000000000000000000",
@@ -1146,7 +1148,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "PDAT"
   },
   "global_geometry_raw_point_block": {
    "guid": "00000000000000000000000000000000",
@@ -1325,7 +1328,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "BLOK"
   },
   "global_geometry_block_resource_block": {
    "guid": "00000000000000000000000000000000",

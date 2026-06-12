@@ -237,7 +237,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "BLOK"
   },
   "global_geometry_block_resource_block": {
    "guid": "00000000000000000000000000000000",
@@ -604,7 +605,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "WNDM"
   },
   "gloal_wind_primitives_block": {
    "guid": "00000000000000000000000000000000",

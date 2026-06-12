@@ -446,7 +446,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "cmtb"
   },
   "character_vitality_block": {
    "guid": "00000000000000000000000000000000",

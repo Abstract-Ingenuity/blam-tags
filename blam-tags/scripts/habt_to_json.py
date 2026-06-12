@@ -238,6 +238,12 @@ class Converter:
             raise ValueError("Layout %r has no FieldSet" % struct_name)
         # reserve the entry so recursive refs resolve
         entry = {"size": int(fs.get("sizeofValue")), "fields": []}
+        # H2 inline structs with a `tag` carry a 16-byte block-style
+        # header on disk (e.g. mapping_function = MAPP). Record it so the
+        # decoder knows to consume + preserve it.
+        tag = layout_el.get("tag")
+        if tag:
+            entry["tag"] = tag
         self.structs[struct_name] = entry
         entry["fields"] = self.process_fields(fs, struct_name)
         entry["fields"].append({"type": "terminator", "name": None})
@@ -405,11 +411,14 @@ class Converter:
         # finalize struct entries -> include a stable empty guid + size_string
         structs_out = {}
         for sn, s in self.structs.items():
-            structs_out[sn] = {
+            entry = {
                 "guid": "00000000000000000000000000000000",
                 "size": s["size"],
                 "fields": s["fields"],
             }
+            if s.get("tag"):
+                entry["tag"] = s["tag"]
+            structs_out[sn] = entry
         blocks_out = {bn: {"max_count": b["max_count"],
                            "max_count_string": str(b["max_count"]),
                            "struct": b["struct"]} for bn, b in self.blocks.items()}

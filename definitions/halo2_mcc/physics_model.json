@@ -1882,7 +1882,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "csbs"
   },
   "ragdoll_constraints_block": {
    "guid": "00000000000000000000000000000000",

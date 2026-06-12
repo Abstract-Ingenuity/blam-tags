@@ -205,7 +205,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "slpp"
   },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
@@ -228,7 +229,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",

@@ -488,7 +488,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SINF"
   },
   "global_geometry_compression_info_block": {
    "guid": "00000000000000000000000000000000",
@@ -576,7 +577,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "BLOK"
   },
   "global_geometry_block_resource_block": {
    "guid": "00000000000000000000000000000000",
@@ -681,7 +683,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SECT"
   },
   "global_geometry_part_block_new": {
    "guid": "00000000000000000000000000000000",

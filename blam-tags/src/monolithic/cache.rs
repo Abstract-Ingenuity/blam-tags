@@ -506,6 +506,7 @@ fn hydrate_resource_chunk(
     let struct_data = TagStructData {
         struct_index: 0,
         sub_chunks: Vec::new(),
+        classic_struct_header: None,
     };
 
     *chunk = TagResourceChunk::Exploded {

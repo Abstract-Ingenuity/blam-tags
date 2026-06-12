@@ -161,6 +161,10 @@ struct TagStructSchema {
     guid: String,
     size: u32,
     fields: Vec<TagFieldSchema>,
+    /// Classic Halo 2 only: a 4-char group tag present when this inline
+    /// struct carries a 16-byte block-style header on disk (e.g. `MAPP`).
+    #[serde(default)]
+    tag: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -681,6 +685,17 @@ fn build_layout_from_schema(
         interop_layout_count: interop_layouts.len() as u32,
     };
 
+    // Classic Halo 2 inline-struct tags (0 = no on-disk header), parallel
+    // to struct_layouts order.
+    let struct_tags: Vec<u32> = schema
+        .structs
+        .values()
+        .map(|s| match &s.tag {
+            Some(t) => crate::fields::parse_group_tag(t).unwrap_or(0),
+            None => 0,
+        })
+        .collect();
+
     let mut result = TagLayout {
         root_data_size: schema_root_size,
         guid: layout_guid,
@@ -701,6 +716,7 @@ fn build_layout_from_schema(
         resource_layouts,
         interop_layouts,
         struct_layouts,
+        struct_tags,
     };
 
     // Compute struct sizes + field offsets. First pass with tmpl

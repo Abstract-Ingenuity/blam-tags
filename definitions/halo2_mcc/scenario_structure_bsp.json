@@ -2015,7 +2015,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SINF"
   },
   "global_geometry_compression_info_block": {
    "guid": "00000000000000000000000000000000",
@@ -2103,7 +2104,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "BLOK"
   },
   "global_geometry_block_resource_block": {
    "guid": "00000000000000000000000000000000",
@@ -2208,7 +2210,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SECT"
   },
   "global_geometry_part_block_new": {
    "guid": "00000000000000000000000000000000",
@@ -4395,7 +4398,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "svis"
   },
   "structure_bsp_instanced_geometry_definition_block": {
    "guid": "00000000000000000000000000000000",
@@ -4472,7 +4476,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "igri"
   },
   "global_collision_bsp_struct": {
    "guid": "00000000000000000000000000000000",
@@ -4522,7 +4527,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "cbsp"
   },
   "collision_bsp_physics_block": {
    "guid": "00000000000000000000000000000000",
@@ -5050,7 +5056,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "spdf"
   },
   "breakable_surface_key_table_block": {
    "guid": "00000000000000000000000000000000",
@@ -5286,7 +5293,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "obj#"
   },
   "game_portal_to_portal_mapping_block": {
    "guid": "00000000000000000000000000000000",
@@ -5484,7 +5492,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "rnli"
   },
   "decorator_placement_definition_block": {
    "guid": "00000000000000000000000000000000",

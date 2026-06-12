@@ -296,7 +296,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "cnvs"
   },
   "unused_create_new_variants_struct": {
    "guid": "00000000000000000000000000000000",

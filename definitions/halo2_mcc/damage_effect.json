@@ -313,7 +313,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "masd"
   },
   "damage_effect_player_response_block": {
    "guid": "00000000000000000000000000000000",
@@ -410,7 +411,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SFDS"
   },
   "vibration_definition_struct": {
    "guid": "00000000000000000000000000000000",
@@ -435,7 +437,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "RBDS"
   },
   "vibration_frequency_definition_struct": {
    "guid": "00000000000000000000000000000000",
@@ -463,7 +466,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "RFDS"
   },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
@@ -486,7 +490,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",
@@ -527,7 +532,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "dsfx"
   }
  },
  "arrays": {},

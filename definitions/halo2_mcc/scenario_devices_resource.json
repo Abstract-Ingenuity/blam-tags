@@ -410,7 +410,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sobj"
   },
   "scenario_object_id_struct": {
    "guid": "00000000000000000000000000000000",
@@ -438,7 +439,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "obj#"
   },
   "scenario_device_struct": {
    "guid": "00000000000000000000000000000000",
@@ -461,7 +463,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sdvt"
   },
   "scenario_machine_struct_v3": {
    "guid": "00000000000000000000000000000000",
@@ -481,7 +484,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "smht"
   },
   "pathfinding_object_index_list_block": {
    "guid": "00000000000000000000000000000000",
@@ -583,7 +587,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sctt"
   },
   "scenario_control_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -669,7 +674,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "slft"
   },
   "scenario_light_fixture_palette_block": {
    "guid": "00000000000000000000000000000000",

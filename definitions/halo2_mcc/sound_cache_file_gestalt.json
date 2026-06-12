@@ -403,7 +403,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "snpl"
   },
   "sound_gestalt_scale_block": {
    "guid": "00000000000000000000000000000000",
@@ -440,7 +441,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "snsc"
   },
   "sound_gestalt_import_names_block": {
    "guid": "00000000000000000000000000000000",
@@ -627,7 +629,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "plsn"
   },
   "platform_sound_override_mixbins_block": {
    "guid": "00000000000000000000000000000000",
@@ -703,7 +706,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "spl1"
   },
   "platform_sound_pitch_lfo_block": {
    "guid": "00000000000000000000000000000000",
@@ -811,7 +815,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ssfx"
   },
   "sound_effect_component_block": {
    "guid": "00000000000000000000000000000000",
@@ -919,7 +924,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",
@@ -1107,7 +1113,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "slpp"
   },
   "sound_gestalt_remastered_sound_references_block": {
    "guid": "00000000000000000000000000000000",
@@ -1223,7 +1230,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "snpr"
   },
   "sound_promotion_rule_block": {
    "guid": "00000000000000000000000000000000",
@@ -1395,7 +1403,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "BLOK"
   },
   "global_geometry_block_resource_block": {
    "guid": "00000000000000000000000000000000",

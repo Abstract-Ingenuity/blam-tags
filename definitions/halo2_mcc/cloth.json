@@ -138,7 +138,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "clpr"
   },
   "cloth_vertices_block": {
    "guid": "00000000000000000000000000000000",

@@ -292,7 +292,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sd2s"
   },
   "angular_velocity_lower_bound_struct": {
    "guid": "00000000000000000000000000000000",
@@ -306,7 +307,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "avlb"
   },
   "projectile_material_response_block": {
    "guid": "00000000000000000000000000000000",
@@ -713,7 +715,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",

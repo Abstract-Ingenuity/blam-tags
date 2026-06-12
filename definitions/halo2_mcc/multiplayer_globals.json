@@ -765,7 +765,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "gapu"
   },
   "grenade_block": {
    "guid": "00000000000000000000000000000000",
@@ -958,7 +959,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "masd"
   },
   "sound_response_definition_block": {
    "guid": "00000000000000000000000000000000",

@@ -367,7 +367,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sobj"
   },
   "scenario_object_id_struct": {
    "guid": "00000000000000000000000000000000",
@@ -395,7 +396,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "obj#"
   },
   "scenario_object_permutation_struct": {
    "guid": "00000000000000000000000000000000",
@@ -435,7 +437,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sper"
   },
   "scenario_scenery_datum_struct_v4": {
    "guid": "00000000000000000000000000000000",
@@ -474,7 +477,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sct3"
   },
   "pathfinding_object_index_list_block": {
    "guid": "00000000000000000000000000000000",

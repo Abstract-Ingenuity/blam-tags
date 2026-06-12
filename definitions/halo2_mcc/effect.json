@@ -317,7 +317,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "CLFN"
   },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
@@ -340,7 +341,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",
@@ -373,7 +375,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SCFN"
   },
   "effect_accelerations_block": {
    "guid": "00000000000000000000000000000000",
@@ -608,7 +611,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "PRPS"
   },
   "particle_property_color_struct_new": {
    "guid": "00000000000000000000000000000000",
@@ -647,7 +651,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "PRPC"
   }
  },
  "arrays": {},

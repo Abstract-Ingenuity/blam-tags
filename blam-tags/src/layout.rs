@@ -230,6 +230,11 @@ pub struct TagLayout {
     pub interop_layouts: Vec<TagInteropLayout>,
     /// `stv2` chunk (v2/v3) or reconstructed from v1 aggregate records.
     pub struct_layouts: Vec<TagStructLayout>,
+    /// Classic Halo 2 only: per-struct 4-char group tag (0 = none),
+    /// parallel to `struct_layouts`. Non-zero for inline structs that
+    /// carry a 16-byte block-style header on disk (e.g. `MAPP`). Empty
+    /// for MCC layouts (read from `blay`), which have no such headers.
+    pub struct_tags: Vec<u32>,
 }
 
 impl TagLayout {
@@ -761,6 +766,8 @@ impl TagLayout {
             struct_layouts,
             resource_layouts,
             interop_layouts,
+            // MCC tags carry no classic inline-struct headers.
+            struct_tags: Vec::new(),
         };
 
         //================================================================================

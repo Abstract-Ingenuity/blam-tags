@@ -451,7 +451,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "masd"
   },
   "melee_damage_parameters_struct": {
    "guid": "00000000000000000000000000000000",
@@ -501,7 +502,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "mdps"
   },
   "aim_assist_struct": {
    "guid": "00000000000000000000000000000000",
@@ -541,7 +543,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "easd"
   },
   "weapon_tracking_struct": {
    "guid": "00000000000000000000000000000000",
@@ -561,7 +564,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "wtsf"
   },
   "weapon_interface_struct": {
    "guid": "00000000000000000000000000000000",
@@ -585,7 +589,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "wItS"
   },
   "weapon_shared_interface_struct": {
    "guid": "00000000000000000000000000000000",
@@ -600,7 +605,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "wSiS"
   },
   "weapon_first_person_interface_block": {
    "guid": "00000000000000000000000000000000",
@@ -844,7 +850,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "wtas"
   },
   "weapon_trigger_charging_struct": {
    "guid": "00000000000000000000000000000000",
@@ -888,7 +895,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "wtcs"
   },
   "weapon_barrels": {
    "guid": "00000000000000000000000000000000",
@@ -1117,7 +1125,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "wbde"
   },
   "barrel_firing_effect_block": {
    "guid": "00000000000000000000000000000000",
@@ -1583,7 +1592,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",

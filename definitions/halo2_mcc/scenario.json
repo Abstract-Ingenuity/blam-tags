@@ -1777,7 +1777,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sobj"
   },
   "scenario_object_id_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1805,7 +1806,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "obj#"
   },
   "scenario_object_permutation_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1845,7 +1847,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sper"
   },
   "scenario_scenery_datum_struct_v4": {
    "guid": "00000000000000000000000000000000",
@@ -1884,7 +1887,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sct3"
   },
   "pathfinding_object_index_list_block": {
    "guid": "00000000000000000000000000000000",
@@ -1981,7 +1985,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sunt"
   },
   "scenario_biped_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -2111,7 +2116,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "seqt"
   },
   "scenario_equipment_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -2194,7 +2200,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "swpt"
   },
   "scenario_weapon_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -2305,7 +2312,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sdvt"
   },
   "scenario_machine_struct_v3": {
    "guid": "00000000000000000000000000000000",
@@ -2325,7 +2333,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "smht"
   },
   "scenario_machine_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -2409,7 +2418,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sctt"
   },
   "scenario_control_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -2495,7 +2505,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "slft"
   },
   "scenario_light_fixture_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -2581,7 +2592,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "#sc#"
   },
   "scenario_sound_scenery_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -2726,7 +2738,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "slit"
   },
   "scenario_light_palette_block": {
    "guid": "00000000000000000000000000000000",
@@ -3157,7 +3170,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ntor"
   },
   "scenario_starting_equipment_block": {
    "guid": "00000000000000000000000000000000",
@@ -6284,7 +6298,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sszd"
   },
   "scenario_crate_block": {
    "guid": "00000000000000000000000000000000",
@@ -6869,7 +6884,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "BLOK"
   },
   "global_geometry_block_resource_block": {
    "guid": "00000000000000000000000000000000",
@@ -7586,7 +7602,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SCFN"
   },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
@@ -7609,7 +7626,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",

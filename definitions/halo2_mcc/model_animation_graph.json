@@ -248,7 +248,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAgr"
   },
   "animation_graph_node_block": {
    "guid": "00000000000000000000000000000000",
@@ -405,7 +406,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "aaim"
   },
   "animation_pool_block": {
    "guid": "00000000000000000000000000000000",
@@ -571,7 +573,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "apds"
   },
   "animation_frame_event_block": {
    "guid": "00000000000000000000000000000000",
@@ -688,7 +691,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "qoSS"
   },
   "animation_graph_contents_struct": {
    "guid": "00000000000000000000000000000000",
@@ -713,7 +717,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAgc"
   },
   "animation_mode_block": {
    "guid": "00000000000000000000000000000000",
@@ -842,7 +847,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ANII"
   },
   "damage_animation_block": {
    "guid": "00000000000000000000000000000000",
@@ -942,7 +948,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ATSS"
   },
   "animation_transition_destination_block": {
    "guid": "00000000000000000000000000000000",
@@ -1002,7 +1009,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ATSS"
   },
   "precache_list_block": {
    "guid": "00000000000000000000000000000000",
@@ -1153,7 +1161,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MArt"
   },
   "inherited_animation_block": {
    "guid": "00000000000000000000000000000000",

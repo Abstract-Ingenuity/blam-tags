@@ -309,7 +309,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "blod"
   },
   "character_physics_struct": {
    "guid": "00000000000000000000000000000000",
@@ -398,7 +399,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chpy"
   },
   "spheres_block": {
    "guid": "00000000000000000000000000000000",
@@ -717,7 +719,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chgr"
   },
   "character_physics_flying_struct": {
    "guid": "00000000000000000000000000000000",
@@ -776,7 +779,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chfl"
   },
   "character_physics_dead_struct": {
    "guid": "00000000000000000000000000000000",
@@ -791,7 +795,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chdd"
   },
   "character_physics_sentinel_struct": {
    "guid": "00000000000000000000000000000000",
@@ -806,7 +811,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "chsn"
   },
   "contact_point_block": {
    "guid": "00000000000000000000000000000000",
@@ -1103,7 +1109,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "uncs"
   },
   "unit_camera_track_block": {
    "guid": "00000000000000000000000000000000",
@@ -1144,7 +1151,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "usas"
   },
   "unit_additional_node_names_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1158,7 +1166,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "uHnd"
   },
   "unit_boarding_melee_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1188,7 +1197,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ubms"
   },
   "campaign_metagame_bucket_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1208,7 +1218,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "cmtb"
   },
   "unit_postures_block": {
    "guid": "00000000000000000000000000000000",
@@ -1524,7 +1535,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "!@#$"
   },
   "unit_lipsync_scales_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1542,7 +1554,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "ulYc"
   },
   "object_block_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1837,7 +1850,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",

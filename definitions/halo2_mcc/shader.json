@@ -476,7 +476,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAPP"
   },
   "byte_block": {
    "guid": "00000000000000000000000000000000",
@@ -666,7 +667,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "shtb"
   },
   "tag_block_index_block": {
    "guid": "00000000000000000000000000000000",
@@ -762,7 +764,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "SCFN"
   },
   "shader_postprocess_overlay_reference_new_block": {
    "guid": "00000000000000000000000000000000",
@@ -1077,7 +1080,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "GPUR"
   },
   "shader_postprocess_bitmap_block": {
    "guid": "00000000000000000000000000000000",
@@ -1250,7 +1254,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "CLFN"
   },
   "shader_postprocess_color_overlay_block": {
    "guid": "00000000000000000000000000000000",
@@ -1360,7 +1365,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "GPUS"
   },
   "render_state_block": {
    "guid": "00000000000000000000000000000000",

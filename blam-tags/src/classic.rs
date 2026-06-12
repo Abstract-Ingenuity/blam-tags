@@ -331,6 +331,31 @@ fn read_h2_block_header(cur: &mut Cursor) -> Result<(Vec<u8>, usize, usize), Cla
     Ok((h, count, size))
 }
 
+/// Halo 2 only: if struct `child_si` is tagged (e.g. `MAPP`) and the
+/// next 4 trailing bytes match its tag (the 4cc is stored little-endian,
+/// so an LE read equals the BE-packed tag), consume + return its 16-byte
+/// block-style header. Otherwise no header is present.
+fn read_h2_struct_header(
+    layout: &TagLayout,
+    child_si: u32,
+    cur: &mut Cursor,
+    engine: ClassicEngine,
+) -> Result<Option<Vec<u8>>, ClassicError> {
+    if engine != ClassicEngine::Halo2 {
+        return Ok(None);
+    }
+    let tag = layout.struct_tags.get(child_si as usize).copied().unwrap_or(0);
+    if tag == 0 {
+        return Ok(None);
+    }
+    let rem = &cur.data[cur.pos..];
+    if rem.len() >= 4 && u32::from_le_bytes([rem[0], rem[1], rem[2], rem[3]]) == tag {
+        Ok(Some(cur.take(16, "h2 struct header")?.to_vec()))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Decode a classic tag body (everything after the 64-byte header) into
 /// the root [`TagBlockData`] using `layout` for structure.
 pub(crate) fn read_classic_body(
@@ -359,7 +384,7 @@ pub(crate) fn read_classic_body(
     for i in 0..count {
         let elem_raw = raw_data[i * elem_size..(i + 1) * elem_size].to_vec();
         let sub = decode_struct_trailing(layout, struct_index, &elem_raw, &mut cur, engine, endian)?;
-        elements.push(TagStructData { struct_index, sub_chunks: sub });
+        elements.push(TagStructData { struct_index, sub_chunks: sub, classic_struct_header: None });
     }
 
     if cur.pos != body.len() {
@@ -446,7 +471,11 @@ fn decode_struct_trailing(
             }
             TagFieldType::TagReference => {
                 let group = rd_i32(raw, off, endian);
-                let len = rd_u32(raw, off + 8, endian) as usize;
+                // The length is signed: H2 null references carry a valid
+                // group but length -1 (CE used group == -1). Treat any
+                // non-positive length as "no path".
+                let len_i = rd_i32(raw, off + 8, endian);
+                let len = if len_i > 0 { len_i as usize } else { 0 };
                 // The MCC `TagReference` payload is `group_tag(4) +
                 // null-terminated path`. The classic inline header keeps
                 // the group (raw[off..off+4]); only `path + NUL` is
@@ -478,6 +507,10 @@ fn decode_struct_trailing(
                 let child_si = field.definition;
                 let child_size = layout.struct_layouts[child_si as usize].size;
                 let child_raw = &raw[off..off + child_size];
+                // H2: a tag'd inline struct (e.g. MAPP) carries a 16-byte
+                // block-style header in the trailing stream before its
+                // nested data. Consume + preserve it if present.
+                let struct_header = read_h2_struct_header(layout, child_si, cur, engine)?;
                 let child_sub =
                     decode_struct_trailing(layout, child_si, child_raw, cur, engine, endian)?;
                 entries.push(TagSubChunkEntry {
@@ -485,6 +518,7 @@ fn decode_struct_trailing(
                     content: TagSubChunkContent::Struct(TagStructData {
                         struct_index: child_si,
                         sub_chunks: child_sub,
+                        classic_struct_header: struct_header,
                     }),
                 });
             }
@@ -496,7 +530,7 @@ fn decode_struct_trailing(
                 for i in 0..count {
                     let elem_raw = &raw[off + i * es..off + (i + 1) * es];
                     let sub = decode_struct_trailing(layout, asi, elem_raw, cur, engine, endian)?;
-                    elems.push(TagStructData { struct_index: asi, sub_chunks: sub });
+                    elems.push(TagStructData { struct_index: asi, sub_chunks: sub, classic_struct_header: None });
                 }
                 entries.push(TagSubChunkEntry {
                     field_index: Some(fi as u32),
@@ -554,7 +588,7 @@ fn decode_block(
     for i in 0..count {
         let elem_raw = raw_data[i * elem_size..(i + 1) * elem_size].to_vec();
         let sub = decode_struct_trailing(layout, struct_index, &elem_raw, cur, engine, endian)?;
-        elements.push(TagStructData { struct_index, sub_chunks: sub });
+        elements.push(TagStructData { struct_index, sub_chunks: sub, classic_struct_header: None });
     }
 
     Ok(TagBlockData {
@@ -625,8 +659,13 @@ fn sync_fixed_counts(layout: &TagLayout, raw: &mut [u8], elem: &TagStructData, e
                 if p.len() >= 4 {
                     raw[off..off + 4].copy_from_slice(&p[0..4]);
                 }
-                let path_len = p.len().saturating_sub(5); // 4 group + 1 NUL
-                wr_u32(raw, off + 8, path_len as u32, endian);
+                // Only rewrite the length when a path is present; null
+                // references preserve their original length field (H2
+                // stores -1 there, not 0).
+                if p.len() > 4 {
+                    let path_len = p.len() - 5; // minus 4 group + 1 NUL
+                    wr_u32(raw, off + 8, path_len as u32, endian);
+                }
             }
             (TagFieldType::StringId, Some(TagSubChunkContent::StringId(s))) => {
                 // H2 inline: (pad:u16, length:u16) big-endian. Sync length.
@@ -684,7 +723,14 @@ fn encode_struct_trailing(layout: &TagLayout, elem: &TagStructData, out: &mut Ve
                         }
                     }
                     TagSubChunkContent::StringId(s) => out.extend_from_slice(s),
-                    TagSubChunkContent::Struct(child) => encode_struct_trailing(layout, child, out),
+                    TagSubChunkContent::Struct(child) => {
+                        // H2 tag'd-struct header precedes the struct's
+                        // trailing data (preserved verbatim).
+                        if let Some(hdr) = &child.classic_struct_header {
+                            out.extend_from_slice(hdr);
+                        }
+                        encode_struct_trailing(layout, child, out);
+                    }
                     TagSubChunkContent::Array(elems) => {
                         for child in elems {
                             encode_struct_trailing(layout, child, out);

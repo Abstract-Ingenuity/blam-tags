@@ -333,7 +333,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "sobj"
   },
   "scenario_object_id_struct": {
    "guid": "00000000000000000000000000000000",
@@ -361,7 +362,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "obj#"
   },
   "scenario_equipment_datum_struct": {
    "guid": "00000000000000000000000000000000",
@@ -376,7 +378,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "seqt"
   },
   "g_scenario_editor_folder_block": {
    "guid": "00000000000000000000000000000000",

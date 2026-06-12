@@ -26,6 +26,11 @@ use crate::monolithic::XSyncState;
 pub(crate) struct TagStructData {
     /// Index into [`TagLayout::struct_layouts`].
     pub(crate) struct_index: u32,
+    /// Classic **Halo 2** only: the 16-byte block-style header that
+    /// precedes a tag'd inline struct's fields on disk (e.g. `MAPP`).
+    /// `None` for MCC, Halo CE, and untagged H2 structs. Preserved
+    /// verbatim for byte-exact write.
+    pub(crate) classic_struct_header: Option<Vec<u8>>,
     /// Sub-chunks emitted inside this struct's `tgst` chunk, in
     /// emission order. Only populated for fields whose type needs a
     /// sub-chunk. The tgst chunk itself has no raw bytes of its
@@ -234,6 +239,7 @@ impl TagStructData {
         Ok(Self {
             struct_index: definition.index,
             sub_chunks,
+            classic_struct_header: None,
         })
     }
 
@@ -374,6 +380,7 @@ impl TagStructData {
         Self {
             struct_index: struct_layout.index,
             sub_chunks,
+            classic_struct_header: None,
         }
     }
 
@@ -555,6 +562,7 @@ fn read_sub_chunks<R: Seek + Read>(
                     elements.push(TagStructData {
                         struct_index: element_definition.index,
                         sub_chunks: element_sub_chunks,
+                        classic_struct_header: None,
                     });
                 }
 
