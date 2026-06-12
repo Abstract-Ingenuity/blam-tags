@@ -320,6 +320,17 @@ pub(crate) fn write_classic_tag(file: &TagFile, engine: ClassicEngine, header: &
     out
 }
 
+/// Read a Halo 2 block header (16 bytes, little-endian): `4cc name +
+/// version(i32) + count(i32) + size(i32)`. The `size` is the element
+/// struct size (H2 blocks are self-describing). Returns the raw header
+/// bytes (preserved for write) plus the count + element size.
+fn read_h2_block_header(cur: &mut Cursor) -> Result<(Vec<u8>, usize, usize), ClassicError> {
+    let h = cur.take(16, "h2 block header")?.to_vec();
+    let count = u32::from_le_bytes([h[8], h[9], h[10], h[11]]) as usize;
+    let size = u32::from_le_bytes([h[12], h[13], h[14], h[15]]) as usize;
+    Ok((h, count, size))
+}
+
 /// Decode a classic tag body (everything after the 64-byte header) into
 /// the root [`TagBlockData`] using `layout` for structure.
 pub(crate) fn read_classic_body(
@@ -332,11 +343,24 @@ pub(crate) fn read_classic_body(
 
     let root_block_index = layout.header.tag_group_block_index;
     let struct_index = layout.block_layouts[root_block_index as usize].struct_index;
-    let elem_size = layout.struct_layouts[struct_index as usize].size;
 
-    // The single root element's fixed bytes lead the body.
-    let root_raw = cur.take(elem_size, "root struct").map(<[u8]>::to_vec)?;
-    let sub_chunks = decode_struct_trailing(layout, struct_index, &root_raw, &mut cur, engine, endian)?;
+    // Halo 2: a 16-byte block header (count + element size) leads the
+    // body. Halo CE: headerless — the single root element leads directly.
+    let (header, count, elem_size) = match engine {
+        ClassicEngine::HaloCe => (None, 1usize, layout.struct_layouts[struct_index as usize].size),
+        ClassicEngine::Halo2 => {
+            let (h, c, s) = read_h2_block_header(&mut cur)?;
+            (Some(h), c, s)
+        }
+    };
+
+    let raw_data = cur.take(count * elem_size, "root struct").map(<[u8]>::to_vec)?;
+    let mut elements = Vec::with_capacity(count);
+    for i in 0..count {
+        let elem_raw = raw_data[i * elem_size..(i + 1) * elem_size].to_vec();
+        let sub = decode_struct_trailing(layout, struct_index, &elem_raw, &mut cur, engine, endian)?;
+        elements.push(TagStructData { struct_index, sub_chunks: sub });
+    }
 
     if cur.pos != body.len() {
         return Err(ClassicError::TrailingBytes { consumed: cur.pos, total: body.len() });
@@ -345,9 +369,10 @@ pub(crate) fn read_classic_body(
     Ok(TagBlockData {
         block_index: root_block_index,
         flags: 0,
-        raw_data: root_raw,
+        raw_data,
         endian,
-        elements: vec![TagStructData { struct_index, sub_chunks }],
+        elements,
+        classic_block_header: header,
     })
 }
 
@@ -371,6 +396,37 @@ fn decode_struct_trailing(
             break;
         }
         let off = field.offset as usize;
+        // Guard against a desynced cursor (e.g. an unhandled H2 inline
+        // struct header) leaving `off` past this element's fixed bytes —
+        // fail cleanly instead of panicking on an out-of-range slice.
+        if matches!(
+            field.field_type,
+            TagFieldType::Block
+                | TagFieldType::Data
+                | TagFieldType::TagReference
+                | TagFieldType::StringId
+                | TagFieldType::Struct
+                | TagFieldType::Array
+        ) {
+            let end = match field.field_type {
+                TagFieldType::Struct => {
+                    off + layout.struct_layouts[field.definition as usize].size
+                }
+                TagFieldType::Array => {
+                    let a = &layout.array_layouts[field.definition as usize];
+                    off + layout.struct_layouts[a.struct_index as usize].size * a.count as usize
+                }
+                TagFieldType::TagReference => off + 16,
+                _ => off + 4,
+            };
+            if end > raw.len() {
+                return Err(ClassicError::UnexpectedEof {
+                    context: "struct fixed field (cursor desync?)",
+                    need: end,
+                    have: raw.len(),
+                });
+            }
+        }
         match field.field_type {
             TagFieldType::Block => {
                 let count = rd_u32(raw, off, endian) as usize;
@@ -461,13 +517,36 @@ fn decode_struct_trailing(
 fn decode_block(
     layout: &TagLayout,
     block_index: u32,
-    count: usize,
+    inline_count: usize,
     cur: &mut Cursor,
     engine: ClassicEngine,
     endian: Endian,
 ) -> Result<TagBlockData, ClassicError> {
     let struct_index = layout.block_layouts[block_index as usize].struct_index;
-    let elem_size = layout.struct_layouts[struct_index as usize].size;
+
+    // An empty block has no on-disk presence (no H2 header, no elements).
+    if inline_count == 0 {
+        return Ok(TagBlockData {
+            block_index,
+            flags: 0,
+            raw_data: Vec::new(),
+            endian,
+            elements: Vec::new(),
+            classic_block_header: None,
+        });
+    }
+
+    // Halo 2: a 16-byte block header (authoritative count + element
+    // size) precedes the elements. Halo CE: headerless, size from layout.
+    let (header, count, elem_size) = match engine {
+        ClassicEngine::HaloCe => {
+            (None, inline_count, layout.struct_layouts[struct_index as usize].size)
+        }
+        ClassicEngine::Halo2 => {
+            let (h, c, s) = read_h2_block_header(cur)?;
+            (Some(h), c, s)
+        }
+    };
 
     let raw_data = cur.take(count * elem_size, "block elements")?.to_vec();
 
@@ -484,6 +563,7 @@ fn decode_block(
         raw_data,
         endian,
         elements,
+        classic_block_header: header,
     })
 }
 
@@ -497,14 +577,9 @@ fn decode_block(
 /// unmodified tree this is a no-op, so read→write stays byte-exact.
 pub(crate) fn write_classic_body(layout: &TagLayout, root: &TagBlockData) -> Vec<u8> {
     let mut out = Vec::new();
-    let mut raw = root.raw_data.clone();
-    if let Some(elem) = root.elements.first() {
-        sync_fixed_counts(layout, &mut raw, elem, root.endian);
-    }
-    out.extend_from_slice(&raw);
-    if let Some(elem) = root.elements.first() {
-        encode_struct_trailing(layout, elem, &mut out);
-    }
+    // The root is just a block (1 element) — emit it the same way,
+    // including the Halo 2 block header if present.
+    encode_block(layout, root, &mut out);
     out
 }
 
@@ -639,13 +714,24 @@ mod tests {
 }
 
 fn encode_block(layout: &TagLayout, block: &TagBlockData, out: &mut Vec<u8>) {
-    let struct_index = layout.block_layouts[block.block_index as usize].struct_index;
-    let sz = layout.struct_layouts[struct_index as usize].size;
+    let elem_count = block.elements.len();
+    // Use the on-disk element size (raw_data is preserved verbatim) so
+    // the Halo 2 header's authoritative size is honoured even when the
+    // synthesized layout size disagrees.
+    let sz = if elem_count > 0 { block.raw_data.len() / elem_count } else { 0 };
     let mut raw = block.raw_data.clone();
     if sz > 0 {
         for (i, elem) in block.elements.iter().enumerate() {
             sync_fixed_counts(layout, &mut raw[i * sz..(i + 1) * sz], elem, block.endian);
         }
+    }
+    // Halo 2: re-emit the 16-byte block header, re-syncing the count
+    // (offset 8, LE i32) from the live element count. Empty H2 blocks
+    // carry no header (None).
+    if let Some(hdr) = &block.classic_block_header {
+        let mut h = hdr.clone();
+        h[8..12].copy_from_slice(&(elem_count as u32).to_le_bytes());
+        out.extend_from_slice(&h);
     }
     out.extend_from_slice(&raw);
     for elem in &block.elements {

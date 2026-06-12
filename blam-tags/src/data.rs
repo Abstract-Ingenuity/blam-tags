@@ -329,6 +329,7 @@ impl TagStructData {
                         raw_data: Vec::new(),
                         endian,
                         elements: Vec::new(),
+                        classic_block_header: None,
                     }))
                 }
                 TagFieldType::Array => {
@@ -844,6 +845,12 @@ pub(crate) struct TagBlockData {
     /// `raw_data` at index `i * element_size`. Simple-block elements
     /// have empty `sub_chunks`.
     pub(crate) elements: Vec<TagStructData>,
+    /// Classic **Halo 2** only: the 16-byte block header (`4cc +
+    /// version + count + size`) that precedes this block's elements on
+    /// disk. `None` for MCC and Halo CE (whose blocks are headerless).
+    /// Preserved verbatim for byte-exact write; the count is re-synced
+    /// from `elements.len()` on encode. The root block carries one too.
+    pub(crate) classic_block_header: Option<Vec<u8>>,
 }
 
 impl TagBlockData {
@@ -898,6 +905,7 @@ impl TagBlockData {
             raw_data,
             endian,
             elements,
+            classic_block_header: None,
         })
     }
 
@@ -1058,6 +1066,7 @@ impl TagBlockData {
                 block_layout.struct_index as usize,
                 endian,
             )],
+            classic_block_header: None,
         }
     }
 }
