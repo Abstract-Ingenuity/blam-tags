@@ -91,6 +91,22 @@ BLOCK_INDEX_MAP = {
 
 ZERO_PAD = {"Pad": "pad", "UselessPad": "useless_pad", "Skip": "skip"}
 
+# canonical type -> fixed byte size (for synthesizing inline-array struct sizes)
+FIELD_SIZES = {
+    "string": 32, "long_string": 256, "string_id": 4, "old_string_id": 4,
+    "char_integer": 1, "short_integer": 2, "long_integer": 4, "int64_integer": 8,
+    "angle": 4, "tag": 4, "char_enum": 1, "short_enum": 2, "long_enum": 4,
+    "byte_flags": 1, "word_flags": 2, "long_flags": 4, "point_2d": 4, "rectangle_2d": 8,
+    "rgb_color": 4, "argb_color": 4, "real": 4, "real_slider": 4, "real_fraction": 4,
+    "real_point_2d": 8, "real_point_3d": 12, "real_vector_2d": 8, "real_vector_3d": 12,
+    "real_quaternion": 16, "real_euler_angles_2d": 8, "real_euler_angles_3d": 12,
+    "real_plane_2d": 12, "real_plane_3d": 16, "real_rgb_color": 12, "real_argb_color": 16,
+    "short_bounds": 4, "angle_bounds": 8, "real_bounds": 8, "fraction_bounds": 8,
+    "tag_reference": 16, "block": 12, "data": 20, "vertex_buffer": 32,
+    "char_block_index": 1, "short_block_index": 2, "long_block_index": 4,
+    "pointer": 4, "real_matrix_3x3": 36,
+}
+
 
 def sanitize(name):
     if not name:
@@ -119,7 +135,9 @@ def parse_max_count(raw):
 
 
 class Converter:
-    def __init__(self):
+    def __init__(self, shared=None, group_to_path=None, parent_groups=None):
+        self.group_to_path = group_to_path or {}  # group tag -> xml path (parent lookup)
+        self.parent_groups = parent_groups or set()  # groups that are some tag's parent (intermediate bases)
         self.blocks = {}
         self.structs = {}
         self.enums_flags = {}
@@ -127,6 +145,13 @@ class Converter:
         self.arrays = {}
         self._enum_by_content = {}   # (kind, options tuple) -> name
         self._used_names = set()
+        # XRef resolution (h2): regolithID -> element.
+        # Seeded with the cross-file shared layouts (common/*.xml), then
+        # the tag file's own inline layouts override in convert().
+        shared = shared or ({}, {})
+        self.layout_by_id = dict(shared[0])   # "block:foo" -> <Layout> element
+        self.options_by_id = dict(shared[1])  # "enum:foo"  -> <Options> element
+        self.struct_by_id = {}                # layout regolithID -> struct name (dedup shared layouts)
 
     def unique(self, base):
         name = base
@@ -137,9 +162,33 @@ class Converter:
         self._used_names.add(name)
         return name
 
+    def resolve_options(self, field_el):
+        """The <Options> for an enum/flags field — inline or via OptionsXRef."""
+        opts = field_el.find("Options")
+        if opts is not None:
+            return opts
+        xref = field_el.find("OptionsXRef")
+        if xref is not None and xref.text:
+            return self.options_by_id.get(xref.text.strip())
+        return None
+
+    def resolve_layout(self, el):
+        """The <Layout> for a Block/Struct/Array — inline or via LayoutXRef."""
+        lay = el.find("Layout")
+        if lay is not None:
+            return lay
+        xref = el.find("LayoutXRef")
+        if xref is not None and xref.text:
+            rid = xref.text.strip()
+            lay = self.layout_by_id.get(rid)
+            if lay is None:
+                raise ValueError("unresolved LayoutXRef %r" % rid)
+            return lay
+        raise ValueError("Block/Struct/Array has neither <Layout> nor <LayoutXRef>")
+
     def intern_enum(self, field_el, kind):
         """kind: 'enum' or 'flags'. Returns the registry name."""
-        opts = field_el.find("Options")
+        opts = self.resolve_options(field_el)
         names = []
         if opts is not None:
             tag = "Enum" if kind == "enum" else "Bit"
@@ -171,20 +220,28 @@ class Converter:
                 return fs
         return sets[0] if sets else None
 
-    def process_layout(self, layout_el, struct_name):
-        """Register a struct (name struct_name) from a <Layout>'s latest FieldSet."""
-        if struct_name in self.structs:
-            return self.structs[struct_name]["size"]
+    def process_layout(self, layout_el, struct_name_hint=None):
+        """Register (once) the struct for a <Layout>, deduped by its
+        regolithID so shared (XRef'd) layouts map to a single struct.
+        Returns the struct name."""
+        rid = layout_el.get("regolithID")
+        if rid and rid in self.struct_by_id:
+            return self.struct_by_id[rid]
+        base = struct_name_hint or sanitize(
+            layout_el.get("internalName") or layout_el.get("name") or "struct"
+        )
+        struct_name = self.unique(base)
+        if rid:
+            self.struct_by_id[rid] = struct_name
         fs = self.latest_field_set(layout_el)
         if fs is None:
             raise ValueError("Layout %r has no FieldSet" % struct_name)
-        size = int(fs.get("sizeofValue"))
-        # reserve the name so recursive refs resolve
-        entry = {"size": size, "fields": []}
+        # reserve the entry so recursive refs resolve
+        entry = {"size": int(fs.get("sizeofValue")), "fields": []}
         self.structs[struct_name] = entry
         entry["fields"] = self.process_fields(fs, struct_name)
         entry["fields"].append({"type": "terminator", "name": None})
-        return size
+        return struct_name
 
     def process_fields(self, fieldset_el, owner):
         fields = []
@@ -194,38 +251,40 @@ class Converter:
 
             if tag == "Explanation":
                 continue  # documentation only, 0 bytes, not on disk
+            if tag == "Custom":
+                fields.append({"type": "custom", "name": name})  # editor-only, 0 bytes
+                continue
             if tag in ZERO_PAD:
-                length = int(el.get("length", "0"))
+                # UselessPad is 0 bytes on disk in the non-legacy (MCC)
+                # form — kept only for the editor. Pad/Skip occupy bytes.
+                length = 0 if tag == "UselessPad" else int(el.get("length", "0"))
                 fields.append({"type": ZERO_PAD[tag], "name": name, "definition": length})
                 continue
             if tag == "Struct":
-                layout = el.find("Layout")
-                sname = sanitize(layout.get("internalName") or layout.get("name"))
-                sname = self._register_unique_struct(layout, sname)
+                sname = self.process_layout(self.resolve_layout(el))
                 fields.append({"type": "struct", "name": name, "definition": sname})
                 continue
             if tag == "Block":
-                layout = el.find("Layout")
-                bname = sanitize(layout.get("internalName") or layout.get("name"))
-                bstruct = bname + "_struct"
-                bname_u = self.unique(bname)
-                # struct name unique too
-                bstruct = self.unique(bstruct)
-                self.blocks[bname_u] = {
+                layout = self.resolve_layout(el)
+                sname = self.process_layout(layout)
+                bname = self.unique(sanitize(layout.get("internalName") or layout.get("name")))
+                self.blocks[bname] = {
                     "max_count": parse_max_count(el.get("maxElementCount")),
-                    "struct": bstruct,
+                    "struct": sname,
                 }
-                self.process_layout(layout, bstruct)
-                fields.append({"type": "block", "name": name, "definition": bname_u})
+                fields.append({"type": "block", "name": name, "definition": bname})
                 continue
             if tag == "Array":
-                layout = el.find("Layout")
-                aname = sanitize(layout.get("internalName") or layout.get("name"))
-                astruct = self._register_unique_struct(layout, aname + "_struct")
-                aname_u = self.unique(aname + "_array")
-                count = int(el.get("count", "1"))
-                self.arrays[aname_u] = {"count": count, "struct": astruct}
-                fields.append({"type": "array", "name": name, "definition": aname_u})
+                if el.find("Layout") is not None or el.find("LayoutXRef") is not None:
+                    layout = self.resolve_layout(el)
+                    sname = self.process_layout(layout)
+                else:
+                    # Inline fields directly under <Array> (no <Layout>):
+                    # synthesize an element struct from the array's children.
+                    sname = self.process_inline_struct(el, name)
+                aname = self.unique(sanitize(name) + "_array")
+                self.arrays[aname] = {"count": int(el.get("count", "1")), "struct": sname}
+                fields.append({"type": "array", "name": name, "definition": aname})
                 continue
             if tag in ("ShortEnum", "LongEnum", "CharEnum"):
                 ename = self.intern_enum(el, "enum")
@@ -254,10 +313,69 @@ class Converter:
             raise ValueError("Unhandled XML element <%s> in %r" % (tag, owner))
         return fields
 
-    def _register_unique_struct(self, layout_el, base):
-        sname = self.unique(base)
-        self.process_layout(layout_el, sname)
+    def struct_size_from_fields(self, fields):
+        """Sum a field list's byte sizes (for synthesized inline structs)."""
+        total = 0
+        for f in fields:
+            t = f["type"]
+            if t == "terminator":
+                break
+            if t in ("pad", "useless_pad", "skip"):
+                total += int(f["definition"])
+            elif t == "struct":
+                total += self.structs[f["definition"]]["size"]
+            elif t == "array":
+                a = self.arrays[f["definition"]]
+                total += self.structs[a["struct"]]["size"] * a["count"]
+            else:
+                total += FIELD_SIZES.get(t, 0)
+        return total
+
+    def process_inline_struct(self, el, name_hint):
+        """Build a struct from an element's direct field children (an
+        <Array>/<Struct> that carries fields inline instead of a <Layout>)."""
+        sname = self.unique(sanitize(name_hint or "inline") + "_struct")
+        entry = {"size": 0, "fields": []}
+        self.structs[sname] = entry
+        entry["fields"] = self.process_fields(el, sname)
+        entry["fields"].append({"type": "terminator", "name": None})
+        entry["size"] = self.struct_size_from_fields(entry["fields"])
         return sname
+
+    def build_group_root(self, group_root_el):
+        """Process a TagGroup's root struct, recursively prepending its
+        parent group's root struct (the `parent` attribute) as field [0].
+        The child's sizeofValue already includes the inherited parent, so
+        only the field is prepended (the size is not bumped)."""
+        root_layout = group_root_el.find("Layout")
+        hint = sanitize(root_layout.get("internalName") or root_layout.get("name")) + "_struct"
+        struct_name = self.process_layout(root_layout, hint)
+
+        parent = group_root_el.get("parent")
+        if parent:
+            ppath = self.group_to_path.get(parent)
+            if ppath is None:
+                raise ValueError("parent group %r not found for inheritance" % parent)
+            proot = ET.parse(ppath).getroot()
+            # seed the parent file's own inline layouts/options for XRefs
+            for lay in proot.iter("Layout"):
+                rid = lay.get("regolithID")
+                if rid:
+                    self.layout_by_id.setdefault(rid, lay)
+            for opt in proot.iter("Options"):
+                rid = opt.get("regolithID")
+                if rid:
+                    self.options_by_id.setdefault(rid, opt)
+            parent_struct = self.build_group_root(proot)
+            self.structs[struct_name]["fields"].insert(
+                0, {"type": "struct", "name": proot.get("name"), "definition": parent_struct}
+            )
+            # Leaf tags' sizeofValue already includes the inherited chain;
+            # intermediate base groups (themselves a parent of others)
+            # store OWN-only sizes, so bump them by the parent's full size.
+            if group_root_el.get("group") in self.parent_groups:
+                self.structs[struct_name]["size"] += self.structs[parent_struct]["size"]
+        return struct_name
 
     def convert(self, xml_path):
         tree = ET.parse(xml_path)
@@ -267,12 +385,22 @@ class Converter:
         name = root.get("name")
         version = int(root.get("version", "0"))
 
+        # Pre-scan: index this file's own inline <Layout>/<Options> by
+        # regolithID (overriding any same-id shared layout), so LayoutXRef
+        # / OptionsXRef references resolve.
+        for lay in root.iter("Layout"):
+            rid = lay.get("regolithID")
+            if rid:
+                self.layout_by_id[rid] = lay
+        for opt in root.iter("Options"):
+            rid = opt.get("regolithID")
+            if rid:
+                self.options_by_id[rid] = opt
+
         root_layout = root.find("Layout")
-        root_block = sanitize(root_layout.get("internalName") or root_layout.get("name"))
-        root_block = self.unique(root_block)
-        root_struct = self.unique(root_block + "_struct")
+        root_block = self.unique(sanitize(root_layout.get("internalName") or root_layout.get("name")))
+        root_struct = self.build_group_root(root)
         self.blocks[root_block] = {"max_count": 1, "struct": root_struct}
-        self.process_layout(root_layout, root_struct)
 
         # finalize struct entries -> include a stable empty guid + size_string
         structs_out = {}
@@ -305,8 +433,55 @@ class Converter:
         }
 
 
-def convert_file(xml_path):
-    return Converter().convert(xml_path)
+def load_shared_layouts(root_dir):
+    """Index every <Layout>/<Options> with a regolithID across ALL xml
+    under root_dir (recursively, incl. common/). H2 shares layouts both
+    via common/*.xml and inline in sibling tag files (e.g.
+    campaign_metagame_bucket lives in unit.xml, referenced by character).
+    Returns (layout_by_id, options_by_id)."""
+    layout_by_id, options_by_id = {}, {}
+    if not os.path.isdir(root_dir):
+        return layout_by_id, options_by_id
+    for dirpath, _, files in os.walk(root_dir):
+        for fn in sorted(files):
+            if not fn.endswith(".xml"):
+                continue
+            try:
+                root = ET.parse(os.path.join(dirpath, fn)).getroot()
+            except Exception:
+                continue
+            for lay in root.iter("Layout"):
+                rid = lay.get("regolithID")
+                if rid and rid not in layout_by_id:
+                    layout_by_id[rid] = lay
+            for opt in root.iter("Options"):
+                rid = opt.get("regolithID")
+                if rid and rid not in options_by_id:
+                    options_by_id[rid] = opt
+    return layout_by_id, options_by_id
+
+
+def build_group_to_path(in_dir):
+    """Map group tag -> xml path, plus the set of groups that are some
+    other group's parent (intermediate base structs)."""
+    group_to_path, parent_groups = {}, set()
+    for fn in sorted(os.listdir(in_dir)):
+        if not fn.endswith(".xml"):
+            continue
+        try:
+            r = ET.parse(os.path.join(in_dir, fn)).getroot()
+            g = r.get("group")
+            if g:
+                group_to_path[g] = os.path.join(in_dir, fn)
+            if r.get("parent"):
+                parent_groups.add(r.get("parent"))
+        except Exception:
+            pass
+    return group_to_path, parent_groups
+
+
+def convert_file(xml_path, shared=None, group_to_path=None, parent_groups=None):
+    return Converter(shared, group_to_path, parent_groups).convert(xml_path)
 
 
 def main():
@@ -318,13 +493,15 @@ def main():
         in_dir, out_dir = args[1], args[2]
         game = args[3] if len(args) > 3 else os.path.basename(out_dir.rstrip("/"))
         os.makedirs(out_dir, exist_ok=True)
+        shared = load_shared_layouts(in_dir)
+        group_to_path, parent_groups = build_group_to_path(in_dir)
         ok = fail = 0
         tag_index = {}
         for fn in sorted(os.listdir(in_dir)):
             if not fn.endswith(".xml"):
                 continue
             try:
-                d = convert_file(os.path.join(in_dir, fn))
+                d = convert_file(os.path.join(in_dir, fn), shared, group_to_path, parent_groups)
                 with open(os.path.join(out_dir, fn[:-4] + ".json"), "w") as f:
                     json.dump(d, f, indent=1)
                 # tag_index key is the literal 4-char group tag (space-padded).

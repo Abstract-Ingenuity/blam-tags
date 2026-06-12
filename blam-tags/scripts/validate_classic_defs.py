@@ -71,6 +71,8 @@ def struct_size(name, d, cache, stack):
 
 def check(path):
     d = json.load(open(path))
+    if "structs" not in d:
+        return []  # _meta.json or non-def file
     errs = []
     # definition resolution
     for sn, s in d["structs"].items():
