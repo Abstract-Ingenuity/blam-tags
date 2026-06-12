@@ -211,100 +211,16 @@ impl TagFunctionHeader {
 // Periodic + transition helpers
 // ---------------------------------------------------------------------------
 //
-// Engine helpers `periodic_function_evaluate(index, time)` and
-// `transition_function_evaluate(index, value)` (Ares
-// `periodic_functions.cpp`) sample analytic curves through 1024-byte
-// lookup tables baked at startup by `periodic_functions_initialize`.
-// The table-bake bodies are stripped from both Ares and Groundhog
-// decompiles. We reproduce the same analytic curves directly — same
-// semantics, no precision loss from byte quantization.
-
-/// `e_transition_function` — input ∈ [0, 1] → output ∈ [0, 1].
-/// Maps to `global_transition_functions_enum` in `h3_guerilla_tag_definitions/math/periodic_functions.cpp`.
-#[allow(dead_code)]
-const TRANSITION_LINEAR: u8     = 0;
-const TRANSITION_EARLY: u8      = 1;
-const TRANSITION_VERY_EARLY: u8 = 2;
-const TRANSITION_LATE: u8       = 3;
-const TRANSITION_VERY_LATE: u8  = 4;
-const TRANSITION_COSINE: u8     = 5;
-const TRANSITION_ONE: u8        = 6;
-const TRANSITION_ZERO: u8       = 7;
-
-/// Analytic transition functions. "early" front-loads the curve (output
-/// near 1 well before input=1), "late" back-loads it. "very" variants
-/// are quartic instead of quadratic for sharper curvature. cosine is
-/// the smoothstep half-cosine.
-pub fn transition_function_evaluate(function_index: u8, value: f32) -> f32 {
-    let t = value.clamp(0.0, 1.0);
-    match function_index {
-        TRANSITION_LINEAR     => t,
-        TRANSITION_EARLY      => 1.0 - (1.0 - t).powi(2),
-        TRANSITION_VERY_EARLY => 1.0 - (1.0 - t).powi(4),
-        TRANSITION_LATE       => t.powi(2),
-        TRANSITION_VERY_LATE  => t.powi(4),
-        TRANSITION_COSINE     => 0.5 * (1.0 - (std::f32::consts::PI * t).cos()),
-        TRANSITION_ONE        => 1.0,
-        TRANSITION_ZERO       => 0.0,
-        _                     => 0.0,
-    }
-}
-
-const PERIODIC_ONE: u8                              = 0;
-const PERIODIC_ZERO: u8                             = 1;
-const PERIODIC_COSINE: u8                           = 2;
-#[allow(dead_code)]
-const PERIODIC_COSINE_WITH_RANDOM_PERIOD: u8        = 3;
-const PERIODIC_DIAGONAL_WAVE: u8                    = 4;
-#[allow(dead_code)]
-const PERIODIC_DIAGONAL_WAVE_WITH_RANDOM_PERIOD: u8 = 5;
-const PERIODIC_SLIDE: u8                            = 6;
-#[allow(dead_code)]
-const PERIODIC_SLIDE_WITH_RANDOM_PERIOD: u8         = 7;
-#[allow(dead_code)]
-const PERIODIC_NOISE: u8                            = 8;
-#[allow(dead_code)]
-const PERIODIC_JITTER: u8                           = 9;
-#[allow(dead_code)]
-const PERIODIC_WANDER: u8                           = 10;
-#[allow(dead_code)]
-const PERIODIC_SPARK: u8                            = 11;
-
-/// Analytic periodic functions. `time` is cyclic — most functions wrap
-/// at integer boundaries. Output range is [0, 1] (the engine's table
-/// stores bytes 0..255 representing this range).
-///
-/// Random-period variants (3, 5, 7) and the noise/jitter/wander/spark
-/// types use a deterministic per-instance seed in the engine; without
-/// the seed plumbed through they're stubbed to their non-random
-/// counterpart or zero. Riverworld water doesn't use any of these.
-pub fn periodic_function_evaluate(function_index: u8, time: f32) -> f32 {
-    // Wrap input to [0, 1) for cyclic functions.
-    let t = time - time.floor();
-    match function_index {
-        PERIODIC_ONE => 1.0,
-        PERIODIC_ZERO => 0.0,
-        PERIODIC_COSINE | PERIODIC_COSINE_WITH_RANDOM_PERIOD => {
-            // Half-amplitude cosine in [0, 1]: 0.5 - 0.5*cos(2π t).
-            // Engine baked table stores values in [0, 1] range.
-            0.5 - 0.5 * (std::f32::consts::TAU * t).cos()
-        }
-        PERIODIC_DIAGONAL_WAVE | PERIODIC_DIAGONAL_WAVE_WITH_RANDOM_PERIOD => {
-            // Triangle wave: ramp up then down per cycle.
-            if t < 0.5 { 2.0 * t } else { 2.0 * (1.0 - t) }
-        }
-        PERIODIC_SLIDE | PERIODIC_SLIDE_WITH_RANDOM_PERIOD => {
-            // Sawtooth: linear ramp 0→1 per cycle.
-            t
-        }
-        // Deterministic-ish stub for the random/noise types until we
-        // plumb a per-instance seed. Returns 0.5 (mid-amplitude). The
-        // engine drives these from a shared random_math seeded RNG;
-        // shipped tags rarely use them outside particle effects.
-        PERIODIC_NOISE | PERIODIC_JITTER | PERIODIC_WANDER | PERIODIC_SPARK => 0.5,
-        _ => 0.0,
-    }
-}
+// `transition_function_evaluate` / `periodic_function_evaluate` are the
+// engine's 1024-entry byte-LUT evaluators (`transition_function_evaluate
+// @0x180346C60` / `periodic_function_evaluate @0x180346AC0`), extracted
+// verbatim from the dllcache — see `tables.rs`. The periodic noise / jitter /
+// wander / spark rows hold *baked pseudo-random data with no closed form*, so
+// the LUT is the only faithful source: those four cannot be reproduced
+// analytically. (The previous closed-form approximations diverged from the
+// engine — notably the transition cosine ease and every periodic noise type.)
+mod tables;
+pub use tables::{periodic_function_evaluate, transition_function_evaluate, FUNCTION_TABLES};
 
 // ---------------------------------------------------------------------------
 // Per-type compact data structures
@@ -385,24 +301,16 @@ impl Spline2Compact {
         Some(Self { spline, left_x, width, bias })
     }
     fn evaluate(&self, input: f32) -> f32 {
-        // Remap input to the spline's [0, 1] domain via the
-        // (left_x, width, bias) sub-range. Bias=0.5 → linear remap;
-        // bias≠0.5 shifts the curve's midpoint. Outside the sub-range
-        // the spline evaluates at its endpoints.
-        if self.width <= 0.0 {
+        // `c_spline2_function_compact::evaluate @0x1804FBD40` — verbatim:
+        //   u  = (input - left_x) / width            (NOT clamped)
+        //   u' = sign(u) * |u|^bias                  (signed power remap)
+        //   return i*u'³ + j*u'² + k*u' + l          (the inner spline at u')
+        if self.width == 0.0 {
             return self.spline.evaluate(0.0);
         }
-        let raw = (input - self.left_x) / self.width;
-        let t = raw.clamp(0.0, 1.0);
-        // Bias remap: standard "biased lerp" — t' = t / ((1/bias - 2)*(1-t) + 1)
-        // when bias ∈ (0, 1). Bias=0.5 → t' = t (linear).
-        let biased = if self.bias > 0.0 && self.bias < 1.0 && (self.bias - 0.5).abs() > 1e-6 {
-            let b = (1.0 / self.bias) - 2.0;
-            t / (b * (1.0 - t) + 1.0)
-        } else {
-            t
-        };
-        self.spline.evaluate(biased)
+        let u = (input - self.left_x) / self.width;
+        let remapped = u.signum() * u.abs().powf(self.bias);
+        self.spline.evaluate(remapped)
     }
 }
 
@@ -1109,12 +1017,16 @@ mod tests {
         blob.extend_from_slice(&0.5f32.to_le_bytes()); // bias = linear
         let f = TagFunction::parse(&blob).unwrap();
         assert_eq!(f.function_type(), FunctionType::Spline2);
-        // input=0.45 → t = (0.45-0.2)/0.5 = 0.5 → spline(0.5) = 0.5
-        assert!((f.evaluate(0.45, 0.0) - 0.5).abs() < 1e-5);
-        // input=0.0 → clamped to 0
-        assert_eq!(f.evaluate(0.0, 0.0), 0.0);
-        // input=1.0 → clamped to 1
-        assert!((f.evaluate(1.0, 0.0) - 1.0).abs() < 1e-5);
+        // Engine `c_spline2_function_compact::evaluate @0x1804FBD40`:
+        //   u  = (input - left_x) / width             (NOT clamped)
+        //   u' = sign(u) * |u|^bias                    (bias=0.5 → signed sqrt)
+        //   return inner_spline(u')                    (here f(t)=t → u')
+        // input=0.45 → u=0.5 → u'=sqrt(0.5)=0.70711
+        assert!((f.evaluate(0.45, 0.0) - 0.5f32.sqrt()).abs() < 1e-5);
+        // input=0.0 → u=-0.4 → u'=-sqrt(0.4)=-0.63246 (no clamping)
+        assert!((f.evaluate(0.0, 0.0) - (-(0.4f32.sqrt()))).abs() < 1e-5);
+        // input=1.0 → u=1.6 → u'=sqrt(1.6)=1.26491 (extrapolates past 1)
+        assert!((f.evaluate(1.0, 0.0) - 1.6f32.sqrt()).abs() < 1e-5);
     }
 
     #[test]
@@ -1153,8 +1065,11 @@ mod tests {
         blob.extend_from_slice(&0.0f32.to_le_bytes());
         blob.extend_from_slice(&1.0f32.to_le_bytes());
         let f = TagFunction::parse(&blob).unwrap();
-        // late = t^2 → at midpoint < 0.5
-        assert!((f.evaluate(0.5, 0.0) - 0.25).abs() < 1e-5);
+        // "late" (engine LUT row 3) eases in ≈ t² → ~0.25 at the midpoint.
+        // Tolerance covers the 1024-entry byte quantization (±1/255 + interp).
+        let mid = f.evaluate(0.5, 0.0);
+        assert!((mid - 0.25).abs() < 0.01, "late(0.5) = {mid}");
+        assert!(mid < 0.5, "late eases in");
     }
 
     #[test]
@@ -1180,15 +1095,20 @@ mod tests {
         blob.extend_from_slice(&1.0f32.to_le_bytes()); // amp_max (compact)
         let f = TagFunction::parse(&blob).unwrap();
         assert_eq!(f.function_type(), FunctionType::Periodic);
-        // periodic cosine at t=0 = 0 (= 0.5 - 0.5*1), so compact = (1-0)*0+0=0
-        // outer clamp [-1, 1] → -1 + 0*(1 - -1) = -1
-        assert!((f.evaluate(0.0, 0.0) - (-1.0)).abs() < 1e-5);
-        // at t=0.25 (quarter cycle): cos(π/2) = 0 → periodic = 0.5
-        // compact = (1-0)*0.5+0 = 0.5; outer = -1 + 0.5*2 = 0
-        assert!((f.evaluate(0.25, 0.0) - 0.0).abs() < 1e-5);
-        // at t=0.5: cos(π) = -1 → periodic = 1.0
-        // compact = 1; outer = -1 + 1*2 = 1
-        assert!((f.evaluate(0.5, 0.0) - 1.0).abs() < 1e-5);
+        // Engine periodic LUT (row 2): the cosine starts at the table TOP
+        // (byte[0]=0xff → 1.0), unlike the old `0.5-0.5cos` approximation
+        // which started at 0. At input 0: lut=1.0, compact=(1-0)*1+0=1.0,
+        // outer [-1,1] → -1 + 1*2 = 1.0. (Clean grid hit, engine-exact.)
+        assert!((f.evaluate(0.0, 0.0) - 1.0).abs() < 1e-2, "cosine@0");
+        // The function must oscillate across the full [-1, 1] output band.
+        let mut lo = f32::INFINITY;
+        let mut hi = f32::NEG_INFINITY;
+        for n in 0..400 {
+            let v = f.evaluate(n as f32 * 0.05, 0.0); // input 0..20
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        assert!(hi > 0.8 && lo < -0.8, "cosine oscillates: [{lo}, {hi}]");
     }
 
     #[test]
@@ -1201,11 +1121,18 @@ mod tests {
         blob.extend_from_slice(&0.0f32.to_le_bytes());
         blob.extend_from_slice(&1.0f32.to_le_bytes());
         let f = TagFunction::parse(&blob).unwrap();
-        // peak at t=0.5
-        assert!((f.evaluate(0.5, 0.0) - 1.0).abs() < 1e-5);
-        // zeros at t=0 and t=1
-        assert!((f.evaluate(0.0, 0.0) - 0.0).abs() < 1e-5);
-        assert!((f.evaluate(1.0, 0.0) - 0.0).abs() < 1e-5);
+        // Engine periodic LUT (row 4): the diagonal/triangle wave starts at
+        // the table bottom (byte[0]=0x00 → 0.0) at input 0 (clean grid hit).
+        assert!(f.evaluate(0.0, 0.0).abs() < 1e-2, "triangle@0");
+        // Over a span of inputs it must sweep the full [0, 1] band.
+        let mut lo = f32::INFINITY;
+        let mut hi = f32::NEG_INFINITY;
+        for n in 0..400 {
+            let v = f.evaluate(n as f32 * 0.05, 0.0); // input 0..20
+            lo = lo.min(v);
+            hi = hi.max(v);
+        }
+        assert!(hi > 0.9 && lo < 0.1, "triangle oscillates: [{lo}, {hi}]");
     }
 
     #[test]
