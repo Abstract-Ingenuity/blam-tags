@@ -104,7 +104,8 @@ impl TagStream {
     /// `TagFile::new` when creating a tag from a schema.
     pub(crate) fn new_default(layout: TagLayout) -> Self {
         let root_block_index = layout.header.tag_group_block_index;
-        let data = TagBlockData::new_root_default(&layout, root_block_index);
+        // MCC tags are written little-endian.
+        let data = TagBlockData::new_root_default(&layout, root_block_index, Endian::Le);
         Self { layout, data }
     }
 

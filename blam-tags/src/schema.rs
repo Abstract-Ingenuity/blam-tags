@@ -278,6 +278,8 @@ fn field_type_info(ty: &str) -> Option<FieldTypeInfo> {
         "custom_long_block_index"  => FieldTypeInfo { ty: TagFieldType::CustomLongBlockIndex,   canonical: "custom long block index",  size: 4,   needs_sub_chunk: 0 },
         "data"                     => FieldTypeInfo { ty: TagFieldType::Data,                   canonical: "data",                     size: 20,  needs_sub_chunk: 1 },
         "vertex_buffer"            => FieldTypeInfo { ty: TagFieldType::VertexBuffer,           canonical: "vertex buffer",            size: 32,  needs_sub_chunk: 0 },
+        "pointer"                  => FieldTypeInfo { ty: TagFieldType::Pointer,                canonical: "pointer",                  size: 4,   needs_sub_chunk: 0 },
+        "real_matrix_3x3"          => FieldTypeInfo { ty: TagFieldType::RealMatrix3x3,          canonical: "real matrix 3x3",          size: 36,  needs_sub_chunk: 0 },
         "pad"                      => FieldTypeInfo { ty: TagFieldType::Pad,                    canonical: "pad",                      size: 0,   needs_sub_chunk: 0 },
         "useless_pad"              => FieldTypeInfo { ty: TagFieldType::UselessPad,             canonical: "useless pad",              size: 0,   needs_sub_chunk: 0 },
         "skip"                     => FieldTypeInfo { ty: TagFieldType::Skip,                   canonical: "skip",                     size: 0,   needs_sub_chunk: 0 },
@@ -845,6 +847,8 @@ fn resolve_field_definition(
             | TagFieldType::RealBounds
             | TagFieldType::FractionBounds
             | TagFieldType::VertexBuffer
+            | TagFieldType::Pointer
+            | TagFieldType::RealMatrix3x3
             | TagFieldType::CustomCharBlockIndex
             | TagFieldType::CustomShortBlockIndex
             | TagFieldType::CustomLongBlockIndex

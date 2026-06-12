@@ -11,7 +11,25 @@ use std::path::Path;
 use crate::error::TagReadError;
 use crate::io::*;
 use crate::layout::TagLayout;
+use crate::classic::ClassicEngine;
 use crate::stream::TagStream;
+
+/// Which on-disk container a [`TagFile`] uses — selects the write path.
+/// Set at read time and round-tripped: a tag read as classic writes back
+/// as classic, an MCC tag writes back as MCC.
+#[derive(Debug, Clone)]
+pub enum TagContainer {
+    /// MCC self-describing container (`tag!`/`blay`/`tgbl` chunks).
+    Mcc,
+    /// Classic (Halo CE / H2) flat tag — no embedded layout. Carries the
+    /// [`ClassicEngine`] (byte order) and the original 64-byte header,
+    /// preserved verbatim on write with only the checksum patched (the
+    /// first 36 bytes can hold per-tag build strings).
+    Classic {
+        engine: ClassicEngine,
+        header: Vec<u8>,
+    },
+}
 
 /// Fixed 64-byte preamble at the start of every tag file.
 ///
@@ -103,6 +121,9 @@ impl TagFileHeader {
 #[derive(Debug)]
 pub struct TagFile {
     pub header: TagFileHeader,
+    /// On-disk container format. Determines how [`TagFile::write`]
+    /// serializes — MCC chunks vs classic flat bytes.
+    pub container: TagContainer,
     /// Wire byte order detected on read (LE for PC/MCC, BE for Xbox
     /// 360 / legacy debug builds). Preserved so writers can round-trip
     /// to the same endian the file was loaded from.
@@ -156,12 +177,34 @@ impl TagFile {
         };
         Ok(Self {
             header,
+            container: TagContainer::Mcc,
             endian: Endian::Le,
             tag_stream,
             dependency_list_stream: None,
             import_info_stream: None,
             asset_depot_storage_stream: None,
         })
+    }
+
+    /// Assemble a [`TagFile`] from an already-built header + tag stream,
+    /// with no optional streams. Used by the classic (Halo CE / H2)
+    /// reader in [`crate::classic`], which synthesizes the layout from a
+    /// JSON def rather than an embedded `blay` chunk.
+    pub(crate) fn from_parts(
+        header: TagFileHeader,
+        container: TagContainer,
+        endian: Endian,
+        tag_stream: TagStream,
+    ) -> Self {
+        Self {
+            header,
+            container,
+            endian,
+            tag_stream,
+            dependency_list_stream: None,
+            import_info_stream: None,
+            asset_depot_storage_stream: None,
+        }
     }
 
     /// Open `path` and parse a complete tag file. The read asserts that
@@ -248,6 +291,7 @@ impl TagFile {
 
         Ok(Self {
             header,
+            container: TagContainer::Mcc,
             endian,
             tag_stream,
             dependency_list_stream,
@@ -276,6 +320,13 @@ impl TagFile {
     }
 
     fn write_to<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        // Classic (Halo CE / H2) tags serialize as flat bytes with a
+        // reconstructed 64-byte header — no MCC chunking.
+        if let TagContainer::Classic { engine, header } = &self.container {
+            let bytes = crate::classic::write_classic_tag(self, *engine, header);
+            return writer.write_all(&bytes);
+        }
+
         self.header.write(writer)?;
         self.tag_stream.write(u32::from_be_bytes(*b"tag!"), writer)?;
 

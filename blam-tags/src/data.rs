@@ -228,7 +228,7 @@ impl TagStructData {
             // struct may still hold fixed-size containers (Array,
             // Struct) that need scaffolding to be navigable via the
             // API. Same situation as a simple-block element.
-            TagStructData::new_default(layout, definition.index as usize).sub_chunks
+            TagStructData::new_default(layout, definition.index as usize, endian).sub_chunks
         };
 
         Ok(Self {
@@ -288,9 +288,10 @@ impl TagStructData {
         struct_raw: &mut [u8],
         field_index: usize,
         value: TagFieldData,
+        endian: Endian,
     ) {
         let field = &layout.fields[field_index];
-        if let Some(new_content) = serialize_field(field, &value, struct_raw) {
+        if let Some(new_content) = serialize_field(field, &value, struct_raw, endian) {
             let entry = self
                 .sub_chunks
                 .iter_mut()
@@ -305,7 +306,7 @@ impl TagStructData {
     /// and friends to initialize a new element's struct tree. Does
     /// not allocate any raw bytes — the caller (the block) provides
     /// them by growing its own `raw_data`.
-    pub(crate) fn new_default(layout: &TagLayout, struct_index: usize) -> Self {
+    pub(crate) fn new_default(layout: &TagLayout, struct_index: usize, endian: Endian) -> Self {
         let struct_layout = &layout.struct_layouts[struct_index];
         let mut sub_chunks = Vec::new();
         let mut field_index = struct_layout.first_field_index as usize;
@@ -318,7 +319,7 @@ impl TagStructData {
 
             let content: Option<TagSubChunkContent> = match field.field_type {
                 TagFieldType::Struct => Some(TagSubChunkContent::Struct(
-                    TagStructData::new_default(layout, field.definition as usize),
+                    TagStructData::new_default(layout, field.definition as usize, endian),
                 )),
                 TagFieldType::Block => {
                     let block_layout = &layout.block_layouts[field.definition as usize];
@@ -326,7 +327,7 @@ impl TagStructData {
                         block_index: block_layout.index,
                         flags: 0,
                         raw_data: Vec::new(),
-                        endian: Endian::Le,
+                        endian,
                         elements: Vec::new(),
                     }))
                 }
@@ -337,6 +338,7 @@ impl TagStructData {
                         elements.push(TagStructData::new_default(
                             layout,
                             array_layout.struct_index as usize,
+                            endian,
                         ));
                     }
                     Some(TagSubChunkContent::Array(elements))
@@ -883,6 +885,7 @@ impl TagBlockData {
                 elements.push(TagStructData::new_default(
                     layout,
                     struct_layout.index as usize,
+                    endian,
                 ));
             }
         }
@@ -934,7 +937,7 @@ impl TagBlockData {
         let element_size = layout.struct_layouts[struct_index].size;
         let old_len = self.raw_data.len();
         self.raw_data.resize(old_len + element_size, 0);
-        self.elements.push(TagStructData::new_default(layout, struct_index));
+        self.elements.push(TagStructData::new_default(layout, struct_index, self.endian));
         self.elements.last_mut().unwrap()
     }
 
@@ -948,7 +951,7 @@ impl TagBlockData {
             insert_offset..insert_offset,
             std::iter::repeat_n(0, element_size),
         );
-        self.elements.insert(index, TagStructData::new_default(layout, struct_index));
+        self.elements.insert(index, TagStructData::new_default(layout, struct_index, self.endian));
         &mut self.elements[index]
     }
 
@@ -1040,7 +1043,7 @@ impl TagBlockData {
     /// single, loadable element out of the box. Nested sub-chunks
     /// (including any child blocks, which stay empty) are populated
     /// by [`TagStructData::new_default`].
-    pub(crate) fn new_root_default(layout: &TagLayout, block_index: u32) -> Self {
+    pub(crate) fn new_root_default(layout: &TagLayout, block_index: u32, endian: Endian) -> Self {
         let block_layout = &layout.block_layouts[block_index as usize];
         let struct_layout = &layout.struct_layouts[block_layout.struct_index as usize];
         let element_size = struct_layout.size;
@@ -1049,10 +1052,11 @@ impl TagBlockData {
             block_index,
             flags: 0,
             raw_data: vec![0u8; element_size],
-            endian: Endian::Le,
+            endian,
             elements: vec![TagStructData::new_default(
                 layout,
                 block_layout.struct_index as usize,
+                endian,
             )],
         }
     }

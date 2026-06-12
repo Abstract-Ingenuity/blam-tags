@@ -72,6 +72,7 @@ pub mod data;
 pub mod path;
 pub mod stream;
 pub mod file;
+pub mod classic;
 pub mod api;
 pub mod definition;
 pub mod bitmap;
@@ -172,7 +173,8 @@ pub use tag_function::{
     TagFunctionHeader,
 };
 pub use animation::{
-    Animation, AnimationClip, AnimationError, AnimationGroup, AnimationTracks,
-    AnimatedStreamStatus, BitArray, Codec, JmaKind, MovementData, MovementFrame, MovementKind,
-    NodeFlags, NodeTransform, PackedDataSizes, Pose, SizeLayout, Skeleton, SkeletonNode,
+    Animation, AnimationClip, AnimationError, AnimationGraph, AnimationGroup, AnimationName,
+    AnimationStateType, AnimationTracks, AnimatedStreamStatus, BitArray, Codec, JmaKind,
+    MovementData, MovementFrame, MovementKind, NodeFlags, NodeTransform, ObjectSpaceParentNode,
+    PackedDataSizes, Pose, SizeLayout, Skeleton, SkeletonNode,
 };

@@ -87,6 +87,10 @@ pub enum TagFieldType {
     CustomLongBlockIndex,
     Data,
     VertexBuffer,
+    /// Classic (Halo CE / H2) 4-byte cache pointer — opaque, raw-only.
+    Pointer,
+    /// Classic 3x3 float matrix (36 bytes) — raw-only for now.
+    RealMatrix3x3,
     Pad,
     UselessPad,
     Skip,
@@ -164,6 +168,8 @@ impl TagFieldType {
             "custom long block index" => Self::CustomLongBlockIndex,
             "data" => Self::Data,
             "vertex buffer" => Self::VertexBuffer,
+            "pointer" => Self::Pointer,
+            "real matrix 3x3" => Self::RealMatrix3x3,
             "pad" => Self::Pad,
             "useless pad" => Self::UselessPad,
             "skip" => Self::Skip,
@@ -544,26 +550,33 @@ impl TagFieldData {
 
 #[inline] fn write_i8(raw: &mut [u8], o: usize, v: i8) { raw[o] = v as u8 }
 #[inline] fn write_u8(raw: &mut [u8], o: usize, v: u8) { raw[o] = v }
-#[inline] fn write_i16(raw: &mut [u8], o: usize, v: i16) {
-    raw[o..o + 2].copy_from_slice(&v.to_le_bytes());
+#[inline] fn write_i16(raw: &mut [u8], o: usize, v: i16, e: Endian) {
+    let b = match e { Endian::Le => v.to_le_bytes(), Endian::Be => v.to_be_bytes() };
+    raw[o..o + 2].copy_from_slice(&b);
 }
-#[inline] fn write_u16(raw: &mut [u8], o: usize, v: u16) {
-    raw[o..o + 2].copy_from_slice(&v.to_le_bytes());
+#[inline] fn write_u16(raw: &mut [u8], o: usize, v: u16, e: Endian) {
+    let b = match e { Endian::Le => v.to_le_bytes(), Endian::Be => v.to_be_bytes() };
+    raw[o..o + 2].copy_from_slice(&b);
 }
-#[inline] fn write_i32(raw: &mut [u8], o: usize, v: i32) {
-    raw[o..o + 4].copy_from_slice(&v.to_le_bytes());
+#[inline] fn write_i32(raw: &mut [u8], o: usize, v: i32, e: Endian) {
+    let b = match e { Endian::Le => v.to_le_bytes(), Endian::Be => v.to_be_bytes() };
+    raw[o..o + 4].copy_from_slice(&b);
 }
-#[inline] fn write_u32(raw: &mut [u8], o: usize, v: u32) {
-    raw[o..o + 4].copy_from_slice(&v.to_le_bytes());
+#[inline] fn write_u32(raw: &mut [u8], o: usize, v: u32, e: Endian) {
+    let b = match e { Endian::Le => v.to_le_bytes(), Endian::Be => v.to_be_bytes() };
+    raw[o..o + 4].copy_from_slice(&b);
 }
-#[inline] fn write_i64(raw: &mut [u8], o: usize, v: i64) {
-    raw[o..o + 8].copy_from_slice(&v.to_le_bytes());
+#[inline] fn write_i64(raw: &mut [u8], o: usize, v: i64, e: Endian) {
+    let b = match e { Endian::Le => v.to_le_bytes(), Endian::Be => v.to_be_bytes() };
+    raw[o..o + 8].copy_from_slice(&b);
 }
-#[inline] fn write_u64(raw: &mut [u8], o: usize, v: u64) {
-    raw[o..o + 8].copy_from_slice(&v.to_le_bytes());
+#[inline] fn write_u64(raw: &mut [u8], o: usize, v: u64, e: Endian) {
+    let b = match e { Endian::Le => v.to_le_bytes(), Endian::Be => v.to_be_bytes() };
+    raw[o..o + 8].copy_from_slice(&b);
 }
-#[inline] fn write_f32(raw: &mut [u8], o: usize, v: f32) {
-    raw[o..o + 4].copy_from_slice(&v.to_le_bytes());
+#[inline] fn write_f32(raw: &mut [u8], o: usize, v: f32, e: Endian) {
+    let b = match e { Endian::Le => v.to_le_bytes(), Endian::Be => v.to_be_bytes() };
+    raw[o..o + 4].copy_from_slice(&b);
 }
 
 /// Read a fixed-size null-padded UTF-8 string out of `bytes`. Stops at
@@ -737,8 +750,8 @@ pub(crate) fn deserialize_field(
         | TagFieldType::Array
         | TagFieldType::PageableResource => None,
 
-        // Not yet modeled.
-        TagFieldType::VertexBuffer => None,
+        // Not yet modeled (raw-only — preserved in raw_data for roundtrip).
+        TagFieldType::VertexBuffer | TagFieldType::Pointer | TagFieldType::RealMatrix3x3 => None,
 
         // Strings (null-padded in raw_data).
         TagFieldType::String => Some(TagFieldData::String(
@@ -965,6 +978,7 @@ pub(crate) fn serialize_field(
     field: &TagFieldLayout,
     value: &TagFieldData,
     raw_struct: &mut [u8],
+    endian: Endian,
 ) -> Option<TagSubChunkContent> {
     let offset = field.offset as usize;
 
@@ -979,152 +993,152 @@ pub(crate) fn serialize_field(
         }
 
         TagFieldData::CharInteger(v) => { write_i8(raw_struct, offset, *v); None }
-        TagFieldData::ShortInteger(v) => { write_i16(raw_struct, offset, *v); None }
-        TagFieldData::LongInteger(v) => { write_i32(raw_struct, offset, *v); None }
-        TagFieldData::Int64Integer(v) => { write_i64(raw_struct, offset, *v); None }
+        TagFieldData::ShortInteger(v) => { write_i16(raw_struct, offset, *v, endian); None }
+        TagFieldData::LongInteger(v) => { write_i32(raw_struct, offset, *v, endian); None }
+        TagFieldData::Int64Integer(v) => { write_i64(raw_struct, offset, *v, endian); None }
         TagFieldData::ByteInteger(v) => { write_u8(raw_struct, offset, *v); None }
-        TagFieldData::WordInteger(v) => { write_u16(raw_struct, offset, *v); None }
-        TagFieldData::DwordInteger(v) => { write_u32(raw_struct, offset, *v); None }
-        TagFieldData::QwordInteger(v) => { write_u64(raw_struct, offset, *v); None }
-        TagFieldData::Tag(v) => { write_u32(raw_struct, offset, *v); None }
+        TagFieldData::WordInteger(v) => { write_u16(raw_struct, offset, *v, endian); None }
+        TagFieldData::DwordInteger(v) => { write_u32(raw_struct, offset, *v, endian); None }
+        TagFieldData::QwordInteger(v) => { write_u64(raw_struct, offset, *v, endian); None }
+        TagFieldData::Tag(v) => { write_u32(raw_struct, offset, *v, endian); None }
 
         TagFieldData::CharEnum { value, .. } => { write_i8(raw_struct, offset, *value); None }
-        TagFieldData::ShortEnum { value, .. } => { write_i16(raw_struct, offset, *value); None }
-        TagFieldData::LongEnum { value, .. } => { write_i32(raw_struct, offset, *value); None }
+        TagFieldData::ShortEnum { value, .. } => { write_i16(raw_struct, offset, *value, endian); None }
+        TagFieldData::LongEnum { value, .. } => { write_i32(raw_struct, offset, *value, endian); None }
 
         TagFieldData::ByteFlags { value, .. } => { write_u8(raw_struct, offset, *value); None }
-        TagFieldData::WordFlags { value, .. } => { write_u16(raw_struct, offset, *value); None }
-        TagFieldData::LongFlags { value, .. } => { write_i32(raw_struct, offset, *value); None }
+        TagFieldData::WordFlags { value, .. } => { write_u16(raw_struct, offset, *value, endian); None }
+        TagFieldData::LongFlags { value, .. } => { write_i32(raw_struct, offset, *value, endian); None }
 
         TagFieldData::ByteBlockFlags(v) => { write_u8(raw_struct, offset, *v); None }
-        TagFieldData::WordBlockFlags(v) => { write_u16(raw_struct, offset, *v); None }
-        TagFieldData::LongBlockFlags(v) => { write_i32(raw_struct, offset, *v); None }
+        TagFieldData::WordBlockFlags(v) => { write_u16(raw_struct, offset, *v, endian); None }
+        TagFieldData::LongBlockFlags(v) => { write_i32(raw_struct, offset, *v, endian); None }
 
         TagFieldData::CharBlockIndex(v) => { write_i8(raw_struct, offset, *v); None }
         TagFieldData::CustomCharBlockIndex(v) => { write_i8(raw_struct, offset, *v); None }
-        TagFieldData::ShortBlockIndex(v) => { write_i16(raw_struct, offset, *v); None }
-        TagFieldData::CustomShortBlockIndex(v) => { write_i16(raw_struct, offset, *v); None }
-        TagFieldData::LongBlockIndex(v) => { write_i32(raw_struct, offset, *v); None }
-        TagFieldData::CustomLongBlockIndex(v) => { write_i32(raw_struct, offset, *v); None }
+        TagFieldData::ShortBlockIndex(v) => { write_i16(raw_struct, offset, *v, endian); None }
+        TagFieldData::CustomShortBlockIndex(v) => { write_i16(raw_struct, offset, *v, endian); None }
+        TagFieldData::LongBlockIndex(v) => { write_i32(raw_struct, offset, *v, endian); None }
+        TagFieldData::CustomLongBlockIndex(v) => { write_i32(raw_struct, offset, *v, endian); None }
 
-        TagFieldData::Angle(v) => { write_f32(raw_struct, offset, *v); None }
-        TagFieldData::Real(v) => { write_f32(raw_struct, offset, *v); None }
-        TagFieldData::RealSlider(v) => { write_f32(raw_struct, offset, *v); None }
-        TagFieldData::RealFraction(v) => { write_f32(raw_struct, offset, *v); None }
+        TagFieldData::Angle(v) => { write_f32(raw_struct, offset, *v, endian); None }
+        TagFieldData::Real(v) => { write_f32(raw_struct, offset, *v, endian); None }
+        TagFieldData::RealSlider(v) => { write_f32(raw_struct, offset, *v, endian); None }
+        TagFieldData::RealFraction(v) => { write_f32(raw_struct, offset, *v, endian); None }
 
         TagFieldData::Point2d(p) => {
-            write_i16(raw_struct, offset, p.x);
-            write_i16(raw_struct, offset + 2, p.y);
+            write_i16(raw_struct, offset, p.x, endian);
+            write_i16(raw_struct, offset + 2, p.y, endian);
             None
         }
         TagFieldData::Rectangle2d(r) => {
-            write_i16(raw_struct, offset, r.top);
-            write_i16(raw_struct, offset + 2, r.left);
-            write_i16(raw_struct, offset + 4, r.bottom);
-            write_i16(raw_struct, offset + 6, r.right);
+            write_i16(raw_struct, offset, r.top, endian);
+            write_i16(raw_struct, offset + 2, r.left, endian);
+            write_i16(raw_struct, offset + 4, r.bottom, endian);
+            write_i16(raw_struct, offset + 6, r.right, endian);
             None
         }
         TagFieldData::RealPoint2d(p) => {
-            write_f32(raw_struct, offset, p.x);
-            write_f32(raw_struct, offset + 4, p.y);
+            write_f32(raw_struct, offset, p.x, endian);
+            write_f32(raw_struct, offset + 4, p.y, endian);
             None
         }
         TagFieldData::RealPoint3d(p) => {
-            write_f32(raw_struct, offset, p.x);
-            write_f32(raw_struct, offset + 4, p.y);
-            write_f32(raw_struct, offset + 8, p.z);
+            write_f32(raw_struct, offset, p.x, endian);
+            write_f32(raw_struct, offset + 4, p.y, endian);
+            write_f32(raw_struct, offset + 8, p.z, endian);
             None
         }
         TagFieldData::RealVector2d(v) => {
-            write_f32(raw_struct, offset, v.i);
-            write_f32(raw_struct, offset + 4, v.j);
+            write_f32(raw_struct, offset, v.i, endian);
+            write_f32(raw_struct, offset + 4, v.j, endian);
             None
         }
         TagFieldData::RealVector3d(v) => {
-            write_f32(raw_struct, offset, v.i);
-            write_f32(raw_struct, offset + 4, v.j);
-            write_f32(raw_struct, offset + 8, v.k);
+            write_f32(raw_struct, offset, v.i, endian);
+            write_f32(raw_struct, offset + 4, v.j, endian);
+            write_f32(raw_struct, offset + 8, v.k, endian);
             None
         }
         TagFieldData::RealQuaternion(q) => {
-            write_f32(raw_struct, offset, q.i);
-            write_f32(raw_struct, offset + 4, q.j);
-            write_f32(raw_struct, offset + 8, q.k);
-            write_f32(raw_struct, offset + 12, q.w);
+            write_f32(raw_struct, offset, q.i, endian);
+            write_f32(raw_struct, offset + 4, q.j, endian);
+            write_f32(raw_struct, offset + 8, q.k, endian);
+            write_f32(raw_struct, offset + 12, q.w, endian);
             None
         }
         TagFieldData::RealEulerAngles2d(a) => {
-            write_f32(raw_struct, offset, a.yaw);
-            write_f32(raw_struct, offset + 4, a.pitch);
+            write_f32(raw_struct, offset, a.yaw, endian);
+            write_f32(raw_struct, offset + 4, a.pitch, endian);
             None
         }
         TagFieldData::RealEulerAngles3d(a) => {
-            write_f32(raw_struct, offset, a.yaw);
-            write_f32(raw_struct, offset + 4, a.pitch);
-            write_f32(raw_struct, offset + 8, a.roll);
+            write_f32(raw_struct, offset, a.yaw, endian);
+            write_f32(raw_struct, offset + 4, a.pitch, endian);
+            write_f32(raw_struct, offset + 8, a.roll, endian);
             None
         }
         TagFieldData::RealPlane2d(p) => {
-            write_f32(raw_struct, offset, p.i);
-            write_f32(raw_struct, offset + 4, p.j);
-            write_f32(raw_struct, offset + 8, p.d);
+            write_f32(raw_struct, offset, p.i, endian);
+            write_f32(raw_struct, offset + 4, p.j, endian);
+            write_f32(raw_struct, offset + 8, p.d, endian);
             None
         }
         TagFieldData::RealPlane3d(p) => {
-            write_f32(raw_struct, offset, p.i);
-            write_f32(raw_struct, offset + 4, p.j);
-            write_f32(raw_struct, offset + 8, p.k);
-            write_f32(raw_struct, offset + 12, p.d);
+            write_f32(raw_struct, offset, p.i, endian);
+            write_f32(raw_struct, offset + 4, p.j, endian);
+            write_f32(raw_struct, offset + 8, p.k, endian);
+            write_f32(raw_struct, offset + 12, p.d, endian);
             None
         }
 
-        TagFieldData::RgbColor(c) => { write_u32(raw_struct, offset, c.0); None }
-        TagFieldData::ArgbColor(c) => { write_u32(raw_struct, offset, c.0); None }
+        TagFieldData::RgbColor(c) => { write_u32(raw_struct, offset, c.0, endian); None }
+        TagFieldData::ArgbColor(c) => { write_u32(raw_struct, offset, c.0, endian); None }
         TagFieldData::RealRgbColor(c) => {
-            write_f32(raw_struct, offset, c.red);
-            write_f32(raw_struct, offset + 4, c.green);
-            write_f32(raw_struct, offset + 8, c.blue);
+            write_f32(raw_struct, offset, c.red, endian);
+            write_f32(raw_struct, offset + 4, c.green, endian);
+            write_f32(raw_struct, offset + 8, c.blue, endian);
             None
         }
         TagFieldData::RealArgbColor(c) => {
-            write_f32(raw_struct, offset, c.alpha);
-            write_f32(raw_struct, offset + 4, c.red);
-            write_f32(raw_struct, offset + 8, c.green);
-            write_f32(raw_struct, offset + 12, c.blue);
+            write_f32(raw_struct, offset, c.alpha, endian);
+            write_f32(raw_struct, offset + 4, c.red, endian);
+            write_f32(raw_struct, offset + 8, c.green, endian);
+            write_f32(raw_struct, offset + 12, c.blue, endian);
             None
         }
         TagFieldData::RealHsvColor(c) => {
-            write_f32(raw_struct, offset, c.hue);
-            write_f32(raw_struct, offset + 4, c.saturation);
-            write_f32(raw_struct, offset + 8, c.value);
+            write_f32(raw_struct, offset, c.hue, endian);
+            write_f32(raw_struct, offset + 4, c.saturation, endian);
+            write_f32(raw_struct, offset + 8, c.value, endian);
             None
         }
         TagFieldData::RealAhsvColor(c) => {
-            write_f32(raw_struct, offset, c.alpha);
-            write_f32(raw_struct, offset + 4, c.hue);
-            write_f32(raw_struct, offset + 8, c.saturation);
-            write_f32(raw_struct, offset + 12, c.value);
+            write_f32(raw_struct, offset, c.alpha, endian);
+            write_f32(raw_struct, offset + 4, c.hue, endian);
+            write_f32(raw_struct, offset + 8, c.saturation, endian);
+            write_f32(raw_struct, offset + 12, c.value, endian);
             None
         }
 
         TagFieldData::ShortIntegerBounds(b) => {
-            write_i16(raw_struct, offset, b.lower);
-            write_i16(raw_struct, offset + 2, b.upper);
+            write_i16(raw_struct, offset, b.lower, endian);
+            write_i16(raw_struct, offset + 2, b.upper, endian);
             None
         }
         TagFieldData::AngleBounds(b) => {
-            write_f32(raw_struct, offset, b.lower);
-            write_f32(raw_struct, offset + 4, b.upper);
+            write_f32(raw_struct, offset, b.lower, endian);
+            write_f32(raw_struct, offset + 4, b.upper, endian);
             None
         }
         TagFieldData::RealBounds(b) => {
-            write_f32(raw_struct, offset, b.lower);
-            write_f32(raw_struct, offset + 4, b.upper);
+            write_f32(raw_struct, offset, b.lower, endian);
+            write_f32(raw_struct, offset + 4, b.upper, endian);
             None
         }
         TagFieldData::FractionBounds(b) => {
-            write_f32(raw_struct, offset, b.lower);
-            write_f32(raw_struct, offset + 4, b.upper);
+            write_f32(raw_struct, offset, b.lower, endian);
+            write_f32(raw_struct, offset + 4, b.upper, endian);
             None
         }
 

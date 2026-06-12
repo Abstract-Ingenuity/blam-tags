@@ -1268,7 +1268,7 @@ impl<'a> TagFieldMut<'a> {
         ) {
             return Err(TagSetError::NotAssignable);
         }
-        self.struct_data.set_field(self.layout, &mut *self.struct_raw, self.field_index, value);
+        self.struct_data.set_field(self.layout, &mut *self.struct_raw, self.field_index, value, self.endian);
         Ok(())
     }
 

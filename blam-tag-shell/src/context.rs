@@ -9,6 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use blam_tags::classic::{read_classic_tag_file, ClassicHeader};
+use blam_tags::layout::TagLayout;
 use blam_tags::monolithic::MonolithicCache;
 use blam_tags::paths::{derive_tags_root, resolve_tag_path};
 use blam_tags::TagFile;
@@ -107,12 +109,49 @@ impl CliContext {
                 .map_err(|e| anyhow::anyhow!("failed to load `{}` from cache: {e}", path.display()))?;
             (tag, path.to_path_buf())
         } else {
-            let tag = TagFile::read(path).map_err(|e| anyhow::anyhow!("failed to load tag file: {e}"))?;
+            let tag = self.read_tag_file(path)?;
             (tag, path.to_path_buf())
         };
         self.loaded = Some(LoadedTag { path: source_path, tag, dirty: false });
         self.nav.clear();
         Ok(())
+    }
+
+    /// Read a tag from the filesystem, routing classic (Halo CE / H2)
+    /// tags through the JSON-def synthesized layout and everything else
+    /// through the MCC reader.
+    ///
+    /// Classic tags have no embedded `blay`; they're recognized by the
+    /// engine word at offset 60 ([`ClassicHeader::parse`]). The group is
+    /// taken from the **header's group tag** (offset 36), resolved to a
+    /// group name via the `--game` [`TagIndex`], and its
+    /// `definitions/<game>/<name>.json` def is synthesized into a layout.
+    pub fn read_tag_file(&self, path: &Path) -> Result<TagFile> {
+        let bytes = std::fs::read(path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+
+        if let Some((header, _engine)) = ClassicHeader::parse(&bytes) {
+            let group_tag = u32::from_be_bytes(header.group_tag);
+            let game = self.game.as_deref().context(
+                "classic Halo CE / Halo 2 tags carry no embedded layout — pass a `--game` \
+                 (e.g. `--game haloce_mcc`) so the JSON definition can be located",
+            )?;
+            let name = self.tag_index.name_for(group_tag).with_context(|| {
+                format!(
+                    "no group definition for group tag {:?} in definitions/{game}/",
+                    String::from_utf8_lossy(&header.group_tag).trim_end()
+                )
+            })?;
+            let def_path = Path::new("definitions").join(game).join(format!("{name}.json"));
+            let layout = TagLayout::from_json(&def_path).map_err(|e| {
+                anyhow::anyhow!("failed to load classic layout {}: {e}", def_path.display())
+            })?;
+            return read_classic_tag_file(&bytes, layout).map_err(|e| {
+                anyhow::anyhow!("failed to decode classic tag {}: {e}", path.display())
+            });
+        }
+
+        TagFile::read(path).map_err(|e| anyhow::anyhow!("failed to load tag file: {e}"))
     }
 
     /// Split a `--cache`-mode tag path like
