@@ -20,14 +20,16 @@
 pub mod codec;
 pub mod graph;
 pub mod jma;
+pub mod name;
 pub mod pose;
 
 pub use codec::Codec;
 pub use graph::{
-    AnimationGraph, GraphAction, GraphActionAnimation, GraphMode, GraphTransition,
+    AnimationGraph, GraphAction, GraphActionAnimation, GraphMode, GraphSet, GraphTransition,
     GraphWeaponClass, GraphWeaponType,
 };
 pub use jma::JmaKind;
+pub use name::{base_state_candidates, AnimationName, AnimationStateType};
 pub use pose::{NodeTransform, Pose, Skeleton, SkeletonNode};
 
 use crate::api::TagStruct;
@@ -190,6 +192,27 @@ pub struct AnimationGroup<'a> {
     /// TagTool's `GetAnimationExtension(..., worldRelative)` and
     /// Foundry's `internal_flags.TestBit("world relative")`.
     pub world_relative: bool,
+    /// `object-space parent nodes` — per-overlay 3D pose-overlay data
+    /// (empty for H3, common in Reach/H4). Each entry pins a node (and
+    /// its descendants) to a fixed object-space orientation after overlay
+    /// composition; applied by the JMA writer's object-space correction.
+    /// Empty ⇒ not a 3D pose overlay (Foundry's `is_pose_overlay` false).
+    pub object_space_parents: Vec<ObjectSpaceParentNode>,
+}
+
+/// One `object-space parent nodes` entry: a node whose object-space
+/// orientation is pinned to `(translation, rotation, scale)` for a pose
+/// overlay. Rotation is dequantized from four int16s (`value / 0x7FFF`).
+/// Translation is in world units (metres) — the JMA `×100` happens at
+/// write time. Mirrors Foundry's
+/// `_object_space_parent_orientation_transform`.
+#[derive(Debug, Clone, Copy)]
+pub struct ObjectSpaceParentNode {
+    /// Skeleton node index this entry targets.
+    pub node_index: i16,
+    pub translation: RealPoint3d,
+    pub rotation: RealQuaternion,
+    pub scale: f32,
 }
 
 impl<'a> AnimationGroup<'a> {
@@ -348,6 +371,8 @@ impl<'a> Animation<'a> {
                 }
             }
 
+            let object_space_parents = read_object_space_parents(&metadata);
+
             animations.push(AnimationGroup {
                 index: i,
                 name,
@@ -365,6 +390,7 @@ impl<'a> Animation<'a> {
                 codec_byte,
                 blob,
                 world_relative,
+                object_space_parents,
             });
         }
 
@@ -415,6 +441,75 @@ impl<'a> Animation<'a> {
     pub fn unresolved_count(&self) -> usize {
         self.animations.iter().filter(|a| a.checksum.is_none()).count()
     }
+
+    /// Resolve the composition base pose for an overlay/replacement
+    /// `group` — the first frame of the matching base animation the
+    /// overlay's deltas were authored against. Returns `None` to mean
+    /// "fall back to the rest/bind pose" (no scope, custom name, damage/
+    /// transition state, `aim_spine` pose overlay, or no matching base
+    /// found).
+    ///
+    /// Mirrors Foundry's `_get_base_animation_candidates` +
+    /// `_build_animation(base).first_frame()`: parse the overlay's
+    /// `(mode, weapon_class, weapon_type, state)` scope, walk
+    /// [`base_state_candidates`] in priority order, and resolve each
+    /// against the [`AnimationGraph`]'s `actions` (which already does
+    /// Halo's per-level `any` fallback). The first base/none-type
+    /// animation found is decoded and its frame 0 returned. Both TagTool
+    /// and Foundry compose overlays/replacements onto this base, not the
+    /// bind pose — composing onto the bind pose is what makes extracted
+    /// overlays explode.
+    pub fn overlay_base_pose(
+        &self,
+        graph: &AnimationGraph,
+        group: &AnimationGroup<'a>,
+        skeleton: &Skeleton,
+        defaults: &[NodeTransform],
+    ) -> Option<Vec<NodeTransform>> {
+        let name = AnimationName::parse(group.name.as_deref()?);
+        if !name.valid || name.custom || name.state_type != AnimationStateType::Action {
+            return None;
+        }
+        // POSE_OVERLAY_REST_BASE_STATES — `aim_spine` pose overlays
+        // compose against rest, not a base animation. (Foundry also
+        // gates this on `is_pose_overlay`; `aim_spine` overlays are
+        // always pose overlays in practice.)
+        if name.state == "aim_spine" {
+            return None;
+        }
+
+        for state in base_state_candidates(&name.state) {
+            let Some(act) = graph.find_action(
+                &name.mode,
+                &name.weapon_class,
+                &name.weapon_type,
+                &name.set,
+                &state,
+            ) else {
+                continue;
+            };
+            if !act.is_local() || act.animation_index < 0 {
+                continue;
+            }
+            let idx = act.animation_index as usize;
+            if idx == group.index {
+                continue;
+            }
+            let Some(base_group) = self.get(idx) else { continue };
+            // Only base/none-type animations are valid composition bases
+            // (Foundry's `_resolved_base_candidates` filter).
+            if matches!(base_group.animation_type.as_deref(), Some("overlay") | Some("replacement")) {
+                continue;
+            }
+            let Ok(base_clip) = base_group.decode() else { continue };
+            // Frame 0 of the base, posed against the rest defaults.
+            // Movement is irrelevant to frame 0 (it accumulates from 0).
+            if let Some(first) = base_clip.pose(skeleton, Some(defaults)).frames.into_iter().next() {
+                return Some(first);
+            }
+        }
+        None
+    }
 }
 
 fn resolve_member<'a>(
@@ -448,6 +543,54 @@ fn resolve_member<'a>(
 fn read_inline_animation_data<'a>(anim: &TagStruct<'a>) -> Option<&'a [u8]> {
     anim.field("animation data").and_then(|f| f.as_data())
         .or_else(|| anim.field("animation_data").and_then(|f| f.as_data()))
+}
+
+/// Parse the `object-space parent nodes` block from an animation's
+/// metadata struct (empty for H3; populated for Reach/H4 pose overlays).
+/// Each element has a node index, component flags (ignored — we always
+/// apply the full orientation), and a quantized orientation
+/// (int16 rotation x/y/z/w `/ 0x7FFF`, real translation, real scale).
+fn read_object_space_parents(metadata: &TagStruct<'_>) -> Vec<ObjectSpaceParentNode> {
+    let Some(block) = metadata
+        .field("object-space parent nodes")
+        .and_then(|f| f.as_block())
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let Some(elem) = block.element(i) else { continue };
+        let node_index = elem
+            .read_int_any("node_index")
+            .or_else(|| elem.read_int_any("node index"))
+            .unwrap_or(-1) as i16;
+        let Some(orient) = elem
+            .field("parent orientation")
+            .or_else(|| elem.field("orientation"))
+            .and_then(|f| f.as_struct())
+        else {
+            continue;
+        };
+        let q = |name: &str| orient.read_int_any(name).unwrap_or(0) as f32 / 32767.0;
+        let mut rotation = RealQuaternion {
+            i: q("rotation x"),
+            j: q("rotation y"),
+            k: q("rotation z"),
+            w: q("rotation w"),
+        };
+        rotation = if rotation.length() <= 1e-6 {
+            RealQuaternion::IDENTITY
+        } else {
+            rotation.normalized()
+        };
+        out.push(ObjectSpaceParentNode {
+            node_index,
+            translation: orient.read_point3d("default translation"),
+            rotation,
+            scale: orient.read_real("default scale").unwrap_or(1.0),
+        });
+    }
+    out
 }
 
 fn read_packed_data_sizes(member: &TagStruct<'_>) -> Option<PackedDataSizes> {
@@ -572,9 +715,13 @@ pub enum MovementKind {
     DxDy,
     DxDyDyaw,
     DxDyDzDyaw,
-    /// `DxDyDz + angle_axis` — Reach addition. Read but not yet
-    /// supported in JMA export.
+    /// `DxDyDz + angle_axis` — Reach+ addition. The rotation is the full
+    /// angle-axis 3-vector (magnitude = angle), decoded to a quaternion.
     DxDyDzDangleAxis,
+    /// `xyz_absolute` — Reach+ addition. The translation is an
+    /// **absolute** root position per frame (not accumulated), no
+    /// rotation. Used by some cinematic/scripted root paths.
+    XyzAbsolute,
 }
 
 impl MovementKind {
@@ -586,7 +733,15 @@ impl MovementKind {
             Self::DxDyDyaw => 12,
             Self::DxDyDzDyaw => 16,
             Self::DxDyDzDangleAxis => 24,
+            Self::XyzAbsolute => 12,
         }
+    }
+
+    /// `true` when this kind drives the root bone's *position*
+    /// absolutely (replacing the accumulator) rather than as a
+    /// per-frame delta.
+    pub fn is_absolute(self) -> bool {
+        matches!(self, Self::XyzAbsolute)
     }
 
     /// Resolve the `frame_info_type_enum` schema option name to a
@@ -597,22 +752,32 @@ impl MovementKind {
             "dx,dy,dyaw" => Self::DxDyDyaw,
             "dx,dy,dz,dyaw" => Self::DxDyDzDyaw,
             "dx,dy,dz,dangle_axis" => Self::DxDyDzDangleAxis,
+            "xyz,absolute" | "xyz_absolute" | "x,y,z,absolute" => Self::XyzAbsolute,
             _ => Self::None,
         }
     }
 }
 
-/// One frame of root-bone movement. Unused fields stay at default
-/// (0.0) — the [`MovementKind`] tells you which fields are populated.
-#[derive(Debug, Clone, Copy, Default)]
+/// One frame of root-bone movement. `(dx, dy, dz)` is a local-space
+/// translation delta (or an absolute position for
+/// [`MovementKind::XyzAbsolute`]); `rotation` is the per-frame rotation
+/// **delta** (identity when the kind carries no rotation). All in
+/// local space — JMA's world-space convention is applied at export.
+#[derive(Debug, Clone, Copy)]
 pub struct MovementFrame {
     pub dx: f32,
     pub dy: f32,
     pub dz: f32,
-    /// Yaw delta in **radians** (matches the engine's stored unit).
-    /// `DxDyDyaw` and `DxDyDzDyaw` populate this; `DxDyDzDangleAxis`
-    /// stores a 3-vector that gets folded into a quaternion at export.
-    pub dyaw: f32,
+    /// Per-frame rotation delta. `DxDyDyaw`/`DxDyDzDyaw` carry a
+    /// yaw-only quaternion; `DxDyDzDangleAxis` the full angle-axis
+    /// rotation; the rest leave this at identity.
+    pub rotation: RealQuaternion,
+}
+
+impl Default for MovementFrame {
+    fn default() -> Self {
+        Self { dx: 0.0, dy: 0.0, dz: 0.0, rotation: RealQuaternion::IDENTITY }
+    }
 }
 
 /// Per-component node-flag bitarrays for static + animated codec

@@ -59,17 +59,25 @@ impl AnimationGraph {
     }
 
     /// Look up an action animation by walking the (mode, weapon_class,
-    /// weapon_type, action) tuple. Each component falls back to "any"
-    /// if the exact name doesn't match (mirrors Halo's wildcard
+    /// weapon_type, set, action) tuple. Each scope component falls back
+    /// to "any" if the exact name doesn't match (mirrors Halo's wildcard
     /// resolution). Returns `None` if no action matches at all.
     ///
-    /// Use `mode = "any"`, `weapon_class = "any"`, `weapon_type = "any"`
-    /// for non-combat objects (scenery, machines, etc.).
+    /// The `set` level only exists in Reach+ (mode→class→type→**set**→
+    /// actions); for H3 a single implicit `"any"` set is synthesized
+    /// from the weapon type's direct `actions`, so passing `set = "any"`
+    /// works for both engines. After the exact/`any` set, this also
+    /// falls back to *any* set that contains the action — Reach sets are
+    /// usually labeled `"any"` but this keeps resolution robust.
+    ///
+    /// Use `mode/weapon_class/weapon_type/set = "any"` for non-combat
+    /// objects (scenery, machines, etc.).
     pub fn find_action(
         &self,
         mode: &str,
         weapon_class: &str,
         weapon_type: &str,
+        set: &str,
         action: &str,
     ) -> Option<&GraphActionAnimation> {
         let m = self
@@ -87,18 +95,27 @@ impl AnimationGraph {
             .iter()
             .find(|w| w.label == weapon_type)
             .or_else(|| wc.weapon_types.iter().find(|w| w.label == "any"))?;
-        wt.actions.iter().find(|a| a.label == action).map(|a| &a.animation)
+
+        fn pick<'g>(s: &'g GraphSet, action: &str) -> Option<&'g GraphActionAnimation> {
+            s.actions.iter().find(|a| a.label == action).map(|a| &a.animation)
+        }
+        // Exact set, then the "any" set, then any set carrying the action.
+        wt.sets.iter().find(|s| s.label == set).and_then(|s| pick(s, action))
+            .or_else(|| wt.sets.iter().find(|s| s.label == "any").and_then(|s| pick(s, action)))
+            .or_else(|| wt.sets.iter().find_map(|s| pick(s, action)))
     }
 
-    /// Find the first action available at any (mode, weapon_class,
-    /// weapon_type) tuple. Useful for "just play SOMETHING" — most
-    /// scenery has exactly one action and we don't care which.
+    /// Find the first action available anywhere in the tree. Useful for
+    /// "just play SOMETHING" — most scenery has exactly one action and
+    /// we don't care which.
     pub fn first_action(&self) -> Option<&GraphActionAnimation> {
         for mode in &self.modes {
             for wc in &mode.weapon_classes {
                 for wt in &wc.weapon_types {
-                    if let Some(action) = wt.actions.first() {
-                        return Some(&action.animation);
+                    for set in &wt.sets {
+                        if let Some(action) = set.actions.first() {
+                            return Some(&action.animation);
+                        }
                     }
                 }
             }
@@ -149,25 +166,63 @@ impl GraphWeaponClass {
 #[derive(Debug, Clone, Default)]
 pub struct GraphWeaponType {
     pub label: String,
+    /// Animation **sets**. Reach+ has an explicit `sets[]` level
+    /// (mode→class→type→set→actions); for H3 — which stores `actions`
+    /// directly on the weapon type — a single implicit set labeled
+    /// `"any"` is synthesized so both engines walk the same shape.
+    pub sets: Vec<GraphSet>,
+}
+
+impl GraphWeaponType {
+    fn from_struct(s: &TagStruct<'_>) -> Self {
+        let label = s.read_string_id("label").unwrap_or_default();
+        let sets = match s.field("sets").and_then(|f| f.as_block()) {
+            // Reach+: actions/overlays/transitions live under sets[].
+            Some(b) => read_block_vec(&b, GraphSet::from_struct),
+            // H3: synthesize one implicit "any" set from direct fields.
+            None => vec![GraphSet::from_weapon_type(s)],
+        };
+        Self { label, sets }
+    }
+}
+
+/// One animation **set** under a weapon type. Carries the actual
+/// state→animation bindings. Real block in Reach+; synthesized
+/// (label `"any"`) from the weapon type's direct fields in H3.
+#[derive(Debug, Clone, Default)]
+pub struct GraphSet {
+    pub label: String,
     pub actions: Vec<GraphAction>,
     pub overlays: Vec<GraphAction>,
     pub transitions: Vec<GraphTransition>,
 }
 
-impl GraphWeaponType {
+impl GraphSet {
+    /// Reach+ `animation_set_block` element.
     fn from_struct(s: &TagStruct<'_>) -> Self {
         Self {
             label: s.read_string_id("label").unwrap_or_default(),
-            actions: s
-                .field("actions")
+            actions: action_block(s, "actions"),
+            // Reach names the block "overlay animations"; H3 "overlays".
+            overlays: {
+                let o = action_block(s, "overlay animations");
+                if o.is_empty() { action_block(s, "overlays") } else { o }
+            },
+            transitions: s
+                .field("transitions")
                 .and_then(|f| f.as_block())
-                .map(|b| read_block_vec(&b, GraphAction::from_struct))
+                .map(|b| read_block_vec(&b, GraphTransition::from_struct))
                 .unwrap_or_default(),
-            overlays: s
-                .field("overlays")
-                .and_then(|f| f.as_block())
-                .map(|b| read_block_vec(&b, GraphAction::from_struct))
-                .unwrap_or_default(),
+        }
+    }
+
+    /// H3: the weapon type itself carries the action blocks; wrap them
+    /// in a single implicit `"any"` set.
+    fn from_weapon_type(s: &TagStruct<'_>) -> Self {
+        Self {
+            label: "any".to_string(),
+            actions: action_block(s, "actions"),
+            overlays: action_block(s, "overlays"),
             transitions: s
                 .field("transitions")
                 .and_then(|f| f.as_block())
@@ -252,6 +307,15 @@ impl GraphTransition {
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/// Read a named child block of `s` as a `Vec<GraphAction>`, or empty if
+/// the field is missing.
+fn action_block(s: &TagStruct<'_>, name: &str) -> Vec<GraphAction> {
+    s.field(name)
+        .and_then(|f| f.as_block())
+        .map(|b| read_block_vec(&b, GraphAction::from_struct))
+        .unwrap_or_default()
+}
 
 fn read_block_vec<T, F>(block: &TagBlock<'_>, f: F) -> Vec<T>
 where

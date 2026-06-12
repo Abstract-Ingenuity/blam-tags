@@ -13,9 +13,9 @@
 //! ([`super::jma`]) consumes.
 
 use crate::file::TagFile;
-use crate::math::{RealPoint3d, RealQuaternion};
+use crate::math::{Matrix4, RealPoint3d, RealQuaternion};
 
-use super::{AnimationClip, BitArray, NodeFlags, TOP_LEVEL_NAMES};
+use super::{AnimationClip, BitArray, NodeFlags, ObjectSpaceParentNode, TOP_LEVEL_NAMES};
 
 //================================================================================
 // Skeleton + Pose
@@ -97,6 +97,195 @@ impl NodeTransform {
 #[derive(Debug, Clone)]
 pub struct Pose {
     pub frames: Vec<Vec<NodeTransform>>,
+}
+
+impl Pose {
+    /// Apply object-space parent-node corrections to this pose's frames
+    /// and the leading `reference` frame — Foundry's
+    /// `_apply_object_space_base_corrections`, used for Reach/H4 3D pose
+    /// overlays. No-op when `targets` is empty (e.g. all H3 overlays).
+    ///
+    /// Each target pins a node's object-space orientation to a fixed
+    /// `(translation, rotation, scale)`; the node **and all its
+    /// descendants** are rigidly rotated so the node lands on that
+    /// orientation, without distorting the subtree. The delta is computed
+    /// once per target from a running copy of `base` (deltas compound
+    /// across targets, processed shallow-to-deep) and applied uniformly to
+    /// the leading reference and every body frame.
+    ///
+    /// `base` is the composition base (idle/rest first frame);
+    /// `skeleton` supplies the parent hierarchy for the forward-kinematic
+    /// matrices.
+    pub fn apply_object_space_corrections(
+        &mut self,
+        reference: &mut [NodeTransform],
+        skeleton: &Skeleton,
+        base: &[NodeTransform],
+        targets: &[ObjectSpaceParentNode],
+    ) {
+        if targets.is_empty() {
+            return;
+        }
+        let n = skeleton.len();
+
+        // (target_index, desired object-space matrix), shallow-to-deep.
+        let mut corrections: Vec<(usize, Matrix4)> = Vec::new();
+        for t in targets {
+            if t.node_index < 0 || (t.node_index as usize) >= n {
+                continue;
+            }
+            let target_index = object_space_target_index(t.node_index as usize, skeleton);
+            let matrix = Matrix4::from_loc_rot_scale(t.translation, t.rotation, t.scale);
+            corrections.push((target_index, matrix));
+        }
+        corrections.sort_by_key(|(ti, _)| node_depth(*ti, skeleton));
+
+        // Running base copy used to derive each target's delta (Foundry's
+        // `reference_frame`) — separate object from the exported leading
+        // frame, but corrected in lock-step so compounding matches.
+        let mut correction_ref: Vec<NodeTransform> = base.to_vec();
+        if correction_ref.len() < n {
+            correction_ref.resize(n, NodeTransform::IDENTITY);
+        }
+
+        for (target_index, target_matrix) in corrections {
+            let os = frame_object_space_matrices(&correction_ref, skeleton);
+            let delta = target_matrix * os[target_index].inverse();
+            let descendants = descendant_indices(target_index, skeleton);
+
+            apply_delta_to_frame(&mut correction_ref, skeleton, &descendants, delta);
+            apply_delta_to_frame(reference, skeleton, &descendants, delta);
+            for frame in &mut self.frames {
+                apply_delta_to_frame(frame, skeleton, &descendants, delta);
+            }
+        }
+    }
+}
+
+/// The node an object-space parent entry actually re-orients: the
+/// targeted node's parent, or the node itself when it is a root. Mirrors
+/// Foundry's `_object_space_parent_target_index`.
+fn object_space_target_index(node_index: usize, skeleton: &Skeleton) -> usize {
+    let parent = skeleton.nodes[node_index].parent;
+    if parent < 0 || (parent as usize) >= skeleton.len() {
+        node_index
+    } else {
+        parent as usize
+    }
+}
+
+/// Depth of `idx` in the hierarchy (root = 1), used to order corrections
+/// and descendants shallow-to-deep.
+fn node_depth(mut idx: usize, skeleton: &Skeleton) -> usize {
+    let n = skeleton.len();
+    let mut depth = 0;
+    let mut guard = 0;
+    while idx < n {
+        depth += 1;
+        let parent = skeleton.nodes[idx].parent;
+        if parent < 0 || (parent as usize) >= n || parent as usize == idx {
+            break;
+        }
+        idx = parent as usize;
+        guard += 1;
+        if guard > n {
+            break; // cycle guard
+        }
+    }
+    depth
+}
+
+/// All nodes whose parent-chain reaches `target` (including `target`
+/// itself), shallow-to-deep. Mirrors Foundry's
+/// `_object_space_descendant_indices`.
+fn descendant_indices(target: usize, skeleton: &Skeleton) -> Vec<usize> {
+    let n = skeleton.len();
+    let mut out = Vec::new();
+    for node in 0..n {
+        let mut cur = node;
+        let mut guard = 0;
+        loop {
+            if cur == target {
+                out.push(node);
+                break;
+            }
+            let parent = skeleton.nodes[cur].parent;
+            if parent < 0 || (parent as usize) >= n || parent as usize == cur {
+                break;
+            }
+            cur = parent as usize;
+            guard += 1;
+            if guard > n {
+                break;
+            }
+        }
+    }
+    out.sort_by_key(|node| node_depth(*node, skeleton));
+    out
+}
+
+/// Forward-kinematic object-space matrix per bone for one frame:
+/// `os[node] = os[parent] * local(node)`.
+fn frame_object_space_matrices(frame: &[NodeTransform], skeleton: &Skeleton) -> Vec<Matrix4> {
+    let n = skeleton.len();
+    let mut os: Vec<Option<Matrix4>> = vec![None; n];
+    for i in 0..n {
+        resolve_os(i, frame, skeleton, &mut os);
+    }
+    os.into_iter().map(|o| o.unwrap_or(Matrix4::IDENTITY)).collect()
+}
+
+fn resolve_os(
+    i: usize,
+    frame: &[NodeTransform],
+    skeleton: &Skeleton,
+    os: &mut Vec<Option<Matrix4>>,
+) -> Matrix4 {
+    if let Some(m) = os[i] {
+        return m;
+    }
+    let t = frame.get(i).copied().unwrap_or(NodeTransform::IDENTITY);
+    let local = Matrix4::from_loc_rot_scale(t.translation, t.rotation, t.scale);
+    let parent = skeleton.nodes[i].parent;
+    let m = if parent >= 0 && (parent as usize) < skeleton.len() && parent as usize != i {
+        resolve_os(parent as usize, frame, skeleton, os) * local
+    } else {
+        local
+    };
+    os[i] = Some(m);
+    m
+}
+
+/// Apply `delta` (an object-space transform) to `node_indices` and write
+/// back the resulting local transforms. The whole listed subtree moves
+/// rigidly (delta cancels in the local recompute for descendants whose
+/// parent is also listed), so only the subtree root's local actually
+/// changes. Mirrors Foundry's `_apply_object_space_delta_to_frame`.
+fn apply_delta_to_frame(
+    frame: &mut [NodeTransform],
+    skeleton: &Skeleton,
+    node_indices: &[usize],
+    delta: Matrix4,
+) {
+    let mut os = frame_object_space_matrices(frame, skeleton);
+    for &node in node_indices {
+        if node < os.len() {
+            os[node] = delta * os[node];
+        }
+    }
+    for &node in node_indices {
+        if node >= frame.len() {
+            continue;
+        }
+        let parent = skeleton.nodes[node].parent;
+        let local = if parent >= 0 && (parent as usize) < os.len() {
+            os[parent as usize].inverse() * os[node]
+        } else {
+            os[node]
+        };
+        let (translation, rotation, scale) = local.decompose();
+        frame[node] = NodeTransform { translation, rotation, scale };
+    }
 }
 
 impl AnimationClip {

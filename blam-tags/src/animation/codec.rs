@@ -345,9 +345,11 @@ impl<'a> AnimationGroup<'a> {
 /// out of bounds, the kind doesn't divide cleanly into the slice, or
 /// `frame_info_type` is `none`.
 ///
-/// `DxDyDzDangleAxis` reads the 3-vector at `+12..+24` and uses the
-/// component at `+20` as dyaw. Full angle-axis composition isn't
-/// implemented — kept as-is for parity with TagTool/Foundry.
+/// Rotation is decoded into a per-frame quaternion delta (matching
+/// Foundry's `_read_movement_data`): yaw-only types build a Z-axis
+/// quaternion from the stored radian; `DxDyDzDangleAxis` decodes the
+/// full angle-axis 3-vector (magnitude = angle); `XyzAbsolute` carries
+/// an absolute position with no rotation.
 fn read_movement_at(
     blob: &[u8],
     offset: usize,
@@ -373,21 +375,48 @@ fn read_movement_at(
             },
             MovementKind::DxDyDyaw => MovementFrame {
                 dx: f32_at(blob, off), dy: f32_at(blob, off + 4),
-                dyaw: f32_at(blob, off + 8), ..Default::default()
+                rotation: yaw_quat(f32_at(blob, off + 8)), dz: 0.0,
             },
             MovementKind::DxDyDzDyaw => MovementFrame {
                 dx: f32_at(blob, off), dy: f32_at(blob, off + 4),
-                dz: f32_at(blob, off + 8), dyaw: f32_at(blob, off + 12),
+                dz: f32_at(blob, off + 8), rotation: yaw_quat(f32_at(blob, off + 12)),
             },
             MovementKind::DxDyDzDangleAxis => MovementFrame {
-                dx: f32_at(blob, off), dy: f32_at(blob, off + 4),
-                dz: f32_at(blob, off + 8), dyaw: f32_at(blob, off + 20),
+                dx: f32_at(blob, off), dy: f32_at(blob, off + 4), dz: f32_at(blob, off + 8),
+                rotation: angle_axis_quat(
+                    f32_at(blob, off + 12), f32_at(blob, off + 16), f32_at(blob, off + 20),
+                ),
+            },
+            // Absolute root position, no rotation.
+            MovementKind::XyzAbsolute => MovementFrame {
+                dx: f32_at(blob, off), dy: f32_at(blob, off + 4), dz: f32_at(blob, off + 8),
+                ..Default::default()
             },
             MovementKind::None => MovementFrame::default(),
         };
         frames.push(f);
     }
     MovementData { kind, frames }
+}
+
+/// Quaternion for a rotation of `yaw` radians about +Z (Halo's up).
+fn yaw_quat(yaw: f32) -> RealQuaternion {
+    let half = yaw * 0.5;
+    RealQuaternion { i: 0.0, j: 0.0, k: half.sin(), w: half.cos() }
+}
+
+/// Decode an angle-axis 3-vector (magnitude = angle in radians, the
+/// normalized vector = axis) into a quaternion. Mirrors Foundry's
+/// `_angle_axis_vector_to_quaternion`. Returns identity for a
+/// near-zero magnitude.
+fn angle_axis_quat(x: f32, y: f32, z: f32) -> RealQuaternion {
+    let angle = (x * x + y * y + z * z).sqrt();
+    if angle <= 1e-8 {
+        return RealQuaternion::IDENTITY;
+    }
+    let (s, c) = (angle * 0.5).sin_cos();
+    let k = s / angle;
+    RealQuaternion { i: x * k, j: y * k, k: z * k, w: c }
 }
 
 /// Read the 6 node-flag BitArrays from a blob given the start offset
@@ -1299,6 +1328,23 @@ fn f32_at(blob: &[u8], off: usize) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn angle_axis_quat_identity_for_zero() {
+        let q = angle_axis_quat(0.0, 0.0, 0.0);
+        assert_eq!(q.to_array(), RealQuaternion::IDENTITY.to_array());
+    }
+
+    #[test]
+    fn angle_axis_quat_matches_yaw_about_z() {
+        // An angle-axis vector of magnitude θ about +Z equals a yaw quat.
+        let theta = 0.7_f32;
+        let aa = angle_axis_quat(0.0, 0.0, theta);
+        let yaw = yaw_quat(theta);
+        for (a, b) in aa.to_array().iter().zip(yaw.to_array().iter()) {
+            assert!((a - b).abs() < 1e-6, "{a} vs {b}");
+        }
+    }
 
     /// Build a synthetic uncompressed_static blob with
     /// (n_rot, n_trans, n_scale) nodes, tightly packed.

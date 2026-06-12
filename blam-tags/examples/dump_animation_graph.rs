@@ -43,7 +43,7 @@ fn main() {
     if let Some(first) = graph.first_action() {
         println!("first_action: graph={} anim={}", first.graph_index, first.animation_index);
     }
-    if let Some(idle) = graph.find_action("any", "any", "any", "idle") {
+    if let Some(idle) = graph.find_action("any", "any", "any", "any", "idle") {
         println!("find any/any/any/idle: graph={} anim={}", idle.graph_index, idle.animation_index);
     }
 }

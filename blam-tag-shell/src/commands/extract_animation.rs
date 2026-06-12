@@ -61,7 +61,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde_json::json;
 
-use blam_tags::{Animation, AnimationGroup, JmaKind, NodeTransform, Skeleton, TagFile};
+use blam_tags::{Animation, AnimationGraph, AnimationGroup, JmaKind, NodeTransform, Skeleton, TagFile};
 
 use crate::context::CliContext;
 use blam_tags::paths::{derive_tags_root, resolve_tag_path, tag_ref_path, tag_stem};
@@ -115,6 +115,10 @@ pub fn run(
     // missing from both fall back to identity.
     let defaults = build_defaults(&skeleton, jmad_tag, render_model);
 
+    // Graph tree (`content/modes[]`) drives overlay/replacement base
+    // resolution — see `Animation::overlay_base_pose`.
+    let graph = AnimationGraph::from_tag(jmad_tag);
+
     let target = OutputTarget::from_args(output);
     let stem = tag_stem(&loaded.path, "animation");
 
@@ -138,8 +142,8 @@ pub fn run(
         && groups.len() == 1;
 
     // Resolve every destination up front so we can fail loudly on
-    // post-sanitize name collisions (e.g. `walk fast` vs `walk-fast`
-    // both → `walk_fast.JMA`) instead of silently overwriting.
+    // post-sanitize name collisions (distinct tag names that scrub to
+    // the same on-disk stem) instead of silently overwriting.
     let destinations: Vec<PathBuf> = if json_to_stdout {
         Vec::new()
     } else {
@@ -151,7 +155,22 @@ pub fn run(
         resolved
     };
 
+    let mut skipped = 0usize;
     for (i, group) in groups.iter().enumerate() {
+        // Composite / runtime-blend animations carry no codec payload —
+        // common in Halo 4 (`locomote`, `aim_locomote_*`, `*_composite`):
+        // they're synthesized at runtime from blend axes and have no
+        // keyframe data to export. Skip them with a note rather than
+        // aborting the whole tag.
+        if group.blob.is_empty() {
+            eprintln!(
+                "skipping '{}' — no codec payload (composite/runtime-blend animation)",
+                display_name(group),
+            );
+            skipped += 1;
+            continue;
+        }
+
         let clip = group
             .decode()
             .with_context(|| format!("decode animation '{}'", display_name(group)))?;
@@ -159,8 +178,20 @@ pub fn run(
         match format {
             Format::Json if json_to_stdout => write_json_stdout(group, &clip)?,
             Format::Json => write_json_file(group, &clip, &destinations[i])?,
-            Format::Jma => write_jma(group, &clip, &skeleton, &defaults, &stem, &destinations[i])?,
+            Format::Jma => write_jma(
+                group,
+                &clip,
+                &animation,
+                &graph,
+                &skeleton,
+                &defaults,
+                &stem,
+                &destinations[i],
+            )?,
         }
+    }
+    if skipped > 0 {
+        eprintln!("skipped {skipped} composite/empty animation(s) with no codec payload");
     }
     Ok(())
 }
@@ -461,32 +492,59 @@ fn json_payload(group: &AnimationGroup<'_>, clip: &blam_tags::AnimationClip) -> 
     })
 }
 
+#[allow(clippy::too_many_arguments)] // each arg is load-bearing for composition + naming
 fn write_jma(
     group: &AnimationGroup<'_>,
     clip: &blam_tags::AnimationClip,
+    animation: &Animation<'_>,
+    graph: &AnimationGraph,
     skeleton: &Skeleton,
     defaults: &[NodeTransform],
     actor_name: &str,
     path: &Path,
 ) -> Result<()> {
     let kind = jma_kind_for(group);
-    // Overlay anims store deltas-from-rest in the codec, so they are
-    // composed onto the rest pose up front (Foundry's
-    // `compose_overlay_animation` rules) — the writer then emits the
-    // composed body verbatim with the per-bone reference as its leading
-    // frame. Every other kind builds the pose against the render_model
-    // defaults as the rest-pose fallback.
+    // Overlay/replacement codec values are deltas authored against a
+    // *base* pose — the matching locomotion/idle stance, not the bind
+    // pose. Resolve that base's first frame (Foundry/TagTool both do
+    // this); fall back to the rest pose when no base is found. Composing
+    // onto rest instead is what makes extracted overlays explode.
+    let base = match kind {
+        JmaKind::Jmo | JmaKind::Jmr => animation
+            .overlay_base_pose(graph, group, skeleton, defaults)
+            .unwrap_or_else(|| defaults.to_vec()),
+        _ => defaults.to_vec(),
+    };
     let (pose, leading): (blam_tags::Pose, Vec<NodeTransform>) = match kind {
-        // Overlay: deltas composed onto the static-or-rest reference.
+        // Overlay: deltas composed onto the static-or-base reference.
         JmaKind::Jmo => {
-            let (reference, body) = clip.overlay_pose(skeleton, defaults);
+            let (mut reference, mut body) = clip.overlay_pose(skeleton, &base);
+            // 3D pose overlays (Reach/H4) pin object-space parent nodes —
+            // re-orient them + descendants after composition (Foundry's
+            // _apply_object_space_base_corrections). No-op for H3.
+            body.apply_object_space_corrections(
+                &mut reference,
+                skeleton,
+                &base,
+                &group.object_space_parents,
+            );
             (body, reference)
         }
         // Replacement: animated nodes take the codec value, every other
-        // node (incl. static-flagged) takes the rest pose — matching
+        // node (incl. static-flagged) takes the base pose — matching
         // Foundry's `compose_replacement_animation` and TagTool's
-        // `Replace()`. Leading frame is the rest pose.
-        JmaKind::Jmr => (clip.replacement_pose(skeleton, defaults), defaults.to_vec()),
+        // `Replace()`. Leading frame is the base pose.
+        JmaKind::Jmr => {
+            let mut body = clip.replacement_pose(skeleton, &base);
+            let mut reference = base.clone();
+            body.apply_object_space_corrections(
+                &mut reference,
+                skeleton,
+                &base,
+                &group.object_space_parents,
+            );
+            (body, reference)
+        }
         // Base kinds / JMW: full pose against the render_model defaults.
         _ => (clip.pose(skeleton, Some(defaults)), defaults.to_vec()),
     };
@@ -538,9 +596,28 @@ fn display_name(group: &AnimationGroup<'_>) -> String {
         .unwrap_or_else(|| format!("[{}]", group.index))
 }
 
+/// Map a tag-internal animation name to its on-disk file stem so the
+/// result re-imports to the same graph name.
+///
+/// Halo uses `:` as the animation-name **token separator** and `_`
+/// *within* a token. Tool.exe / HABT (`build_scene.py`) take the file
+/// basename **verbatim** as the animation name, and Foundry's
+/// `data_name` is `name.replace(":", " ")` — so the importable stem
+/// replaces every `:` with a space and keeps underscores. TagTool
+/// writes the raw colon name (an invalid Windows path / ADS); the older
+/// blam behavior replaced `:`→`_`, which collapsed the token boundary
+/// and would round-trip to the wrong name. Only genuinely
+/// path-/filename-illegal characters are scrubbed to `_`; spaces and
+/// underscores are preserved.
 fn sanitize(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| match c {
+            ':' => ' ',
+            '/' | '\\' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            // Control chars aren't valid in filenames either.
+            c if c.is_control() => '_',
+            c => c,
+        })
         .collect()
 }
 

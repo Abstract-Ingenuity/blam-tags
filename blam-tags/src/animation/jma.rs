@@ -39,7 +39,7 @@
 //!
 //!   In all cases the final on-disk frame count is `codec_count + 1`.
 
-use crate::math::{RealPoint3d, RealQuaternion};
+use crate::math::{RealPoint3d, RealQuaternion, RealVector3d};
 
 use super::{MovementData, MovementFrame, NodeTransform, Pose, Skeleton};
 
@@ -97,7 +97,10 @@ impl JmaKind {
         match frame_info_type.unwrap_or("none") {
             "dx,dy" => Self::Jma,
             "dx,dy,dyaw" => Self::Jmt,
-            "dx,dy,dz,dyaw" | "dx,dy,dz,dangle_axis" => Self::Jmz,
+            // dz-bearing movement (incl. angle-axis and absolute) → JMZ
+            // so the writer folds it into the root bone.
+            "dx,dy,dz,dyaw" | "dx,dy,dz,dangle_axis" | "xyz,absolute" | "xyz_absolute"
+            | "x,y,z,absolute" => Self::Jmz,
             _ => Self::Jmm,
         }
     }
@@ -192,38 +195,44 @@ impl Pose {
         }
 
         // Movement folding state — accumulated through every codec
-        // frame. The trailing held frame (when present) inherits the
-        // final state with no further accumulation.
+        // frame. The accumulator is advanced *after* each frame is
+        // written, so frame 0 holds the root still and movement begins
+        // accumulating from frame 1. This mirrors Foundry's prepended
+        // zero movement frame (`_movement_data_from_second_frame`); the
+        // trailing held frame then carries the final (full) accumulation.
         let mut accumulated_translation = RealPoint3d::default();
-        let mut accumulated_yaw = 0.0f32;
+        let mut accumulated_rotation = RealQuaternion::IDENTITY;
+        let absolute = movement.map(|m| m.kind.is_absolute()).unwrap_or(false);
 
         for (frame_idx, frame) in self.frames.iter().enumerate() {
-            // Advance movement accumulators FIRST so this frame's
-            // root bone reflects the new position. (Order matters:
-            // frame 0 already shows the first delta, not zero.)
-            if kind.folds_movement() {
-                let local = movement
-                    .and_then(|m| m.frames.get(frame_idx))
-                    .copied()
-                    .unwrap_or_default();
-                advance_movement(&mut accumulated_translation, &mut accumulated_yaw, &local);
-            }
-
             for (bone_idx, transform) in frame.iter().enumerate() {
                 let composed = compose_frame_bone(
                     *transform,
                     bone_idx,
                     accumulated_translation,
-                    accumulated_yaw,
+                    accumulated_rotation,
                     kind,
                 );
                 write_transform(writer, composed)?;
             }
+
+            // Advance AFTER writing so the next frame reflects this
+            // frame's delta (Foundry's frame-0-is-rest convention).
+            if kind.folds_movement() {
+                if let Some(local) = movement.and_then(|m| m.frames.get(frame_idx)) {
+                    advance_movement(
+                        &mut accumulated_translation,
+                        &mut accumulated_rotation,
+                        local,
+                        absolute,
+                    );
+                }
+            }
         }
 
         // Trailing held frame — duplicate of the last codec frame's
-        // (already-composed-where-relevant) values. Movement state
-        // freezes at the final accumulated translation/yaw.
+        // pose, carrying the final accumulated movement (which now
+        // includes the last codec frame's delta).
         if kind.appends_held_frame() {
             let last_idx = codec_count - 1;
             let last_frame = &self.frames[last_idx];
@@ -232,7 +241,7 @@ impl Pose {
                     *transform,
                     bone_idx,
                     accumulated_translation,
-                    accumulated_yaw,
+                    accumulated_rotation,
                     kind,
                 );
                 write_transform(writer, composed)?;
@@ -244,22 +253,29 @@ impl Pose {
     }
 }
 
-/// Apply this frame's local movement delta — translation rotated
-/// into world space by the previously-accumulated yaw, then yaw
-/// itself accumulated. Foundry commit `850d680d` order: rotate
-/// first, accumulate after.
+/// Apply this frame's local movement delta to the running accumulators.
+/// Translation is rotated into world space by the rotation accumulated
+/// so far, then added; rotation is composed afterwards (Foundry's
+/// `apply_movement_data` order — rotate first, accumulate after). For
+/// absolute movement ([`MovementKind::XyzAbsolute`]) the translation is
+/// a per-frame absolute position and no rotation is accumulated.
 fn advance_movement(
     translation: &mut RealPoint3d,
-    accumulated_yaw: &mut f32,
+    accumulated_rotation: &mut RealQuaternion,
     local: &MovementFrame,
+    absolute: bool,
 ) {
-    let (cos_y, sin_y) = (accumulated_yaw.cos(), accumulated_yaw.sin());
-    let world_dx = local.dx * cos_y - local.dy * sin_y;
-    let world_dy = local.dx * sin_y + local.dy * cos_y;
-    translation.x += world_dx;
-    translation.y += world_dy;
-    translation.z += local.dz;
-    *accumulated_yaw += local.dyaw;
+    if absolute {
+        translation.x = local.dx;
+        translation.y = local.dy;
+        translation.z = local.dz;
+        return;
+    }
+    let world = *accumulated_rotation * RealVector3d { i: local.dx, j: local.dy, k: local.dz };
+    translation.x += world.i;
+    translation.y += world.j;
+    translation.z += world.k;
+    *accumulated_rotation = (*accumulated_rotation * local.rotation).normalized();
 }
 
 /// Fold accumulated movement into the root bone for the given JMA kind.
@@ -274,7 +290,7 @@ fn compose_frame_bone(
     transform: NodeTransform,
     bone_idx: usize,
     accumulated_translation: RealPoint3d,
-    accumulated_yaw: f32,
+    accumulated_rotation: RealQuaternion,
     kind: JmaKind,
 ) -> NodeTransform {
     let mut t = transform.translation;
@@ -287,18 +303,10 @@ fn compose_frame_bone(
             y: t.y + accumulated_translation.y,
             z: t.z + accumulated_translation.z,
         };
-        q = yaw_quat(accumulated_yaw) * q;
+        q = accumulated_rotation * q;
     }
 
     NodeTransform { translation: t, rotation: q, scale: s }
-}
-
-/// Rotation around +Z axis (Halo's up) by `yaw` radians, encoded as
-/// a quaternion. Used to fold accumulated movement yaw into the
-/// root bone at write time.
-fn yaw_quat(yaw: f32) -> RealQuaternion {
-    let half = yaw * 0.5;
-    RealQuaternion { i: 0.0, j: 0.0, k: half.sin(), w: half.cos() }
 }
 
 /// Write one (translation, rotation, scale) bone-frame triple in
