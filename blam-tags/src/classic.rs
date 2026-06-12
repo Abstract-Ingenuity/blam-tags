@@ -430,6 +430,7 @@ fn decode_struct_trailing(
                 | TagFieldType::Data
                 | TagFieldType::TagReference
                 | TagFieldType::StringId
+                | TagFieldType::OldStringId
                 | TagFieldType::Struct
                 | TagFieldType::Array
         ) {
@@ -493,15 +494,18 @@ fn decode_struct_trailing(
                     content: TagSubChunkContent::TagReference(payload),
                 });
             }
-            TagFieldType::StringId => {
+            TagFieldType::StringId | TagFieldType::OldStringId => {
                 // H2: inline (pad:u16, length:u16) big-endian, then
-                // `length` trailing string bytes.
+                // `length` trailing string bytes. (Non-legacy MCC H2
+                // treats old_string_id identically to string_id.)
                 let len = u16::from_be_bytes([raw[off + 2], raw[off + 3]]) as usize;
                 let s = cur.take(len, "string_id value")?.to_vec();
-                entries.push(TagSubChunkEntry {
-                    field_index: Some(fi as u32),
-                    content: TagSubChunkContent::StringId(s),
-                });
+                let content = if field.field_type == TagFieldType::OldStringId {
+                    TagSubChunkContent::OldStringId(s)
+                } else {
+                    TagSubChunkContent::StringId(s)
+                };
+                entries.push(TagSubChunkEntry { field_index: Some(fi as u32), content });
             }
             TagFieldType::Struct => {
                 let child_si = field.definition;
@@ -667,7 +671,8 @@ fn sync_fixed_counts(layout: &TagLayout, raw: &mut [u8], elem: &TagStructData, e
                     wr_u32(raw, off + 8, path_len as u32, endian);
                 }
             }
-            (TagFieldType::StringId, Some(TagSubChunkContent::StringId(s))) => {
+            (TagFieldType::StringId, Some(TagSubChunkContent::StringId(s)))
+            | (TagFieldType::OldStringId, Some(TagSubChunkContent::OldStringId(s))) => {
                 // H2 inline: (pad:u16, length:u16) big-endian. Sync length.
                 raw[off + 2..off + 4].copy_from_slice(&(s.len() as u16).to_be_bytes());
             }
@@ -702,6 +707,7 @@ fn encode_struct_trailing(layout: &TagLayout, elem: &TagStructData, out: &mut Ve
                 | TagFieldType::Data
                 | TagFieldType::TagReference
                 | TagFieldType::StringId
+                | TagFieldType::OldStringId
                 | TagFieldType::Struct
                 | TagFieldType::Array
         ) {
@@ -722,7 +728,8 @@ fn encode_struct_trailing(layout: &TagLayout, elem: &TagStructData, out: &mut Ve
                             out.extend_from_slice(&p[4..]);
                         }
                     }
-                    TagSubChunkContent::StringId(s) => out.extend_from_slice(s),
+                    TagSubChunkContent::StringId(s)
+                    | TagSubChunkContent::OldStringId(s) => out.extend_from_slice(s),
                     TagSubChunkContent::Struct(child) => {
                         // H2 tag'd-struct header precedes the struct's
                         // trailing data (preserved verbatim).
