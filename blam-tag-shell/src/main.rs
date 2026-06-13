@@ -341,6 +341,13 @@ enum Commands {
         /// readable but not Tool-importable.
         #[arg(long, default_value = "tif")]
         format: String,
+        /// Extract the artist's original *color plate* (the lossless
+        /// RGBA source sheet Tool compiled the bitmap from) as a single
+        /// TIFF, instead of the per-image compiled `processed pixel
+        /// data`. Present on classic CE/H2 tags; gen3+ MCC tags ship
+        /// without source.
+        #[arg(long)]
+        color_plate: bool,
     },
 
     /// Extract geometry source files from a tag. Accepts:
@@ -631,9 +638,9 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::export::run(ctx, subtree.as_deref(), output.as_deref())
         }
 
-        Commands::ExtractBitmap { file, output, format } => {
+        Commands::ExtractBitmap { file, output, format, color_plate } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::extract_bitmap::run(ctx, output.as_deref(), &format)
+            commands::extract_bitmap::run(ctx, output.as_deref(), &format, color_plate)
         }
 
         Commands::ExtractGeometry { file, kinds, output, flat, force } => {

@@ -61,10 +61,34 @@ fn format_from_extension(path: &Path) -> Option<OutFormat> {
     }
 }
 
-pub fn run(ctx: &mut CliContext, output: Option<&str>, format: &str) -> Result<()> {
+pub fn run(ctx: &mut CliContext, output: Option<&str>, format: &str, color_plate: bool) -> Result<()> {
     let cli_format = parse_format(format)?;
 
     let loaded = ctx.loaded("extract-bitmap")?;
+
+    // `--color-plate`: write the single artist source sheet (always a
+    // TIFF — it's the lossless RGBA re-import format), not the per-image
+    // compiled textures.
+    if color_plate {
+        let stem = tag_stem(&loaded.path, "bitmap");
+        let Some(cp) = blam_tags::bitmap::color_plate(&loaded.tag)
+            .context("decode color plate")?
+        else {
+            println!("tag has no color plate (no `compressed color plate data`)");
+            return Ok(());
+        };
+        let target = resolve_color_plate_path(output, &stem)?;
+        if let Some(parent) = target.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+            }
+        }
+        let file = File::create(&target).with_context(|| format!("create {}", target.display()))?;
+        cp.write_tiff(&mut BufWriter::new(file))?;
+        println!("{}: {}×{} color plate", target.display(), cp.width, cp.height);
+        return Ok(());
+    }
+
     let bitmap = Bitmap::new(&loaded.tag)
         .context("tag does not look like a .bitmap (no `bitmaps` block / `processed pixel data`)")?;
 
@@ -85,6 +109,20 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>, format: &str) -> Result<(
 
     // Otherwise treat as a directory and use the --format flag.
     run_to_dir(&output_path, &stem, &bitmap, count, cli_format)
+}
+
+/// Where to write the color-plate TIFF. An `--output` ending in
+/// `.tif`/`.tiff` is the exact file; any other path is a directory
+/// (`<dir>/<stem>.tif`); omitted means `./<stem>.tif`.
+fn resolve_color_plate_path(output: Option<&str>, stem: &str) -> Result<PathBuf> {
+    let filename = format!("{stem}.tif");
+    Ok(match output {
+        Some(o) if matches!(Path::new(o).extension().and_then(|e| e.to_str()), Some("tif") | Some("tiff")) => {
+            PathBuf::from(o)
+        }
+        Some(o) => Path::new(o).join(filename),
+        None => PathBuf::from(filename),
+    })
 }
 
 fn run_to_file(target: &Path, bitmap: &Bitmap<'_>, count: usize, format: OutFormat) -> Result<()> {

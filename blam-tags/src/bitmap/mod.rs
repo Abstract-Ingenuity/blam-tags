@@ -27,7 +27,9 @@
 //! resource block. This module is built around that case; cache-paged
 //! bitmaps would need a different code path (out of scope here).
 
-use std::io::Write;
+use std::io::{Read, Write};
+
+use flate2::read::ZlibDecoder;
 
 use crate::api::{TagBlock, TagStruct};
 use crate::file::TagFile;
@@ -398,6 +400,79 @@ fn convert_x360_image<'a>(
     xbox360::swap_byte_pairs(&mut linear);
 
     Ok((linear, Some(1)))
+}
+
+/// A bitmap tag's **color plate** — the artist's original source sheet
+/// (the input Tool.exe compiled the bitmap from), recovered as straight
+/// RGBA8. Distinct from the per-image `processed pixel data` (the
+/// compiled game texture): the color plate is lossless ARGB regardless
+/// of the final compressed format, carries the full sprite-sheet layout,
+/// and re-imports directly. Present on classic CE/H2 tags (gen3+ MCC
+/// tags ship with the source stripped). See [`color_plate`].
+pub struct ColorPlate {
+    pub width: u32,
+    pub height: u32,
+    /// Row-major RGBA8 (`[R, G, B, A]` per pixel), `width*height*4` bytes.
+    pub rgba: Vec<u8>,
+}
+
+impl ColorPlate {
+    /// Write the color plate as a Tool-importable RGBA8 TIFF.
+    pub fn write_tiff(&self, out: &mut impl Write) -> Result<(), BitmapError> {
+        tiff::write_rgba8_tiff(out, self.width, self.height, &self.rgba)
+    }
+}
+
+/// Recover a bitmap tag's color plate, or `None` if it carries no source
+/// (`compressed color plate data` empty / absent — common for tags
+/// re-saved without source, and all gen3+ MCC tags).
+///
+/// On-disk shape (verified on CE + H2, cross-checked vs SnowyMouse's
+/// `halo2-color-plate-extractor`): `compressed color plate data` is a
+/// big-endian `u32` uncompressed-size prefix followed by a zlib stream
+/// that inflates to `width*height` ARGB8888 pixels (little-endian
+/// `0xAARRGGBB`, i.e. memory order `[B, G, R, A]`); we swap R↔B to get
+/// RGBA. CE nests the fields under a `color plate` struct; H2 has them
+/// at the tag root — handled transparently.
+pub fn color_plate(tag: &TagFile) -> Result<Option<ColorPlate>, BitmapError> {
+    let root = tag.root();
+    let src = root
+        .field_path("color plate")
+        .and_then(|f| f.as_struct())
+        .unwrap_or(root);
+
+    let Some(blob) = src.field("compressed color plate data").and_then(|f| f.as_data()) else {
+        return Ok(None);
+    };
+    let width = src.read_int_any("color plate width").unwrap_or(0).max(0) as u32;
+    let height = src.read_int_any("color plate height").unwrap_or(0).max(0) as u32;
+    if blob.len() < 4 || width == 0 || height == 0 {
+        return Ok(None);
+    }
+
+    let expected = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or(BitmapError::PixelSliceOutOfBounds { offset: 0, size: u64::MAX, available: 0 })?;
+
+    // blob = [big-endian u32 uncompressed size][zlib stream].
+    let mut rgba = Vec::with_capacity(expected);
+    ZlibDecoder::new(&blob[4..])
+        .read_to_end(&mut rgba)
+        .map_err(BitmapError::Io)?;
+    if rgba.len() != expected {
+        return Err(BitmapError::PixelSliceOutOfBounds {
+            offset: 0,
+            size: expected as u64,
+            available: rgba.len() as u64,
+        });
+    }
+
+    // Stored ARGB8888 (memory `[B, G, R, A]`) → straight RGBA8.
+    for px in rgba.chunks_exact_mut(4) {
+        px.swap(0, 2);
+    }
+    Ok(Some(ColorPlate { width, height, rgba }))
 }
 
 /// One element of `bitmaps[]` — metadata plus the slice of pixel

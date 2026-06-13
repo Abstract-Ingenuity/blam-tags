@@ -12,7 +12,7 @@ half = "2"
 num-traits = "0.2"
 num-derive = "0.4"
 strum = { version = "0.27", features = ["derive"] }
+flate2 = "1"
 
 [dev-dependencies]
 md5 = "0.7"
-flate2 = "1"
