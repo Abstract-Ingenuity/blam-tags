@@ -87,8 +87,18 @@ pub fn run(
             reject_hlmt_only_args(kinds, force, "gbxmodel")?;
             run_gbxmodel(ctx, output, flat)
         }
+        // Direct collision input. Halo CE collision lives in a standalone
+        // `model_collision_geometry`, and CE objects reference it directly
+        // (no `.model` wrapper), so it's the only way to reach CE collision
+        // geometry. H2/H3 `collision_model` is also accepted here for a
+        // standalone BSP-local-space dump (no skeleton composition).
+        b"coll" => {
+            reject_hlmt_only_args(kinds, force, "collision_model")?;
+            run_collision(ctx, output, flat)
+        }
         _ => anyhow::bail!(
             "extract-geometry expects `.model` (hlmt), `.gbxmodel` (mod2, Halo CE), \
+             `.collision_model`/`.model_collision_geometry` (coll), \
              `.scenario` (scnr), or `.scenario_structure_bsp` (sbsp) — got group `{}`.",
             std::str::from_utf8(&group).unwrap_or("?"),
         ),
@@ -447,6 +457,29 @@ fn run_gbxmodel(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Resul
     let path = output_path_for(&out_root, &stem, Kind::Render, flat, "jms");
     write_to(&path, |w| Ok(jms.write(w, game.jms_version())?))?;
     println!("{}: [render: JMS] {}", path.display(), jms_summary(&jms));
+    Ok(())
+}
+
+/// Direct `coll` input → render-less collision JMS. Dispatches on
+/// engine: Halo CE's `model_collision_geometry` stores BSPs per-node
+/// (no region/permutation nesting), H2/H3's `collision_model` stores
+/// them per region/permutation. Vertices stay in their tag-local space
+/// (no skeleton to compose against on a standalone collision tag).
+fn run_collision(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()> {
+    use blam_tags::game::Game;
+    let loaded = ctx.loaded("extract-geometry")?;
+    let game = Game::of(&loaded.tag);
+    let jms = match game {
+        Game::Halo1 => JmsFile::from_model_collision_geometry(&loaded.tag)
+            .context("build model_collision_geometry JMS")?,
+        _ => JmsFile::from_collision_model(&loaded.tag)
+            .context("build collision_model JMS")?,
+    };
+    let stem = tag_stem(&loaded.path, "collision_model");
+    let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    let path = output_path_for(&out_root, &stem, Kind::Collision, flat, "jms");
+    write_to(&path, |w| Ok(jms.write(w, game.jms_version())?))?;
+    println!("{}: [collision] {}", path.display(), jms_summary(&jms));
     Ok(())
 }
 

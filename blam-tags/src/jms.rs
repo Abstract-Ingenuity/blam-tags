@@ -588,91 +588,161 @@ impl JmsFile {
                             .copied()
                     } else { None };
 
-                    // Build a (start_vertex, end_vertex, forward,
-                    // reverse, left_surface, right_surface) cache to
-                    // avoid hammering the as_struct API in the hot
-                    // edge-walk loop.
-                    let edge_cache: Vec<EdgeRow> = (0..edges.len()).map(|k| {
-                        let e = edges.element(k).unwrap();
-                        EdgeRow {
-                            start_vertex: e.read_int_any("start vertex").unwrap_or(-1) as i32,
-                            end_vertex: e.read_int_any("end vertex").unwrap_or(-1) as i32,
-                            forward_edge: e.read_int_any("forward edge").unwrap_or(-1) as i32,
-                            reverse_edge: e.read_int_any("reverse edge").unwrap_or(-1) as i32,
-                            left_surface: e.read_int_any("left surface").unwrap_or(-1) as i32,
-                            right_surface: e.read_int_any("right surface").unwrap_or(-1) as i32,
-                        }
-                    }).collect();
-
-                    let vert_points: Vec<RealPoint3d> = (0..bsp_verts.len()).map(|k| {
-                        let local = bsp_verts.element(k).unwrap().read_point3d("point") * SCALE;
-                        if let Some((rot, trans)) = bone_world {
-                            // World = bone_translation + bone_rotation.rotate(local)
-                            trans + rot * local.as_vector()
-                        } else {
-                            local
-                        }
-                    }).collect();
-
-                    for si in 0..surfaces.len() {
-                        let surface = surfaces.element(si).unwrap();
-                        let first_edge = surface.read_int_any("first edge").unwrap_or(-1) as i32;
-                        if first_edge < 0 { continue; }
-                        let surface_material = surface.read_int_any("material").unwrap_or(-1) as i32;
-
-                        // Edge-ring walk.
-                        let polygon = walk_surface_ring(si as i32, first_edge, &edge_cache);
-                        if polygon.len() < 3 { continue; }
-
-                        // Look up shader name for this surface's material.
-                        let shader_name = if surface_material >= 0 && (surface_material as usize) < materials_block.len() {
-                            let m = materials_block.element(surface_material as usize).unwrap();
-                            m.read_string_id("name").unwrap_or_default()
-                        } else {
-                            "default".to_owned()
-                        };
-                        let cell_label = format!("{} {}", perm_name, region_name);
-                        let jms_idx = match materials.iter().position(|m|
-                            m.name == shader_name && m.material_name.ends_with(&cell_label)
-                        ) {
-                            Some(i) => i as i32,
-                            None => {
-                                let slot = materials.len() + 1;
-                                materials.push(JmsMaterial {
-                                    name: shader_name,
-                                    material_name: format!("({}) {}", slot, cell_label),
-                                });
-                                (materials.len() - 1) as i32
-                            }
-                        };
-
-                        // Triangle-fan the convex polygon.
-                        for k in 1..polygon.len() - 1 {
-                            let a = polygon[0];
-                            let b = polygon[k];
-                            let c = polygon[k + 1];
-                            let base = vertices.len() as u32;
-                            for &vi in &[a, b, c] {
-                                let pos = vert_points.get(vi as usize).copied().unwrap_or(RealPoint3d::ZERO);
-                                vertices.push(JmsVertex {
-                                    position: pos,
-                                    normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
-                                    node_sets: vec![(node_idx, 1.0)],
-                                    uvs: vec![crate::math::RealPoint2d::ZERO],
-                                });
-                            }
-                            triangles.push(JmsTriangle {
-                                material: jms_idx,
-                                v: [base, base + 1, base + 2],
-                                region: 0,
-                            });
-                        }
-                    }
+                    let cell_label = format!("{} {}", perm_name, region_name);
+                    Self::emit_collision_bsp(
+                        &surfaces, &edges, &bsp_verts, node_idx, bone_world,
+                        &materials_block, &cell_label,
+                        &mut materials, &mut vertices, &mut triangles,
+                    );
                 }
             }
         }
 
         Ok(Self { nodes, materials, vertices, triangles, ..Default::default() })
+    }
+
+    /// Walk a parsed Halo CE `model_collision_geometry` tag and
+    /// reconstruct the JMS scene. CE stores collision BSPs per-node
+    /// (`nodes[i]/bsps[j]`) with the surface/edge/vertex blocks
+    /// directly inside each `bsps` element — there is no
+    /// region/permutation/`bsp`-wrapper nesting and no skeleton
+    /// composition (CE collision vertices are already in node-local
+    /// space, and the node's own bind transform is not stored here).
+    pub fn from_model_collision_geometry(tag: &TagFile) -> Result<Self, JmsError> {
+        let root = tag.root();
+        let nodes = read_nodes(&root).or_else(|_| read_phmo_nodes(&root))?;
+        let materials_block = root.field_path("materials").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("materials"))?;
+        let nodes_block = root.field_path("nodes").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("nodes"))?;
+
+        let mut materials: Vec<JmsMaterial> = Vec::new();
+        let mut vertices: Vec<JmsVertex> = Vec::new();
+        let mut triangles: Vec<JmsTriangle> = Vec::new();
+
+        for ni in 0..nodes_block.len() {
+            let node = nodes_block.element(ni).unwrap();
+            let node_name = node.read_string_id("name").or_else(|| node.read_string("name")).unwrap_or_default();
+            let bsps = match node.field("bsps").and_then(|f| f.as_block()) {
+                Some(b) => b, None => continue,
+            };
+            for bi in 0..bsps.len() {
+                let bsp = bsps.element(bi).unwrap();
+                let surfaces = match bsp.field("surfaces").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+                let edges = match bsp.field("edges").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+                let bsp_verts = match bsp.field("vertices").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+                Self::emit_collision_bsp(
+                    &surfaces, &edges, &bsp_verts, ni as i16, None,
+                    &materials_block, &node_name,
+                    &mut materials, &mut vertices, &mut triangles,
+                );
+            }
+        }
+
+        Ok(Self { nodes, materials, vertices, triangles, ..Default::default() })
+    }
+
+    /// Emit triangles for one collision BSP (a `surfaces`/`edges`/
+    /// `vertices` triple) into the shared material/vertex/triangle
+    /// accumulators. Shared by the H2/H3 `collision_model` walker and
+    /// the CE `model_collision_geometry` walker — the only structural
+    /// differences (per-node vs per-region nesting, point-vs-vector
+    /// vertices, string-id-vs-string material names, index widths) are
+    /// handled by the readers here, which accept either form.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_collision_bsp(
+        surfaces: &crate::api::TagBlock<'_>,
+        edges: &crate::api::TagBlock<'_>,
+        bsp_verts: &crate::api::TagBlock<'_>,
+        node_idx: i16,
+        bone_world: Option<(RealQuaternion, RealPoint3d)>,
+        materials_block: &crate::api::TagBlock<'_>,
+        cell_label: &str,
+        materials: &mut Vec<JmsMaterial>,
+        vertices: &mut Vec<JmsVertex>,
+        triangles: &mut Vec<JmsTriangle>,
+    ) {
+        // Build a (start_vertex, end_vertex, forward, reverse,
+        // left_surface, right_surface) cache to avoid hammering the
+        // as_struct API in the hot edge-walk loop.
+        let edge_cache: Vec<EdgeRow> = (0..edges.len()).map(|k| {
+            let e = edges.element(k).unwrap();
+            EdgeRow {
+                start_vertex: e.read_int_any("start vertex").unwrap_or(-1) as i32,
+                end_vertex: e.read_int_any("end vertex").unwrap_or(-1) as i32,
+                forward_edge: e.read_int_any("forward edge").unwrap_or(-1) as i32,
+                reverse_edge: e.read_int_any("reverse edge").unwrap_or(-1) as i32,
+                left_surface: e.read_int_any("left surface").unwrap_or(-1) as i32,
+                right_surface: e.read_int_any("right surface").unwrap_or(-1) as i32,
+            }
+        }).collect();
+
+        // CE stores `point` as real_vector_3d, H2/H3 as real_point_3d
+        // — read_point_or_vec accepts either.
+        let vert_points: Vec<RealPoint3d> = (0..bsp_verts.len()).map(|k| {
+            let local = read_point_or_vec(&bsp_verts.element(k).unwrap(), "point") * SCALE;
+            if let Some((rot, trans)) = bone_world {
+                // World = bone_translation + bone_rotation.rotate(local)
+                trans + rot * local.as_vector()
+            } else {
+                local
+            }
+        }).collect();
+
+        for si in 0..surfaces.len() {
+            let surface = surfaces.element(si).unwrap();
+            let first_edge = surface.read_int_any("first edge").unwrap_or(-1) as i32;
+            if first_edge < 0 { continue; }
+            let surface_material = surface.read_int_any("material").unwrap_or(-1) as i32;
+
+            // Edge-ring walk.
+            let polygon = walk_surface_ring(si as i32, first_edge, &edge_cache);
+            if polygon.len() < 3 { continue; }
+
+            // Look up shader name for this surface's material.
+            // H2/H3 store it as a string_id, CE as an inline string.
+            let shader_name = if surface_material >= 0 && (surface_material as usize) < materials_block.len() {
+                let m = materials_block.element(surface_material as usize).unwrap();
+                m.read_string_id("name").or_else(|| m.read_string("name")).unwrap_or_default()
+            } else {
+                "default".to_owned()
+            };
+            let jms_idx = match materials.iter().position(|m|
+                m.name == shader_name && m.material_name.ends_with(cell_label)
+            ) {
+                Some(i) => i as i32,
+                None => {
+                    let slot = materials.len() + 1;
+                    materials.push(JmsMaterial {
+                        name: shader_name,
+                        material_name: format!("({}) {}", slot, cell_label),
+                    });
+                    (materials.len() - 1) as i32
+                }
+            };
+
+            // Triangle-fan the convex polygon.
+            for k in 1..polygon.len() - 1 {
+                let a = polygon[0];
+                let b = polygon[k];
+                let c = polygon[k + 1];
+                let base = vertices.len() as u32;
+                for &vi in &[a, b, c] {
+                    let pos = vert_points.get(vi as usize).copied().unwrap_or(RealPoint3d::ZERO);
+                    vertices.push(JmsVertex {
+                        position: pos,
+                        normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
+                        node_sets: vec![(node_idx, 1.0)],
+                        uvs: vec![crate::math::RealPoint2d::ZERO],
+                    });
+                }
+                triangles.push(JmsTriangle {
+                    material: jms_idx,
+                    v: [base, base + 1, base + 2],
+                    region: 0,
+                });
+            }
+        }
     }
 
     /// Walk a parsed `physics_model` tag and reconstruct the JMS
