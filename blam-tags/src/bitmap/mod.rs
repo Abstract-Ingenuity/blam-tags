@@ -467,13 +467,15 @@ impl<'a> BitmapImage<'a> {
     }
 
     /// `true` for cube map textures (six 2D surfaces under one image).
+    /// Type-name match is case-insensitive (classic CE uses lowercase
+    /// `2d texture`/`3d texture`; gen3+/H2 use `2D texture`).
     pub fn is_cube(&self) -> bool {
-        matches!(self.type_name().as_deref(), Some("cube map"))
+        self.type_name().is_some_and(|t| t.eq_ignore_ascii_case("cube map"))
     }
 
     /// `true` for texture arrays (`depth` layers of 2D surfaces).
     pub fn is_array(&self) -> bool {
-        matches!(self.type_name().as_deref(), Some("array"))
+        self.type_name().is_some_and(|t| t.eq_ignore_ascii_case("array"))
     }
 
     /// Number of stacked surfaces beyond the base mip chain:
@@ -533,7 +535,8 @@ impl<'a> BitmapImage<'a> {
         // 3D textures aren't observed in either corpus and the
         // layer / depth semantics need a different writer path —
         // refuse for now.
-        if !is_cube && !is_array && !matches!(type_name.as_deref(), Some("2D texture") | None) {
+        let is_2d = type_name.as_deref().is_none_or(|t| t.eq_ignore_ascii_case("2d texture"));
+        if !is_cube && !is_array && !is_2d {
             return Err(BitmapError::UnsupportedTextureType(type_name.unwrap_or_default()));
         }
         let bytes = self.pixel_bytes()?;

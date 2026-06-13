@@ -102,7 +102,7 @@ pub fn write_image_tiff(
     // strip math would need slice-major addressing rather than the
     // layer-major form `compose_layer_strip` uses. Defer until a
     // tag actually shows up.
-    if matches!(image.type_name().as_deref(), Some("3D texture")) {
+    if image.type_name().is_some_and(|t| t.eq_ignore_ascii_case("3d texture")) {
         return Err(BitmapError::TiffLayoutDeferred("3D texture".into()));
     }
 
