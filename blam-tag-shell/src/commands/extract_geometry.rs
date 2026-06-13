@@ -409,10 +409,24 @@ fn run_scenario(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Resul
             }
         };
 
-        let mut ass = AssFile::from_scenario_structure_bsp(&bsp_tag)
-            .with_context(|| format!("structure_bsps[{bi}]: build ASS from `{bsp_rel}`"))?;
+        // Halo 2 BSPs use the section-format reader + ASS v2 and carry
+        // no re-extractable structure lights (H2 baked lighting into
+        // lightmaps; there is no stli/generic-light block to recover).
+        // Halo 3 uses the gen3 reader + v2-vs-v7... v7, and layers in
+        // the paired stli's GENERIC_LIGHTs.
+        let is_h2 = Game::of(&loaded.tag) == Game::Halo2;
+        let ass_version: u32 = if is_h2 { 2 } else { 7 };
+        let mut ass = if is_h2 {
+            AssFile::from_scenario_structure_bsp_h2(&bsp_tag)
+                .with_context(|| format!("structure_bsps[{bi}]: build H2 ASS from `{bsp_rel}`"))?
+        } else {
+            AssFile::from_scenario_structure_bsp(&bsp_tag)
+                .with_context(|| format!("structure_bsps[{bi}]: build ASS from `{bsp_rel}`"))?
+        };
 
-        if let Some(lighting_rel) = lighting_ref_path {
+        if is_h2 {
+            // H2 has no stli; nothing to layer in.
+        } else if let Some(lighting_rel) = lighting_ref_path {
             match ctx.load_referenced_tag(&lighting_rel, "scenario_structure_lighting_info") {
                 Ok(stli) => {
                     if let Err(e) = ass.add_lights_from_stli(&stli) {
@@ -439,7 +453,7 @@ fn run_scenario(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Resul
         }
         let mut writer = BufWriter::new(File::create(&path)
             .with_context(|| format!("create {}", path.display()))?);
-        ass.write(&mut writer)?;
+        ass.write_version(&mut writer, ass_version)?;
         let total_verts: usize = ass.objects.iter().map(|o| o.vertices_len()).sum();
         let total_tris: usize = ass.objects.iter().map(|o| o.triangles_len()).sum();
         let light_count = ass.objects.iter()
@@ -549,8 +563,10 @@ fn run_sbsp(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let stem = tag_stem(&loaded.path, "bsp");
     let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
+    let game = Game::of(&loaded.tag);
+
     // Halo CE level geometry compiles from JMS, not ASS — dispatch by engine.
-    if Game::of(&loaded.tag) == Game::Halo1 {
+    if game == Game::Halo1 {
         for line in emit_ce_bsp_jms(&loaded.tag, &out_root, &stem, false)? {
             println!("{line}");
         }
@@ -559,8 +575,16 @@ fn run_sbsp(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
 
     let path = out_root.join(format!("{stem}.ASS"));
 
-    let ass = AssFile::from_scenario_structure_bsp(&loaded.tag)
-        .with_context(|| format!("build ASS from {}", loaded.path.display()))?;
+    // Halo 2 stores BSP render geometry in the section format and emits
+    // ASS version 2; Halo 3 uses the gen3 mesh format and version 7.
+    let ass_version = game.ass_version().unwrap_or(7);
+    let ass = if game == Game::Halo2 {
+        AssFile::from_scenario_structure_bsp_h2(&loaded.tag)
+            .with_context(|| format!("build H2 ASS from {}", loaded.path.display()))?
+    } else {
+        AssFile::from_scenario_structure_bsp(&loaded.tag)
+            .with_context(|| format!("build ASS from {}", loaded.path.display()))?
+    };
 
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -568,7 +592,7 @@ fn run_sbsp(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     }
     let mut writer = BufWriter::new(File::create(&path)
         .with_context(|| format!("create {}", path.display()))?);
-    ass.write(&mut writer)?;
+    ass.write_version(&mut writer, ass_version as u32)?;
 
     let total_verts: usize = ass.objects.iter().map(|o| o.vertices_len()).sum();
     let total_tris: usize = ass.objects.iter().map(|o| o.triangles_len()).sum();

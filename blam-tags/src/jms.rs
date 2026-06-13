@@ -2151,7 +2151,7 @@ fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> JmsVertex {
 /// Node influences come from the `(NEW)` or `(OLD)` index arrays paired
 /// with `node weights`, selected by `use new node indices`; weights of
 /// zero are dropped. The caller overrides these for rigid sections.
-fn read_h2_vertex(v: &TagStruct<'_>) -> JmsVertex {
+pub(crate) fn read_h2_vertex(v: &TagStruct<'_>) -> JmsVertex {
     let position = v.read_point3d("position") * SCALE;
     // H2 declares the vertex normal as `real_vector_3d` (Halo 3 used
     // `real_point_3d`).

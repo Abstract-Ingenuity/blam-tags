@@ -722,6 +722,289 @@ impl AssFile {
         })
     }
 
+    /// Reconstruct an ASS scene from a Halo 2 `scenario_structure_bsp`.
+    /// Same overall shape as [`Self::from_scenario_structure_bsp`] (the
+    /// H3 reader) — clusters → MESH, instanced geometries → MESH +
+    /// INSTANCE, portals/weather/markers/environment-objects/collision
+    /// as recompile marker geometry — but H2 stores render geometry in
+    /// the section format (`cluster data[0]/section`, like the H2
+    /// render_model) rather than H3's `render geometry/meshes`, and its
+    /// collision BSP lives in the top-level `collision bsp` block rather
+    /// than an inline raw-resource. Emitted ASS targets **version 2**.
+    pub fn from_scenario_structure_bsp_h2(tag: &TagFile) -> Result<Self, AssError> {
+        let root = tag.root();
+        let mut materials = read_materials_h2(&root)?;
+        let materials_count = materials.len();
+
+        let mut objects: Vec<AssObject> = Vec::new();
+        let mut instances: Vec<AssInstance> = Vec::new();
+
+        // INSTANCE 0 = Scene Root (parent-only marker).
+        instances.push(AssInstance {
+            object_index: -1,
+            name: "Scene Root".to_owned(),
+            unique_id: 0,
+            parent_id: -1,
+            ..Default::default()
+        });
+
+        // Clusters → MESH OBJECTs at origin. H2 cluster geometry is a
+        // single section under `cluster data[0]/section`.
+        let clusters = root.field_path("clusters").and_then(|f| f.as_block())
+            .ok_or(AssError::MissingField("clusters"))?;
+        for ci in 0..clusters.len() {
+            let cluster = clusters.element(ci).unwrap();
+            let Some(section) = cluster.field_path("cluster data[0]/section").and_then(|f| f.as_struct())
+            else { continue };
+            let object = build_h2_section_object(&section, materials_count);
+            if object.vertices_len() == 0 { continue; }
+            let object_index = objects.len() as i32;
+            objects.push(object);
+            instances.push(AssInstance {
+                object_index,
+                name: format!("cluster_{ci}"),
+                unique_id: instances.len() as i32,
+                parent_id: 0,
+                ..Default::default()
+            });
+        }
+
+        // Cluster portals → `+portal`-named MESHes (recompile markers).
+        let portal_mat_idx = ensure_special_material(&mut materials, "+portal") as i32;
+        if let Some(portals) = root.field_path("cluster portals").and_then(|f| f.as_block()) {
+            for pi in 0..portals.len() {
+                let portal = portals.element(pi).unwrap();
+                let verts_block = match portal.field("vertices").and_then(|f| f.as_block()) {
+                    Some(b) => b, None => continue,
+                };
+                if verts_block.len() < 3 { continue; }
+                let mut verts: Vec<AssVertex> = Vec::with_capacity(verts_block.len());
+                for vi in 0..verts_block.len() {
+                    let p = verts_block.element(vi).unwrap().read_point3d("point");
+                    verts.push(AssVertex {
+                        position: p * SCALE,
+                        normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
+                        color: RealRgbColor::default(),
+                        node_set: Vec::new(),
+                        uvs: vec![RealPoint3d::ZERO],
+                    });
+                }
+                let tris: Vec<AssTriangle> = (1..verts.len() - 1)
+                    .map(|k| AssTriangle { material: portal_mat_idx, v: [0, k as u32, k as u32 + 1] })
+                    .collect();
+                let object_index = objects.len() as i32;
+                objects.push(AssObject {
+                    xref_filepath: String::new(),
+                    xref_objectname: String::new(),
+                    payload: AssObjectPayload::Mesh { vertices: verts, triangles: tris },
+                });
+                instances.push(AssInstance {
+                    object_index,
+                    name: format!("+portal_{pi}"),
+                    unique_id: instances.len() as i32,
+                    parent_id: 0,
+                    ..Default::default()
+                });
+            }
+        }
+
+        // Instanced geometries → one MESH per definition (content-deduped)
+        // + one INSTANCE per placement. H2 IGD geometry is a section under
+        // `render info/render data[0]/section`.
+        let defs = root.field_path("instanced geometries definitions").and_then(|f| f.as_block());
+        let inst_block = root.field_path("instanced geometry instances").and_then(|f| f.as_block());
+        if let (Some(defs), Some(inst_block)) = (defs, inst_block) {
+            let mut def_object_index: Vec<Option<i32>> = vec![None; defs.len()];
+            let mut content_to_object_index: HashMap<Vec<u8>, i32> = HashMap::new();
+            for di in 0..defs.len() {
+                let def = defs.element(di).unwrap();
+                let Some(section) = def.field_path("render info/render data[0]/section").and_then(|f| f.as_struct())
+                else { continue };
+                let object = build_h2_section_object(&section, materials_count);
+                if object.vertices_len() == 0 { continue; }
+                let key = object_content_key(&object);
+                if let Some(&existing) = content_to_object_index.get(&key) {
+                    def_object_index[di] = Some(existing);
+                } else {
+                    let idx = objects.len() as i32;
+                    content_to_object_index.insert(key, idx);
+                    def_object_index[di] = Some(idx);
+                    objects.push(object);
+                }
+            }
+            for ii in 0..inst_block.len() {
+                let inst = inst_block.element(ii).unwrap();
+                let def_idx = inst.read_int_any("instance definition").unwrap_or(-1);
+                if def_idx < 0 || (def_idx as usize) >= def_object_index.len() { continue; }
+                let Some(object_index) = def_object_index[def_idx as usize] else { continue; };
+                let scale = inst.read_real("scale").unwrap_or(1.0);
+                let f = inst.read_vec3("forward");
+                let l = inst.read_vec3("left");
+                let u = inst.read_vec3("up");
+                let p = inst.read_point3d("position");
+                let rot = RealQuaternion::from_basis_columns(f, l, u);
+                let name = inst.read_string_id("name").unwrap_or_else(|| format!("instance_{ii}"));
+                instances.push(AssInstance {
+                    object_index,
+                    name,
+                    unique_id: instances.len() as i32,
+                    parent_id: 0,
+                    inheritance_flag: 0,
+                    local_rotation: rot,
+                    local_translation: p * SCALE,
+                    local_scale: scale,
+                    pivot_rotation: RealQuaternion::IDENTITY,
+                    pivot_translation: RealPoint3d::ZERO,
+                    pivot_scale: 1.0,
+                    bone_groups: Vec::new(),
+                });
+            }
+        }
+
+        // Weather polyhedra → `+weather`-named hull MESHes.
+        let weather_mat_idx = ensure_special_material(&mut materials, "+weather") as i32;
+        if let Some(wp_block) = root.field_path("weather polyhedra").and_then(|f| f.as_block()) {
+            for wi in 0..wp_block.len() {
+                let wp = wp_block.element(wi).unwrap();
+                let planes_block = match wp.field("planes").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+                let mut planes: Vec<RealPlane3d> = Vec::with_capacity(planes_block.len());
+                for pi in 0..planes_block.len() {
+                    planes.push(planes_block.element(pi).unwrap().read_plane3d("plane"));
+                }
+                if planes.len() < 4 { continue; }
+                let (verts, tris) = polyhedron_from_planes(&planes, weather_mat_idx);
+                if verts.is_empty() { continue; }
+                let object_index = objects.len() as i32;
+                objects.push(AssObject {
+                    xref_filepath: String::new(),
+                    xref_objectname: String::new(),
+                    payload: AssObjectPayload::Mesh { vertices: verts, triangles: tris },
+                });
+                instances.push(AssInstance {
+                    object_index,
+                    name: format!("+weather_{wi}"),
+                    unique_id: instances.len() as i32,
+                    parent_id: 0,
+                    ..Default::default()
+                });
+            }
+        }
+
+        // Markers → SPHERE primitives. H2 marker `name` is an inline
+        // string (H3 used a string_id).
+        if let Some(markers_block) = root.field_path("markers").and_then(|f| f.as_block()) {
+            for mi in 0..markers_block.len() {
+                let m = markers_block.element(mi).unwrap();
+                let name = m.read_string_id("name").or_else(|| m.read_string("name"))
+                    .unwrap_or_else(|| format!("marker_{mi}"));
+                let pos = m.read_point3d("position");
+                let rot = m.read_quat("rotation");
+                let object_index = objects.len() as i32;
+                objects.push(AssObject {
+                    xref_filepath: String::new(),
+                    xref_objectname: String::new(),
+                    payload: AssObjectPayload::Sphere { material: -1, radius: 10.0 },
+                });
+                instances.push(AssInstance {
+                    object_index,
+                    name,
+                    unique_id: instances.len() as i32,
+                    parent_id: 0,
+                    inheritance_flag: 0,
+                    local_rotation: rot,
+                    local_translation: pos * SCALE,
+                    local_scale: 1.0,
+                    pivot_rotation: RealQuaternion::IDENTITY,
+                    pivot_translation: RealPoint3d::ZERO,
+                    pivot_scale: 1.0,
+                    bone_groups: Vec::new(),
+                });
+            }
+        }
+
+        // Environment objects → XREF OBJECTs. H2 fields differ from H3:
+        // placement uses `translation` (not `position`) + a `string`
+        // name, palette entry references the scenery via `definition`
+        // (not `object`), and there is no per-placement scale.
+        let env_objects = root.field_path("environment objects").and_then(|f| f.as_block());
+        let env_palette = root.field_path("environment object palette").and_then(|f| f.as_block());
+        if let (Some(eo), Some(ep)) = (env_objects, env_palette) {
+            let mut palette_object_index: Vec<Option<i32>> = vec![None; ep.len()];
+            for pi in 0..ep.len() {
+                let pal = ep.element(pi).unwrap();
+                let xref = pal.read_tag_ref_path("definition")
+                    .or_else(|| pal.read_tag_ref_path("object"))
+                    .unwrap_or_default();
+                if xref.is_empty() { continue; }
+                let xref_name = Path::new(&xref.replace('\\', "/"))
+                    .file_stem().and_then(|s| s.to_str()).unwrap_or("env_object").to_owned();
+                palette_object_index[pi] = Some(objects.len() as i32);
+                objects.push(AssObject {
+                    xref_filepath: xref,
+                    xref_objectname: xref_name,
+                    payload: AssObjectPayload::Mesh { vertices: Vec::new(), triangles: Vec::new() },
+                });
+            }
+            for ei in 0..eo.len() {
+                let placement = eo.element(ei).unwrap();
+                let pi = placement.read_int_any("palette_index")
+                    .or_else(|| placement.read_int_any("palette index")).unwrap_or(-1);
+                if pi < 0 || (pi as usize) >= palette_object_index.len() { continue; }
+                let Some(object_index) = palette_object_index[pi as usize] else { continue; };
+                let pos = placement.read_point3d("translation");
+                let rot = placement.read_quat("rotation");
+                let name = placement.read_string_id("name").or_else(|| placement.read_string("name"))
+                    .unwrap_or_else(|| format!("env_object_{ei}"));
+                instances.push(AssInstance {
+                    object_index,
+                    name,
+                    unique_id: instances.len() as i32,
+                    parent_id: 0,
+                    inheritance_flag: 0,
+                    local_rotation: rot,
+                    local_translation: pos * SCALE,
+                    local_scale: 1.0,
+                    pivot_rotation: RealQuaternion::IDENTITY,
+                    pivot_translation: RealPoint3d::ZERO,
+                    pivot_scale: 1.0,
+                    bone_groups: Vec::new(),
+                });
+            }
+        }
+
+        // Structure collision BSP → single `@CollideOnly` MESH. H2 keeps
+        // it in the top-level `collision bsp` block.
+        if let Some(coll_block) = root.field_path("collision bsp").and_then(|f| f.as_block()) {
+            let coll_mat_idx = ensure_special_material(&mut materials, "@collision_only") as i32;
+            let (verts, tris) = build_collision_mesh(&coll_block, coll_mat_idx);
+            if !verts.is_empty() {
+                let object_index = objects.len() as i32;
+                objects.push(AssObject {
+                    xref_filepath: String::new(),
+                    xref_objectname: String::new(),
+                    payload: AssObjectPayload::Mesh { vertices: verts, triangles: tris },
+                });
+                instances.push(AssInstance {
+                    object_index,
+                    name: "@CollideOnly".to_owned(),
+                    unique_id: instances.len() as i32,
+                    parent_id: 0,
+                    ..Default::default()
+                });
+            }
+        }
+
+        Ok(Self {
+            header_tool: "blam-tags".to_owned(),
+            header_tool_version: "0.1".to_owned(),
+            header_user: "blam-tag-shell".to_owned(),
+            header_machine: String::new(),
+            materials,
+            objects,
+            instances,
+        })
+    }
+
     /// Walk a parsed `render_model` tag and reconstruct an ASS scene
     /// suitable for re-import via Tool. Counterpart to
     /// [`crate::JmsFile::from_render_model`] for the same input —
@@ -1014,10 +1297,23 @@ impl AssFile {
         })
     }
 
-    /// Write the ASS as version 7 (H3) text format.
+    /// Write the ASS as version 7 (H3) text format. Convenience
+    /// wrapper over [`Self::write_version`].
     pub fn write<W: Write>(&self, w: &mut W) -> Result<(), AssError> {
+        self.write_version(w, 7)
+    }
+
+    /// Write the ASS in the given format version. Halo 2 emits version
+    /// 2, Halo 3 version 7. The format deltas (from the H3 Blender
+    /// Toolset's `file_ass/build_asset.py`) are gated below:
+    /// material `lightmap_variant`-lighting strings appear at `>= 4`,
+    /// per-vertex color at `>= 6`, the `index\tweight` node form at
+    /// `>= 3` (older writes them on two lines), the 3-component UV at
+    /// `>= 5` (older is 2-component), and the inline triangle form at
+    /// `>= 3` (older writes material/v0/v1/v2 on four lines).
+    pub fn write_version<W: Write>(&self, w: &mut W, version: u32) -> Result<(), AssError> {
         writeln!(w, ";### HEADER ###")?;
-        writeln!(w, "7")?;
+        writeln!(w, "{version}")?;
         writeln!(w, "\"{}\"", self.header_tool)?;
         writeln!(w, "\"{}\"", self.header_tool_version)?;
         writeln!(w, "\"{}\"", self.header_user)?;
@@ -1031,9 +1327,11 @@ impl AssFile {
             writeln!(w, ";MATERIAL {i}")?;
             writeln!(w, "\"{}\"", m.name)?;
             writeln!(w, "\"{}\"", m.lightmap_variant)?;
-            writeln!(w, "{}", m.bm_strings.len())?;
-            for s in &m.bm_strings {
-                writeln!(w, "\"{s}\"")?;
+            if version >= 4 {
+                writeln!(w, "{}", m.bm_strings.len())?;
+                for s in &m.bm_strings {
+                    writeln!(w, "\"{s}\"")?;
+                }
             }
         }
         writeln!(w)?;
@@ -1059,19 +1357,33 @@ impl AssFile {
                         write!(w, "\n")?;
                         write_floats(w, &v.position.to_array())?;
                         write_floats(w, &v.normal.to_array())?;
-                        write_floats(w, &[v.color.red, v.color.green, v.color.blue])?;
+                        if version >= 6 {
+                            write_floats(w, &[v.color.red, v.color.green, v.color.blue])?;
+                        }
                         write!(w, "{}", v.node_set.len())?;
                         for (idx, weight) in &v.node_set {
-                            write!(w, "\n{}\t{:.10}", idx, weight)?;
+                            if version >= 3 {
+                                write!(w, "\n{}\t{:.10}", idx, weight)?;
+                            } else {
+                                write!(w, "\n{}\n{:.10}", idx, weight)?;
+                            }
                         }
                         write!(w, "\n{}", v.uvs.len())?;
                         for uv in &v.uvs {
-                            write!(w, "\n{:.10}\t{:.10}\t{:.10}\n", uv.x, uv.y, uv.z)?;
+                            if version >= 5 {
+                                write!(w, "\n{:.10}\t{:.10}\t{:.10}\n", uv.x, uv.y, uv.z)?;
+                            } else {
+                                write!(w, "\n{:.10}\t{:.10}", uv.x, uv.y)?;
+                            }
                         }
                     }
                     write!(w, "\n{}", triangles.len())?;
                     for t in triangles {
-                        write!(w, "\n{}\t\t{}\t{}\t{}", t.material, t.v[0], t.v[1], t.v[2])?;
+                        if version >= 3 {
+                            write!(w, "\n{}\t\t{}\t{}\t{}", t.material, t.v[0], t.v[1], t.v[2])?;
+                        } else {
+                            write!(w, "\n{}\n{}\n{}\n{}", t.material, t.v[0], t.v[1], t.v[2])?;
+                        }
                     }
                     writeln!(w)?;
                 }
@@ -1472,6 +1784,153 @@ fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> AssVertex {
 }
 
 fn empty_mesh() -> AssObject { AssObject::empty_mesh() }
+
+/// Read Halo 2 `materials` (global_geometry_material_block) into ASS
+/// materials. H2 stores the shader as a `shader` tag_reference (H3
+/// uses `render method`). ASS v2 doesn't emit the per-material lighting
+/// strings (`>= 4` only), so `bm_strings` is left empty.
+fn read_materials_h2(root: &TagStruct<'_>) -> Result<Vec<AssMaterial>, AssError> {
+    let block = root.field_path("materials").and_then(|f| f.as_block())
+        .ok_or(AssError::MissingField("materials"))?;
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let m = block.element(i).unwrap();
+        let path = m.read_tag_ref_path("shader")
+            .or_else(|| m.read_tag_ref_path("old shader"))
+            .unwrap_or_default();
+        let name = Path::new(&path.replace('\\', "/"))
+            .file_stem().and_then(|s| s.to_str()).unwrap_or("default").to_owned();
+        out.push(AssMaterial { name, lightmap_variant: String::new(), bm_strings: Vec::new() });
+    }
+    Ok(out)
+}
+
+/// Build an ASS MESH object from a Halo 2 geometry `section` struct
+/// (`parts` + `raw vertices` + u16 `strip indices` with 0xFFFF restart,
+/// the same layout the H2 render_model path decodes). Triangle material
+/// is the part's `material` index into the global materials list (= the
+/// ASS materials list, in order); clamped into range. Vertices are
+/// static world geometry — no node binding emitted.
+fn build_h2_section_object(section: &TagStruct<'_>, materials_count: usize) -> AssObject {
+    let (raw_v, strip, parts) = match (
+        section.field("raw vertices").and_then(|f| f.as_block()),
+        section.field("strip indices").and_then(|f| f.as_block()),
+        section.field("parts").and_then(|f| f.as_block()),
+    ) {
+        (Some(v), Some(s), Some(p)) => (v, s, p),
+        _ => return empty_mesh(),
+    };
+    // Unlike the H2 render_model (triangle strips with a 0xFFFF
+    // restart), H2 sbsp cluster/IGD geometry is stored as triangle
+    // LISTS — the `strip indices` block carries no 0xFFFF restarts and
+    // every part's `strip length` is a multiple of 3. (Same as H3 sbsp,
+    // whose meshes are also lists despite the "strip" field name.) So
+    // read each part's range as consecutive index triples.
+    let strip_idx: Vec<u32> = (0..strip.len())
+        .filter_map(|k| strip.element(k))
+        .map(|e| e.read_int_any("index").unwrap_or(0) as u32)
+        .collect();
+    let mut verts: Vec<AssVertex> = Vec::new();
+    let mut tris: Vec<AssTriangle> = Vec::new();
+    for pi in 0..parts.len() {
+        let part = parts.element(pi).unwrap();
+        let mut material_index = part.read_int_any("material").unwrap_or(0) as i32;
+        if material_index < 0 || (material_index as usize) >= materials_count {
+            material_index = 0;
+        }
+        let start = part.read_int_any("strip start index").unwrap_or(0).max(0) as usize;
+        let len = part.read_int_any("strip length").unwrap_or(0).max(0) as usize;
+        if start >= strip_idx.len() { continue; }
+        let end = (start + len).min(strip_idx.len());
+        for tri in strip_idx[start..end].chunks_exact(3) {
+            let (a, b, c) = (tri[0], tri[1], tri[2]);
+            let base = verts.len() as u32;
+            let mut ok = true;
+            for vi in [a, b, c] {
+                let Some(v) = raw_v.element(vi as usize) else { ok = false; break };
+                let jv = crate::jms::read_h2_vertex(&v);
+                let uv = jv.uvs.first().copied().unwrap_or(crate::math::RealPoint2d::ZERO);
+                verts.push(AssVertex {
+                    position: jv.position,
+                    normal: jv.normal,
+                    color: RealRgbColor::default(),
+                    node_set: Vec::new(),
+                    uvs: vec![RealPoint3d { x: uv.x, y: uv.y, z: 0.0 }],
+                });
+            }
+            if ok {
+                tris.push(AssTriangle { material: material_index, v: [base, base + 1, base + 2] });
+            } else {
+                verts.truncate(base as usize);
+            }
+        }
+    }
+    AssObject {
+        xref_filepath: String::new(),
+        xref_objectname: String::new(),
+        payload: AssObjectPayload::Mesh { vertices: verts, triangles: tris },
+    }
+}
+
+/// Walk a collision-BSP block (one or more BSP elements, each with
+/// `surfaces`/`edges`/`vertices`) into a single merged MESH via the
+/// shared edge-ring walker. Vertices come out in centimeters. Shared
+/// by the H2 sbsp reader; the H3 reader has an equivalent inline walk.
+fn build_collision_mesh(
+    coll_block: &crate::api::TagBlock<'_>,
+    material_index: i32,
+) -> (Vec<AssVertex>, Vec<AssTriangle>) {
+    let mut verts: Vec<AssVertex> = Vec::new();
+    let mut tris: Vec<AssTriangle> = Vec::new();
+    let mut next_index: u32 = 0;
+    for ci in 0..coll_block.len() {
+        let bsp = coll_block.element(ci).unwrap();
+        let surfaces = match bsp.field("surfaces").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+        let edges = match bsp.field("edges").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+        let bsp_verts = match bsp.field("vertices").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+        let edge_cache: Vec<crate::geometry::EdgeRow> = (0..edges.len()).map(|k| {
+            let e = edges.element(k).unwrap();
+            crate::geometry::EdgeRow {
+                start_vertex: e.read_int_any("start vertex").unwrap_or(-1) as i32,
+                end_vertex: e.read_int_any("end vertex").unwrap_or(-1) as i32,
+                forward_edge: e.read_int_any("forward edge").unwrap_or(-1) as i32,
+                reverse_edge: e.read_int_any("reverse edge").unwrap_or(-1) as i32,
+                left_surface: e.read_int_any("left surface").unwrap_or(-1) as i32,
+                right_surface: e.read_int_any("right surface").unwrap_or(-1) as i32,
+            }
+        }).collect();
+        let bsp_points: Vec<RealPoint3d> = (0..bsp_verts.len()).map(|k| {
+            bsp_verts.element(k).unwrap().read_point3d("point") * SCALE
+        }).collect();
+        for si in 0..surfaces.len() {
+            let surface = surfaces.element(si).unwrap();
+            let first_edge = surface.read_int_any("first edge").unwrap_or(-1) as i32;
+            if first_edge < 0 { continue; }
+            let polygon = crate::geometry::walk_surface_ring(si as i32, first_edge, &edge_cache);
+            if polygon.len() < 3 { continue; }
+            let base_for_fan = next_index;
+            for &vi in &polygon {
+                let pos = bsp_points.get(vi as usize).copied().unwrap_or(RealPoint3d::ZERO);
+                verts.push(AssVertex {
+                    position: pos,
+                    normal: RealVector3d { i: 0.0, j: 0.0, k: 1.0 },
+                    color: RealRgbColor::default(),
+                    node_set: Vec::new(),
+                    uvs: vec![RealPoint3d::ZERO],
+                });
+            }
+            let n = polygon.len() as u32;
+            for k in 1..n - 1 {
+                tris.push(AssTriangle {
+                    material: material_index,
+                    v: [base_for_fan, base_for_fan + k, base_for_fan + k + 1],
+                });
+            }
+            next_index += n;
+        }
+    }
+    (verts, tris)
+}
 
 fn default_vertex() -> AssVertex {
     AssVertex {
