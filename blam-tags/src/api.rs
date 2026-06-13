@@ -904,6 +904,14 @@ impl<'a> TagBlock<'a> {
 }
 
 fn block_element_size(layout: &TagLayout, block_data: &TagBlockData) -> usize {
+    // For a populated block the on-disk element size is `raw_data /
+    // count` — authoritative for VERSIONED classic blocks whose elements
+    // are a FieldSet variant smaller/larger than the block's base/latest
+    // struct (e.g. H2 bitmap_data v1 = 116 vs latest 140). Empty blocks
+    // fall back to the base struct; non-versioned blocks agree either way.
+    if !block_data.elements.is_empty() && !block_data.raw_data.is_empty() {
+        return block_data.raw_data.len() / block_data.elements.len();
+    }
     let struct_index = layout.block_layouts[block_data.block_index as usize].struct_index as usize;
     layout.struct_layouts[struct_index].size
 }

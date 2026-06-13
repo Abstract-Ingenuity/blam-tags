@@ -950,6 +950,17 @@ impl TagBlockData {
 
     /// Size of one element's byte region.
     fn element_size(&self, layout: &TagLayout) -> usize {
+        // For a populated block the on-disk element size is authoritative
+        // as `raw_data / count` — this is what the (classic) encoder uses
+        // and is essential for VERSIONED classic blocks, whose elements
+        // are a FieldSet variant that may be smaller/larger than the
+        // block's base/latest struct (e.g. H2 bitmap_data v1 = 116 bytes
+        // vs the latest 140). Empty blocks (and fresh MCC allocations)
+        // fall back to the base struct size; for non-versioned blocks both
+        // agree, so this is a no-op there.
+        if !self.elements.is_empty() && !self.raw_data.is_empty() {
+            return self.raw_data.len() / self.elements.len();
+        }
         let struct_index = layout.block_layouts[self.block_index as usize].struct_index as usize;
         layout.struct_layouts[struct_index].size
     }
