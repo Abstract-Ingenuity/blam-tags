@@ -22,19 +22,22 @@ fn main() {
             println!("      weapon_class {:?}", wc.label);
             for wt in &wc.weapon_types {
                 println!("        weapon_type {:?}", wt.label);
-                for action in &wt.actions {
-                    println!(
-                        "          action {:?} -> graph={} anim={}",
-                        action.label,
-                        action.animation.graph_index,
-                        action.animation.animation_index,
-                    );
-                }
-                if !wt.overlays.is_empty() {
-                    println!("          overlays[{}]", wt.overlays.len());
-                }
-                if !wt.transitions.is_empty() {
-                    println!("          transitions[{}]", wt.transitions.len());
+                for set in &wt.sets {
+                    println!("          set {:?}", set.label);
+                    for action in &set.actions {
+                        println!(
+                            "            action {:?} -> graph={} anim={}",
+                            action.label,
+                            action.animation.graph_index,
+                            action.animation.animation_index,
+                        );
+                    }
+                    if !set.overlays.is_empty() {
+                        println!("            overlays[{}]", set.overlays.len());
+                    }
+                    if !set.transitions.is_empty() {
+                        println!("            transitions[{}]", set.transitions.len());
+                    }
                 }
             }
         }
