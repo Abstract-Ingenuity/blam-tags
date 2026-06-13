@@ -81,9 +81,15 @@ pub fn run(
             reject_hlmt_only_args(kinds, force, "scenario_structure_bsp")?;
             run_sbsp(ctx, output)
         }
+        // Halo CE references a `gbxmodel` (mod2) directly — there's no
+        // `.model` (hlmt) wrapper — so accept it as a direct render input.
+        b"mod2" => {
+            reject_hlmt_only_args(kinds, force, "gbxmodel")?;
+            run_gbxmodel(ctx, output, flat)
+        }
         _ => anyhow::bail!(
-            "extract-geometry expects `.model` (hlmt), `.scenario` (scnr), or \
-             `.scenario_structure_bsp` (sbsp) — got group `{}`.",
+            "extract-geometry expects `.model` (hlmt), `.gbxmodel` (mod2, Halo CE), \
+             `.scenario` (scnr), or `.scenario_structure_bsp` (sbsp) — got group `{}`.",
             std::str::from_utf8(&group).unwrap_or("?"),
         ),
     }
@@ -115,9 +121,9 @@ fn reject_hlmt_only_args(kinds: &[String], force: Option<Force>, input_kind: &st
 fn read_render_jms(tag: &TagFile, game: blam_tags::game::Game) -> Result<JmsFile> {
     use blam_tags::game::Game;
     Ok(match game {
+        Game::Halo1 => JmsFile::from_gbxmodel(tag)?,
         Game::Halo2 => JmsFile::from_h2_render_model(tag)?,
         Game::Halo3 => JmsFile::from_render_model(tag)?,
-        Game::Halo1 => anyhow::bail!("Halo CE gbxmodel → JMS is not yet supported"),
     })
 }
 
@@ -429,6 +435,21 @@ fn run_scenario(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Resul
 /// GENERIC_LIGHT objects. Use `.scenario` input if you need lights.
 ///
 /// Output: `<output_or_cwd>/<sbsp_stem>.ASS` (no nesting — single file).
+/// Halo CE direct `gbxmodel` → render JMS (8200). CE has no `.model`
+/// wrapper and no instance/physics in the gbxmodel itself, so this emits
+/// a single render JMS.
+fn run_gbxmodel(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()> {
+    let loaded = ctx.loaded("extract-geometry")?;
+    let game = blam_tags::game::Game::of(&loaded.tag);
+    let jms = JmsFile::from_gbxmodel(&loaded.tag).context("build gbxmodel JMS")?;
+    let stem = tag_stem(&loaded.path, "gbxmodel");
+    let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    let path = output_path_for(&out_root, &stem, Kind::Render, flat, "jms");
+    write_to(&path, |w| Ok(jms.write(w, game.jms_version())?))?;
+    println!("{}: [render: JMS] {}", path.display(), jms_summary(&jms));
+    Ok(())
+}
+
 fn run_sbsp(ctx: &mut CliContext, output: Option<&str>) -> Result<()> {
     let loaded = ctx.loaded("extract-geometry")?;
     let stem = tag_stem(&loaded.path, "bsp");

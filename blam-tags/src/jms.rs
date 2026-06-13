@@ -115,10 +115,14 @@ pub struct JmsVertex {
 }
 
 /// JMS triangle: material slot + 3 vertex indices into [`JmsFile::vertices`].
+/// `region` indexes [`JmsFile::regions`] and is only emitted by the older
+/// (Halo CE, 8198) triangle format — it stays 0 for the modern format,
+/// which folds region into the material slot label.
 #[derive(Debug, Clone)]
 pub struct JmsTriangle {
     pub material: i32,
     pub v: [u32; 3],
+    pub region: i32,
 }
 
 /// JMS sphere collision primitive. `parent` is a node index, `material`
@@ -214,6 +218,10 @@ pub struct JmsHinge {
 pub struct JmsFile {
     pub nodes: Vec<JmsNode>,
     pub materials: Vec<JmsMaterial>,
+    /// Region names — only populated/emitted for the older (Halo CE,
+    /// 8197) format, which has a dedicated REGIONS section. Empty for the
+    /// modern format (region is encoded in the material slot label).
+    pub regions: Vec<String>,
     pub markers: Vec<JmsMarker>,
     pub vertices: Vec<JmsVertex>,
     pub triangles: Vec<JmsTriangle>,
@@ -394,12 +402,112 @@ impl JmsFile {
                             }
                             vertices.push(jv);
                         }
-                        triangles.push(JmsTriangle { material: jms_mat, v: [base, base + 1, base + 2] });
+                        triangles.push(JmsTriangle { material: jms_mat, v: [base, base + 1, base + 2], region: 0 });
                     }
                 }
             }
         }
         Ok(Self { nodes: world_nodes, materials, markers, vertices, triangles, ..Default::default() })
+    }
+
+    /// Walk a Halo CE `gbxmodel` and reconstruct the JMS scene.
+    ///
+    /// Halo 1 geometry is `geometries[g]/parts[p]` selected per region/
+    /// permutation by a LOD geometry index (`super high` down to `super
+    /// low`; we export the highest available). Each part carries an
+    /// `uncompressed vertices` block — full float position/normal/texcoord
+    /// + two node indices and weights — so no dequantization is needed
+    /// (the parallel `compressed vertices` block is the 32-bit-packed
+    /// alternate). `triangle data` is a triangle strip stored as 3-index
+    /// chunks with `-1` (`0xFFFF`) restart/padding. Node indices are
+    /// global unless the `parts have local nodes` flag is set (local node
+    /// maps are not yet applied). Materials come from `shaders[]`.
+    pub fn from_gbxmodel(tag: &TagFile) -> Result<Self, JmsError> {
+        let root = tag.root();
+        let world_nodes = chain_local_to_world(&read_nodes(&root)?);
+
+        let shaders_block = root.field_path("shaders").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("shaders"))?;
+        let regions_block = root.field_path("regions").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("regions"))?;
+        let geometries_block = root.field_path("geometries").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("geometries"))?;
+
+        // Halo CE: one JMS material per shader (region is a SEPARATE
+        // section + a per-triangle index, not folded into the material as
+        // the modern format does). Material i ↔ shaders[i]; a part's
+        // `shader index` is therefore its material index directly.
+        let mut materials: Vec<JmsMaterial> = Vec::with_capacity(shaders_block.len());
+        for si in 0..shaders_block.len() {
+            let s = shaders_block.element(si).unwrap();
+            let path = s.read_tag_ref_path("shader").unwrap_or_default();
+            let name = Path::new(&path.replace('\\', "/"))
+                .file_stem().and_then(|x| x.to_str()).unwrap_or("default").to_owned();
+            materials.push(JmsMaterial { name, material_name: "<none>".to_owned() });
+        }
+
+        let mut regions: Vec<String> = Vec::with_capacity(regions_block.len());
+        let mut vertices: Vec<JmsVertex> = Vec::new();
+        let mut triangles: Vec<JmsTriangle> = Vec::new();
+
+        for ri in 0..regions_block.len() {
+            let region = regions_block.element(ri).unwrap();
+            // Keep region indices aligned with `ri` (push every region,
+            // even geometry-less ones).
+            regions.push(region.read_string("name").unwrap_or_default());
+            let perms = match region.field("permutations").and_then(|f| f.as_block()) {
+                Some(b) => b, None => continue,
+            };
+            for pi in 0..perms.len() {
+                let perm = perms.element(pi).unwrap();
+                let ngeo = geometries_block.len();
+                let geo_idx = ["super high", "high", "medium", "low", "super low"]
+                    .iter()
+                    .find_map(|f| perm.read_int_any(f).map(|v| v as i32)
+                        .filter(|&v| v >= 0 && (v as usize) < ngeo))
+                    .unwrap_or(-1);
+                if geo_idx < 0 { continue; }
+                let geo = geometries_block.element(geo_idx as usize).unwrap();
+                let parts = match geo.field("parts").and_then(|f| f.as_block()) {
+                    Some(b) => b, None => continue,
+                };
+                for part_i in 0..parts.len() {
+                    let part = parts.element(part_i).unwrap();
+                    let mat = part.read_int_any("shader index").unwrap_or(0).max(0) as i32;
+
+                    let uv = match part.field("uncompressed vertices").and_then(|f| f.as_block()) {
+                        Some(b) => b, None => continue,
+                    };
+                    let td = match part.field("triangle data").and_then(|f| f.as_block()) {
+                        Some(b) => b, None => continue,
+                    };
+                    // Flatten the triangle-data chunks (each holds 3 `indices`)
+                    // into one strip; `-1` becomes the 0xFFFF restart sentinel.
+                    let mut strip: Vec<u16> = Vec::with_capacity(td.len() * 3);
+                    for k in 0..td.len() {
+                        let t = td.element(k).unwrap();
+                        for f in t.fields() {
+                            if let Some(TagFieldData::ShortInteger(i)) = f.value() {
+                                strip.push(i as u16);
+                            }
+                        }
+                    }
+                    for (a, b, c) in strip_to_list(&strip) {
+                        let base = vertices.len() as u32;
+                        for vi in [a, b, c] {
+                            let Some(v) = uv.element(vi as usize) else { continue };
+                            vertices.push(read_ce_vertex(&v));
+                        }
+                        triangles.push(JmsTriangle {
+                            material: mat,
+                            v: [base, base + 1, base + 2],
+                            region: ri as i32,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(Self { nodes: world_nodes, materials, regions, vertices, triangles, ..Default::default() })
     }
 
     /// Walk a parsed `collision_model` tag and reconstruct the JMS
@@ -556,6 +664,7 @@ impl JmsFile {
                             triangles.push(JmsTriangle {
                                 material: jms_idx,
                                 v: [base, base + 1, base + 2],
+                                region: 0,
                             });
                         }
                     }
@@ -637,6 +746,13 @@ impl JmsFile {
     /// (region section, child/sibling nodes, 2-node vertices) is a
     /// separate path added with the Halo CE reader.
     pub fn write<W: Write>(&self, w: &mut W, version: u16) -> Result<(), JmsError> {
+        // The old (Halo CE, <= 8200) format is structurally different — a
+        // bare numeric layout with child/sibling node links, a separate
+        // REGIONS section, two-influence vertices, and per-triangle region
+        // indices — so it has its own writer.
+        if version <= 8200 {
+            return self.write_jms_old(w, version);
+        }
         // 8211+ (Halo 3) appends a per-vertex color triple; 8205 (Halo 2)
         // does not.
         let has_vertex_color = version >= 8211;
@@ -644,6 +760,77 @@ impl JmsFile {
         writeln!(w, "{version}")?;
         writeln!(w)?;
 
+        // (modern format continues below)
+        self.write_modern_after_version(w, version, has_vertex_color)
+    }
+
+    /// Old (Halo CE, <= 8200) bare JMS: no comment scaffolding, child/
+    /// sibling node links (8197), name+texture materials (8197), a
+    /// dedicated REGIONS section (8197), two-influence vertices (8199:
+    /// node0 / pos / normal / node1 / node1-weight / uv / unused), and
+    /// per-triangle region indices (8198).
+    fn write_jms_old<W: Write>(&self, w: &mut W, version: u16) -> Result<(), JmsError> {
+        writeln!(w, "{version}")?;
+        writeln!(w, "0")?; // node list checksum (unused by importers)
+
+        let (children, siblings) = derive_child_sibling(&self.nodes);
+        writeln!(w, "{}", self.nodes.len())?;
+        for (i, n) in self.nodes.iter().enumerate() {
+            writeln!(w, "{}", n.name)?;
+            writeln!(w, "{}", children[i])?;
+            writeln!(w, "{}", siblings[i])?;
+            write_floats(w, &n.rotation.to_array())?;
+            write_floats(w, &n.translation.to_array())?;
+        }
+
+        writeln!(w, "{}", self.materials.len())?;
+        for m in &self.materials {
+            writeln!(w, "{}", m.name)?;
+            writeln!(w, "{}", m.material_name)?; // 8197 "texture path" slot
+        }
+
+        writeln!(w, "{}", self.markers.len())?;
+        for m in &self.markers {
+            writeln!(w, "{}", m.name)?;
+            writeln!(w, "-1")?; // region (markers aren't region-scoped here)
+            writeln!(w, "{}", m.node_index)?;
+            write_floats(w, &m.rotation.to_array())?;
+            write_floats(w, &m.translation.to_array())?;
+            write_floats(w, &[m.radius])?;
+        }
+
+        writeln!(w, "{}", self.regions.len())?;
+        for r in &self.regions {
+            writeln!(w, "{r}")?;
+        }
+
+        writeln!(w, "{}", self.vertices.len())?;
+        for v in &self.vertices {
+            let n0 = v.node_sets.first().copied().unwrap_or((-1, 0.0));
+            let n1 = v.node_sets.get(1).copied().unwrap_or((-1, 0.0));
+            writeln!(w, "{}", n0.0)?;
+            write_floats(w, &v.position.to_array())?;
+            write_floats(w, &v.normal.to_array())?;
+            writeln!(w, "{}", n1.0)?;
+            write_floats(w, &[n1.1])?;
+            let uv = v.uvs.first().map(|u| u.to_array()).unwrap_or([0.0, 0.0]);
+            write_floats(w, &uv)?;
+            writeln!(w, "0")?; // unused flag
+        }
+
+        writeln!(w, "{}", self.triangles.len())?;
+        for t in &self.triangles {
+            writeln!(w, "{}", t.region)?;
+            writeln!(w, "{}", t.material)?;
+            writeln!(w, "{}\t{}\t{}", t.v[0], t.v[1], t.v[2])?;
+        }
+        Ok(())
+    }
+
+    fn write_modern_after_version<W: Write>(
+        &self, w: &mut W, version: u16, has_vertex_color: bool,
+    ) -> Result<(), JmsError> {
+        let _ = version;
         writeln!(w, ";### NODES ###")?;
         writeln!(w, "{}", self.nodes.len())?;
         writeln!(w, ";\t<name>")?;
@@ -902,6 +1089,44 @@ impl JmsFile {
 // Node / material / marker / geometry walkers
 //================================================================================
 
+/// Read a 3-component field that may be declared as either
+/// `real_point_3d` or `real_vector_3d` (the classic engines differ from
+/// gen3+ on several geometry fields).
+fn read_point_or_vec(s: &TagStruct<'_>, name: &str) -> RealPoint3d {
+    match s.field(name).and_then(|f| f.value()) {
+        Some(TagFieldData::RealPoint3d(p)) => p,
+        Some(TagFieldData::RealVector3d(v)) => RealPoint3d { x: v.i, y: v.j, z: v.k },
+        _ => RealPoint3d::ZERO,
+    }
+}
+
+/// Derive the (first-child, next-sibling) index pair for each node from
+/// the flat parent links — the form the old 8197 JMS node section uses.
+/// `-1` where there is no child / sibling.
+fn derive_child_sibling(nodes: &[JmsNode]) -> (Vec<i32>, Vec<i32>) {
+    let n = nodes.len();
+    let mut child = vec![-1i32; n];
+    let mut sibling = vec![-1i32; n];
+    for i in 0..n {
+        // First child: the first node whose parent is `i`.
+        for j in 0..n {
+            if nodes[j].parent as i32 == i as i32 {
+                child[i] = j as i32;
+                break;
+            }
+        }
+        // Next sibling: the next node after `i` sharing its parent.
+        let p = nodes[i].parent;
+        for j in (i + 1)..n {
+            if nodes[j].parent == p {
+                sibling[i] = j as i32;
+                break;
+            }
+        }
+    }
+    (child, sibling)
+}
+
 fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<JmsNode>, JmsError> {
     let block = root.field_path("nodes").and_then(|f| f.as_block())
         .ok_or(JmsError::MissingField("nodes"))?;
@@ -909,10 +1134,14 @@ fn read_nodes(root: &TagStruct<'_>) -> Result<Vec<JmsNode>, JmsError> {
     for i in 0..block.len() {
         let n = block.element(i).unwrap();
         out.push(JmsNode {
-            name: n.read_string_id("name").unwrap_or_default(),
+            // H2/H3 store the node name as a string_id; Halo CE uses a
+            // 32-byte inline `string` — accept either.
+            name: n.read_string_id("name").or_else(|| n.read_string("name")).unwrap_or_default(),
             parent: n.read_block_index("parent node"),
             rotation: n.read_quat("default rotation"),
-            translation: n.read_point3d("default translation") * SCALE,
+            // H2/H3 declare `default translation` as real_point_3d; Halo CE
+            // as real_vector_3d — accept either.
+            translation: read_point_or_vec(&n, "default translation") * SCALE,
         });
     }
     Ok(out)
@@ -1465,6 +1694,7 @@ fn build_geometry(
                 triangles.push(JmsTriangle {
                     material: material_index,
                     v: [base, base + 1, base + 2],
+                                region: 0,
                 });
             }
         }
@@ -1640,6 +1870,7 @@ fn append_instance_geometry(
             triangles.push(JmsTriangle {
                 material: material_index,
                 v: [base, base + 1, base + 2],
+                                region: 0,
             });
         }
     }
@@ -1718,6 +1949,30 @@ fn read_h2_vertex(v: &TagStruct<'_>) -> JmsVertex {
             if wt > 0.0 && idx >= 0 {
                 node_sets.push((idx, wt));
             }
+        }
+    }
+    JmsVertex {
+        position,
+        normal,
+        node_sets,
+        uvs: vec![crate::math::RealPoint2d { x: uv.x, y: 1.0 - uv.y }],
+    }
+}
+
+/// Read one Halo CE `uncompressed vertices[]` element into a JMS vertex.
+/// Position is a `real_vector_3d` (Halo 1's convention); node binding is
+/// the fixed two-influence `node0/node1` index+weight pair.
+fn read_ce_vertex(v: &TagStruct<'_>) -> JmsVertex {
+    let p = v.read_vec3("position");
+    let position = RealPoint3d { x: p.i, y: p.j, z: p.k } * SCALE;
+    let normal = v.read_vec3("normal");
+    let uv = v.read_point2d("texture coords");
+    let mut node_sets = Vec::with_capacity(2);
+    for (idx_f, wt_f) in [("node0 index", "node0 weight"), ("node1 index", "node1 weight")] {
+        let idx = v.read_int_any(idx_f).unwrap_or(-1) as i16;
+        let wt = v.read_real(wt_f).unwrap_or(0.0);
+        if idx >= 0 && wt > 0.0 {
+            node_sets.push((idx, wt));
         }
     }
     JmsVertex {
