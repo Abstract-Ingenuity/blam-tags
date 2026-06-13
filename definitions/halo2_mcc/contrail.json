@@ -92,7 +92,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 64
     },
     {
      "type": "pad",
@@ -252,7 +252,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "real",
@@ -386,5 +386,6 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

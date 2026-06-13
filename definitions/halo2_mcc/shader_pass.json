@@ -369,7 +369,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "data",
@@ -379,7 +379,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "short_enum",
@@ -448,7 +448,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 224
     },
     {
      "type": "terminator",
@@ -2404,5 +2404,6 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

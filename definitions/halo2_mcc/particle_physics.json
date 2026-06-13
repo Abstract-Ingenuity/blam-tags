@@ -5,6 +5,11 @@
  "flags": 0,
  "block": "particle_physics_block",
  "blocks": {
+  "real_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "real_block"
+  },
   "byte_block_2": {
    "max_count": 1024,
    "max_count_string": "1024",
@@ -140,6 +145,77 @@
    ],
    "tag": "PRPS"
   },
+  "mapping_function__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function Type"
+    },
+    {
+     "type": "byte_flags",
+     "name": "Flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 1"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 0"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 1"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 3"
+    },
+    {
+     "type": "block",
+     "name": "Values",
+     "definition": "real_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "real_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "Value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
    "size": 12,
@@ -228,9 +304,27 @@
     "Plus",
     "Times"
    ]
+  },
+  "flags_flags_2": {
+   "options": [
+    "Range",
+    "Unused 0",
+    "Unused 1",
+    "Unused 2",
+    "Color Bit 0",
+    "Color Bit 1",
+    "Color Bit 2",
+    "Color Bit 3"
+   ]
   }
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "mapping_function": {
+   "0": "mapping_function__v0",
+   "1": "mapping_function"
+  }
+ }
 }

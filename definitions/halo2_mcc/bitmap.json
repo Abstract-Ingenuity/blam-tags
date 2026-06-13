@@ -233,6 +233,210 @@
     }
    ]
   },
+  "bitmap_data_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 48,
+   "fields": [
+    {
+     "type": "tag",
+     "name": "signature"
+    },
+    {
+     "type": "short_integer",
+     "name": "width"
+    },
+    {
+     "type": "short_integer",
+     "name": "height"
+    },
+    {
+     "type": "short_integer",
+     "name": "depth"
+    },
+    {
+     "type": "short_enum",
+     "name": "type",
+     "definition": "type_enum_2"
+    },
+    {
+     "type": "short_enum",
+     "name": "format",
+     "definition": "format_enum_2"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "point_2d",
+     "name": "registration point"
+    },
+    {
+     "type": "short_integer",
+     "name": "mipmap count"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "long_integer",
+     "name": "pixels offset"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "bitmap_data_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 116,
+   "fields": [
+    {
+     "type": "tag",
+     "name": "signature"
+    },
+    {
+     "type": "short_integer",
+     "name": "width"
+    },
+    {
+     "type": "short_integer",
+     "name": "height"
+    },
+    {
+     "type": "char_integer",
+     "name": "depth"
+    },
+    {
+     "type": "byte_flags",
+     "name": "more flags",
+     "definition": "more_flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "type",
+     "definition": "type_enum_2"
+    },
+    {
+     "type": "short_enum",
+     "name": "format",
+     "definition": "format_enum_2"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "point_2d",
+     "name": "registration point"
+    },
+    {
+     "type": "short_integer",
+     "name": "mipmap count"
+    },
+    {
+     "type": "char_integer",
+     "name": "lod adjust"
+    },
+    {
+     "type": "char_enum",
+     "name": "cache usage",
+     "definition": "cache_usage_enum"
+    },
+    {
+     "type": "long_integer",
+     "name": "pixels offset"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "pointer",
+     "name": null
+    },
+    {
+     "type": "pointer",
+     "name": null
+    },
+    {
+     "type": "pointer",
+     "name": null
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 0
+    },
+    {
+     "type": "pointer",
+     "name": null
+    },
+    {
+     "type": "pointer",
+     "name": null
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "pointer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "bitmap_data_block": {
    "guid": "00000000000000000000000000000000",
    "size": 140,
@@ -334,7 +538,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -497,14 +701,6 @@
     "force A4R4G4B4"
    ]
   },
-  "more_flags_flags": {
-   "options": [
-    "delete from cache file",
-    "bitmap create attempted",
-    "bitmap recreate allowed",
-    "bitmap sampling allowed"
-   ]
-  },
   "type_enum_2": {
    "options": [
     "2D texture",
@@ -552,6 +748,14 @@
     "prefer stutter (prefer low detail)"
    ]
   },
+  "more_flags_flags": {
+   "options": [
+    "delete from cache file",
+    "bitmap create attempted",
+    "bitmap recreate allowed",
+    "bitmap sampling allowed"
+   ]
+  },
   "cache_usage_enum": {
    "options": [
     "default",
@@ -592,5 +796,12 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "bitmap_data_block": {
+   "0": "bitmap_data_block__v0",
+   "1": "bitmap_data_block__v1",
+   "2": "bitmap_data_block"
+  }
+ }
 }

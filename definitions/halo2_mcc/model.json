@@ -60,6 +60,16 @@
    "max_count_string": "255",
    "struct": "global_damage_nodes_block"
   },
+  "global_damage_section_block_3": {
+   "max_count": 16,
+   "max_count_string": "16",
+   "struct": "global_damage_section_block"
+  },
+  "global_damage_nodes_block_3": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "global_damage_nodes_block"
+  },
   "damage_seat_info_block_2": {
    "max_count": 16,
    "max_count_string": "16",
@@ -74,11 +84,6 @@
    "max_count": 1,
    "max_count_string": "1",
    "struct": "global_damage_info_block"
-  },
-  "model_target_block_2": {
-   "max_count": 32,
-   "max_count_string": "32",
-   "struct": "model_target_block"
   },
   "model_permutation_block_2": {
    "max_count": 32,
@@ -100,6 +105,41 @@
    "max_count_string": "1",
    "struct": "model_object_data_block"
   },
+  "model_variant_block_3": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "model_variant_block"
+  },
+  "model_material_block_3": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "model_material_block"
+  },
+  "global_damage_info_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "global_damage_info_block"
+  },
+  "model_target_block_2": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "model_target_block"
+  },
+  "model_region_block_3": {
+   "max_count": 16,
+   "max_count_string": "16",
+   "struct": "model_region_block"
+  },
+  "model_node_block_3": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "model_node_block"
+  },
+  "model_object_data_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "model_object_data_block"
+  },
   "global_scenario_load_parameters_block_2": {
    "max_count": 32,
    "max_count_string": "32",
@@ -112,14 +152,10 @@
   }
  },
  "structs": {
-  "model_block_struct": {
+  "model_block_struct__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 348,
+   "size": 200,
    "fields": [
-    {
-     "type": "custom",
-     "name": "MODEL_DEFINITION_TAG"
-    },
     {
      "type": "tag_reference",
      "name": "render model"
@@ -138,20 +174,11 @@
     },
     {
      "type": "tag_reference",
-     "name": "physics_model"
+     "name": "physics model"
     },
     {
      "type": "real",
-     "name": "disappear distance"
-    },
-    {
-     "type": "real",
-     "name": "begin fade distance"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
+     "name": "max draw distance"
     },
     {
      "type": "real",
@@ -204,9 +231,9 @@
      "definition": "global_damage_info_block_2"
     },
     {
-     "type": "block",
-     "name": "targets",
-     "definition": "model_target_block_2"
+     "type": "pad",
+     "name": null,
+     "definition": 12
     },
     {
      "type": "block",
@@ -227,51 +254,6 @@
      "type": "block",
      "name": "model object data",
      "definition": "model_object_data_block_2"
-    },
-    {
-     "type": "tag_reference",
-     "name": "default dialogue"
-    },
-    {
-     "type": "tag_reference",
-     "name": "UNUSED"
-    },
-    {
-     "type": "long_flags",
-     "name": "flags",
-     "definition": "flags_flags_7"
-    },
-    {
-     "type": "string_id",
-     "name": "default dialogue effect"
-    },
-    {
-     "type": "array",
-     "name": "render-only node flags",
-     "definition": "render_only_node_flags_array"
-    },
-    {
-     "type": "array",
-     "name": "render-only section flags",
-     "definition": "render_only_section_flags_array"
-    },
-    {
-     "type": "long_flags",
-     "name": "runtime flags",
-     "definition": "runtime_flags_flags"
-    },
-    {
-     "type": "block",
-     "name": "scenario load parameters",
-     "definition": "global_scenario_load_parameters_block_2"
-    },
-    {
-     "type": "tag_reference",
-     "name": "hologram shader"
-    },
-    {
-     "type": "string_id",
-     "name": "hologram control function"
     },
     {
      "type": "terminator",
@@ -412,6 +394,30 @@
     }
    ]
   },
+  "model_variant_state_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "permutation name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_enum",
+     "name": "state",
+     "definition": "state_enum"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "model_variant_state_block": {
    "guid": "00000000000000000000000000000000",
    "size": 32,
@@ -433,7 +439,7 @@
     {
      "type": "short_enum",
      "name": "state",
-     "definition": "state_enum"
+     "definition": "state_enum_2"
     },
     {
      "type": "tag_reference",
@@ -510,6 +516,373 @@
      "type": "pad",
      "name": null,
      "definition": 4
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_damage_info_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 216,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "string_id",
+     "name": "global indirect material name"
+    },
+    {
+     "type": "real",
+     "name": "maximum vitality"
+    },
+    {
+     "type": "real",
+     "name": "body system shock"
+    },
+    {
+     "type": "real_fraction",
+     "name": "friendly damage resistance"
+    },
+    {
+     "type": "tag_reference",
+     "name": "localized damage effect"
+    },
+    {
+     "type": "real",
+     "name": "area damage effect threshold"
+    },
+    {
+     "type": "tag_reference",
+     "name": "area damage effect"
+    },
+    {
+     "type": "real",
+     "name": "body damaged threshold"
+    },
+    {
+     "type": "tag_reference",
+     "name": "body damaged effect"
+    },
+    {
+     "type": "tag_reference",
+     "name": "body depleted effect"
+    },
+    {
+     "type": "real",
+     "name": "body destroyed threshold"
+    },
+    {
+     "type": "tag_reference",
+     "name": "body destroyed effect"
+    },
+    {
+     "type": "real",
+     "name": "maximum shield vitality"
+    },
+    {
+     "type": "string_id",
+     "name": "global shield material name"
+    },
+    {
+     "type": "real",
+     "name": "minimum stun damage"
+    },
+    {
+     "type": "real",
+     "name": "stun time"
+    },
+    {
+     "type": "real",
+     "name": "recharge time"
+    },
+    {
+     "type": "real",
+     "name": "shield damaged threshold"
+    },
+    {
+     "type": "tag_reference",
+     "name": "shield damaged effect"
+    },
+    {
+     "type": "tag_reference",
+     "name": "shield depleted effect"
+    },
+    {
+     "type": "tag_reference",
+     "name": "shield recharging effect"
+    },
+    {
+     "type": "block",
+     "name": "damage sections",
+     "definition": "global_damage_section_block_2"
+    },
+    {
+     "type": "block",
+     "name": "nodes",
+     "definition": "global_damage_nodes_block_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_damage_section_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 68,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_3"
+    },
+    {
+     "type": "real_fraction",
+     "name": "vitality percentage"
+    },
+    {
+     "type": "block",
+     "name": "instant responses",
+     "definition": "instantaneous_damage_repsonse_block_2"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "g_null_block_2"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "g_null_block_3"
+    },
+    {
+     "type": "real",
+     "name": "stun time"
+    },
+    {
+     "type": "real",
+     "name": "recharge time"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "string_id",
+     "name": "resurrection restored region name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "instantaneous_damage_repsonse_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 104,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "response type",
+     "definition": "response_type_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "constraint damage type",
+     "definition": "constraint_damage_type_enum"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "real",
+     "name": "damage threshold"
+    },
+    {
+     "type": "tag_reference",
+     "name": "transition effect"
+    },
+    {
+     "type": "struct",
+     "name": "damage effect",
+     "definition": "instantaneous_response_damage_effect_struct"
+    },
+    {
+     "type": "string_id",
+     "name": "region"
+    },
+    {
+     "type": "short_enum",
+     "name": "new state",
+     "definition": "state_enum_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "runtime region index"
+    },
+    {
+     "type": "string_id",
+     "name": "effect marker name"
+    },
+    {
+     "type": "struct",
+     "name": "damage effect marker",
+     "definition": "instantaneous_response_damage_effect_marker_struct"
+    },
+    {
+     "type": "real",
+     "name": "response delay"
+    },
+    {
+     "type": "tag_reference",
+     "name": "delay effect"
+    },
+    {
+     "type": "string_id",
+     "name": "delay effect marker name"
+    },
+    {
+     "type": "string_id",
+     "name": "constraint/group name"
+    },
+    {
+     "type": "string_id",
+     "name": "ejecting seat label"
+    },
+    {
+     "type": "real_fraction",
+     "name": "skip fraction"
+    },
+    {
+     "type": "string_id",
+     "name": "destroyed child object marker name"
+    },
+    {
+     "type": "real_fraction",
+     "name": "total damage threshold"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "instantaneous_response_damage_effect_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "ires"
+  },
+  "instantaneous_response_damage_effect_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "transition damage effect"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "ires"
+  },
+  "instantaneous_response_damage_effect_marker_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "irem"
+  },
+  "instantaneous_response_damage_effect_marker_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "damage effect marker name"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "irem"
+  },
+  "g_null_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "-1"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_damage_nodes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
     },
     {
      "type": "terminator",
@@ -636,12 +1009,12 @@
     {
      "type": "block",
      "name": "damage sections",
-     "definition": "global_damage_section_block_2"
+     "definition": "global_damage_section_block_3"
     },
     {
      "type": "block",
      "name": "nodes",
-     "definition": "global_damage_nodes_block_2"
+     "definition": "global_damage_nodes_block_3"
     },
     {
      "type": "pad",
@@ -680,227 +1053,6 @@
     {
      "type": "tag_reference",
      "name": "overshield shader"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "global_damage_section_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 68,
-   "fields": [
-    {
-     "type": "string_id",
-     "name": "name"
-    },
-    {
-     "type": "long_flags",
-     "name": "flags",
-     "definition": "flags_flags_3"
-    },
-    {
-     "type": "real_fraction",
-     "name": "vitality percentage"
-    },
-    {
-     "type": "block",
-     "name": "instant responses",
-     "definition": "instantaneous_damage_repsonse_block_2"
-    },
-    {
-     "type": "block",
-     "name": null,
-     "definition": "g_null_block_2"
-    },
-    {
-     "type": "block",
-     "name": null,
-     "definition": "g_null_block_3"
-    },
-    {
-     "type": "real",
-     "name": "stun time"
-    },
-    {
-     "type": "real",
-     "name": "recharge time"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "string_id",
-     "name": "resurrection restored region name"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "instantaneous_damage_repsonse_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 104,
-   "fields": [
-    {
-     "type": "short_enum",
-     "name": "response type",
-     "definition": "response_type_enum"
-    },
-    {
-     "type": "short_enum",
-     "name": "constraint damage type",
-     "definition": "constraint_damage_type_enum"
-    },
-    {
-     "type": "long_flags",
-     "name": "flags",
-     "definition": "flags_flags_4"
-    },
-    {
-     "type": "real",
-     "name": "damage threshold"
-    },
-    {
-     "type": "tag_reference",
-     "name": "transition effect"
-    },
-    {
-     "type": "struct",
-     "name": "damage effect",
-     "definition": "instantaneous_response_damage_effect_struct"
-    },
-    {
-     "type": "string_id",
-     "name": "region"
-    },
-    {
-     "type": "short_enum",
-     "name": "new state",
-     "definition": "state_enum"
-    },
-    {
-     "type": "short_integer",
-     "name": "runtime region index"
-    },
-    {
-     "type": "string_id",
-     "name": "effect marker name"
-    },
-    {
-     "type": "struct",
-     "name": "damage effect marker",
-     "definition": "instantaneous_response_damage_effect_marker_struct"
-    },
-    {
-     "type": "real",
-     "name": "response delay"
-    },
-    {
-     "type": "tag_reference",
-     "name": "delay effect"
-    },
-    {
-     "type": "string_id",
-     "name": "delay effect marker name"
-    },
-    {
-     "type": "string_id",
-     "name": "constraint/group name"
-    },
-    {
-     "type": "string_id",
-     "name": "ejecting seat label"
-    },
-    {
-     "type": "real_fraction",
-     "name": "skip fraction"
-    },
-    {
-     "type": "string_id",
-     "name": "destroyed child object marker name"
-    },
-    {
-     "type": "real_fraction",
-     "name": "total damage threshold"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "instantaneous_response_damage_effect_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 16,
-   "fields": [
-    {
-     "type": "tag_reference",
-     "name": "transition damage effect"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ],
-   "tag": "ires"
-  },
-  "instantaneous_response_damage_effect_marker_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 4,
-   "fields": [
-    {
-     "type": "string_id",
-     "name": "damage effect marker name"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ],
-   "tag": "irem"
-  },
-  "g_null_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 0,
-   "fields": [
-    {
-     "type": "custom",
-     "name": "-1"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "global_damage_nodes_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 16,
-   "fields": [
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 12
     },
     {
      "type": "terminator",
@@ -969,65 +1121,6 @@
     }
    ]
   },
-  "model_target_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 28,
-   "fields": [
-    {
-     "type": "string_id",
-     "name": "marker name"
-    },
-    {
-     "type": "real",
-     "name": "size"
-    },
-    {
-     "type": "angle",
-     "name": "cone angle"
-    },
-    {
-     "type": "short_integer",
-     "name": "damage section"
-    },
-    {
-     "type": "short_integer",
-     "name": "variant"
-    },
-    {
-     "type": "real_fraction",
-     "name": "targeting relevance"
-    },
-    {
-     "type": "struct",
-     "name": "lock-on data",
-     "definition": "model_target_lock_on_data_struct"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "model_target_lock_on_data_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 8,
-   "fields": [
-    {
-     "type": "long_flags",
-     "name": "flags",
-     "definition": "flags_flags_5"
-    },
-    {
-     "type": "real",
-     "name": "lock on distance"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ],
-   "tag": "MTLO"
-  },
   "model_region_block": {
    "guid": "00000000000000000000000000000000",
    "size": 20,
@@ -1071,7 +1164,7 @@
     {
      "type": "byte_flags",
      "name": "flags",
-     "definition": "flags_flags_6"
+     "definition": "flags_flags_5"
     },
     {
      "type": "char_integer",
@@ -1175,6 +1268,232 @@
     }
    ]
   },
+  "model_block_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 348,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "MODEL_DEFINITION_TAG"
+    },
+    {
+     "type": "tag_reference",
+     "name": "render model"
+    },
+    {
+     "type": "tag_reference",
+     "name": "collision model"
+    },
+    {
+     "type": "tag_reference",
+     "name": "animation"
+    },
+    {
+     "type": "tag_reference",
+     "name": "physics"
+    },
+    {
+     "type": "tag_reference",
+     "name": "physics_model"
+    },
+    {
+     "type": "real",
+     "name": "disappear distance"
+    },
+    {
+     "type": "real",
+     "name": "begin fade distance"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "real",
+     "name": "reduce to L1"
+    },
+    {
+     "type": "real",
+     "name": "reduce to L2"
+    },
+    {
+     "type": "real",
+     "name": "reduce to L3"
+    },
+    {
+     "type": "real",
+     "name": "reduce to L4"
+    },
+    {
+     "type": "real",
+     "name": "reduce to L5"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "short_enum",
+     "name": "shadow fade distance",
+     "definition": "shadow_fade_distance_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "block",
+     "name": "variants",
+     "definition": "model_variant_block_3"
+    },
+    {
+     "type": "block",
+     "name": "materials",
+     "definition": "model_material_block_3"
+    },
+    {
+     "type": "block",
+     "name": "new damage info",
+     "definition": "global_damage_info_block_3"
+    },
+    {
+     "type": "block",
+     "name": "targets",
+     "definition": "model_target_block_2"
+    },
+    {
+     "type": "block",
+     "name": "runtime regions",
+     "definition": "model_region_block_3"
+    },
+    {
+     "type": "block",
+     "name": "runtime nodes",
+     "definition": "model_node_block_3"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "block",
+     "name": "model object data",
+     "definition": "model_object_data_block_3"
+    },
+    {
+     "type": "tag_reference",
+     "name": "default dialogue"
+    },
+    {
+     "type": "tag_reference",
+     "name": "UNUSED"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_7"
+    },
+    {
+     "type": "string_id",
+     "name": "default dialogue effect"
+    },
+    {
+     "type": "array",
+     "name": "render-only node flags",
+     "definition": "render_only_node_flags_array"
+    },
+    {
+     "type": "array",
+     "name": "render-only section flags",
+     "definition": "render_only_section_flags_array"
+    },
+    {
+     "type": "long_flags",
+     "name": "runtime flags",
+     "definition": "runtime_flags_flags"
+    },
+    {
+     "type": "block",
+     "name": "scenario load parameters",
+     "definition": "global_scenario_load_parameters_block_2"
+    },
+    {
+     "type": "tag_reference",
+     "name": "hologram shader"
+    },
+    {
+     "type": "string_id",
+     "name": "hologram control function"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "model_target_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 28,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "real",
+     "name": "size"
+    },
+    {
+     "type": "angle",
+     "name": "cone angle"
+    },
+    {
+     "type": "short_integer",
+     "name": "damage section"
+    },
+    {
+     "type": "short_integer",
+     "name": "variant"
+    },
+    {
+     "type": "real_fraction",
+     "name": "targeting relevance"
+    },
+    {
+     "type": "struct",
+     "name": "lock-on data",
+     "definition": "model_target_lock_on_data_struct"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "model_target_lock_on_data_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_6"
+    },
+    {
+     "type": "real",
+     "name": "lock on distance"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MTLO"
+  },
   "render_only_node_flags_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 1,
@@ -1254,6 +1573,19 @@
     "copy states to all permutations"
    ]
   },
+  "state_enum": {
+   "options": [
+    "default",
+    "minor damage",
+    "medium damage",
+    "major damage",
+    "destroyed",
+    "blurred (DEPRECIATED)",
+    "very blurred (DEPRECIATED)",
+    "shield active (DEPRECIATED)",
+    "shield inactive (DEPRECIATED)"
+   ]
+  },
   "property_flags_flags": {
    "options": [
     "blurred",
@@ -1261,7 +1593,7 @@
     "shielded"
    ]
   },
-  "state_enum": {
+  "state_enum_2": {
    "options": [
     "default",
     "minor damage",
@@ -1336,54 +1668,6 @@
     "passes attached damage to riders"
    ]
   },
-  "collision_damage_reporting_type_enum": {
-   "options": [
-    "teh guardians11",
-    "falling damage",
-    "generic collision damage",
-    "generic melee damage",
-    "generic explosion",
-    "magnum pistol",
-    "plasma pistol",
-    "needler",
-    "smg",
-    "plasma rifle",
-    "battle rifle",
-    "carbine",
-    "shotgun",
-    "sniper rifle",
-    "beam rifle",
-    "rocket launcher",
-    "flak cannon",
-    "brute shot",
-    "disintegrator",
-    "brute plasma rifle",
-    "energy sword",
-    "frag grenade",
-    "plasma grenade",
-    "flag melee damage",
-    "bomb melee damage",
-    "bomb explosion damage",
-    "ball melee damage",
-    "human turret",
-    "plasma turret",
-    "banshee",
-    "ghost",
-    "mongoose",
-    "scorpion",
-    "spectre driver",
-    "spectre gunner",
-    "warthog driver",
-    "warthog gunner",
-    "wraith",
-    "tank",
-    "sentinel beam",
-    "sentinel rpg",
-    "teleporter",
-    "warthog gunner gauss",
-    "warthog gunner rocket"
-   ]
-  },
   "flags_flags_3": {
    "options": [
     "absorbs body damage",
@@ -1443,16 +1727,55 @@
     "forces object to loose vitality"
    ]
   },
-  "flags_flags_5": {
+  "collision_damage_reporting_type_enum": {
    "options": [
-    "locked by human tracking",
-    "locked by plasma tracking",
-    "headshot",
-    "vulnerable",
-    "alwas locked by plasma tracking"
+    "teh guardians11",
+    "falling damage",
+    "generic collision damage",
+    "generic melee damage",
+    "generic explosion",
+    "magnum pistol",
+    "plasma pistol",
+    "needler",
+    "smg",
+    "plasma rifle",
+    "battle rifle",
+    "carbine",
+    "shotgun",
+    "sniper rifle",
+    "beam rifle",
+    "rocket launcher",
+    "flak cannon",
+    "brute shot",
+    "disintegrator",
+    "brute plasma rifle",
+    "energy sword",
+    "frag grenade",
+    "plasma grenade",
+    "flag melee damage",
+    "bomb melee damage",
+    "bomb explosion damage",
+    "ball melee damage",
+    "human turret",
+    "plasma turret",
+    "banshee",
+    "ghost",
+    "mongoose",
+    "scorpion",
+    "spectre driver",
+    "spectre gunner",
+    "warthog driver",
+    "warthog gunner",
+    "wraith",
+    "tank",
+    "sentinel beam",
+    "sentinel rpg",
+    "teleporter",
+    "warthog gunner gauss",
+    "warthog gunner rocket"
    ]
   },
-  "flags_flags_6": {
+  "flags_flags_5": {
    "options": [
     "cannot be chosen randomly"
    ]
@@ -1462,6 +1785,15 @@
     "not set",
     "user defined",
     "auto generated"
+   ]
+  },
+  "flags_flags_6": {
+   "options": [
+    "locked by human tracking",
+    "locked by plasma tracking",
+    "headshot",
+    "vulnerable",
+    "alwas locked by plasma tracking"
    ]
   },
   "flags_flags_7": {
@@ -1486,5 +1818,27 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "model_variant_state_block": {
+   "0": "model_variant_state_block__v0",
+   "1": "model_variant_state_block"
+  },
+  "instantaneous_response_damage_effect_struct": {
+   "0": "instantaneous_response_damage_effect_struct__v0",
+   "1": "instantaneous_response_damage_effect_struct"
+  },
+  "instantaneous_response_damage_effect_marker_struct": {
+   "0": "instantaneous_response_damage_effect_marker_struct__v0",
+   "1": "instantaneous_response_damage_effect_marker_struct"
+  },
+  "global_damage_info_block": {
+   "0": "global_damage_info_block__v0",
+   "1": "global_damage_info_block"
+  },
+  "model_block_struct": {
+   "0": "model_block_struct__v0",
+   "1": "model_block_struct"
+  }
+ }
 }

@@ -487,12 +487,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "long_integer",
@@ -506,12 +506,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "long_integer",
@@ -535,7 +535,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -695,7 +695,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real",
@@ -818,12 +818,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real_vector_2d",
@@ -832,12 +832,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "terminator",
@@ -1341,5 +1341,6 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

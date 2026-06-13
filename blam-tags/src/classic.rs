@@ -42,19 +42,32 @@ use crate::data::{TagBlockData, TagStructData, TagSubChunkContent, TagSubChunkEn
 use crate::fields::TagFieldType;
 use crate::file::{TagContainer, TagFile, TagFileHeader};
 use crate::io::Endian;
-use crate::layout::TagLayout;
+use crate::layout::{TagFieldLayout, TagLayout};
 use crate::stream::TagStream;
 
 /// Which classic engine a tag belongs to. Selects signature byte order
-/// and a couple of per-field encoding quirks (string_id, group reversal).
+/// and a family of per-field encoding quirks. The four Halo 2 variants
+/// are distinguished by the offset-60 engine word (`ambl`/`LAMB`/`MLAB`/
+/// `BLM!`, stored little-endian / reversed on disk) — each turns on a
+/// different set of "legacy" read rules, matching HABT's
+/// `HAS_LEGACY_{HEADER,STRINGS,PADDING}` flags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClassicEngine {
     /// Halo 1 / Halo: Combat Evolved (Anniversary). Big-endian signature
     /// words, inline 32-byte strings, no string_id table.
     HaloCe,
-    /// Halo 2. Little-endian (reversed) signature words, length-prefixed
-    /// string_id values with trailing bytes.
-    Halo2,
+    /// Halo 2 V1 (`ambl`). 12-byte block/struct headers, 32-byte inline
+    /// `old_string_id`, `useless_pad` occupies its real length.
+    Halo2V1,
+    /// Halo 2 V2 (`LAMB`). 16-byte headers, 32-byte inline
+    /// `old_string_id`, `useless_pad` occupies its real length.
+    Halo2V2,
+    /// Halo 2 V3 (`MLAB`). 16-byte headers, modern (4-byte + trailing)
+    /// `old_string_id`, `useless_pad` occupies its real length.
+    Halo2V3,
+    /// Halo 2 V4 / latest (`BLM!`). The modern MCC form: 16-byte headers,
+    /// 4-byte + trailing `old_string_id`, `useless_pad` is 0 bytes.
+    Halo2V4,
 }
 
 impl ClassicEngine {
@@ -65,8 +78,36 @@ impl ClassicEngine {
     pub fn body_endian(self) -> Endian {
         match self {
             ClassicEngine::HaloCe => Endian::Be,
-            ClassicEngine::Halo2 => Endian::Le,
+            _ => Endian::Le,
         }
+    }
+
+    /// Any of the four Halo 2 variants (i.e. not Halo CE).
+    fn is_halo2(self) -> bool {
+        !matches!(self, ClassicEngine::HaloCe)
+    }
+
+    /// Block/struct headers are the 12-byte legacy form (`4s2hi`:
+    /// version + count are `i16`) instead of the 16-byte `4s3i` form.
+    /// Only Halo 2 V1 (`ambl`).
+    fn legacy_header(self) -> bool {
+        matches!(self, ClassicEngine::Halo2V1)
+    }
+
+    /// `old_string_id` is a 32-byte inline null-terminated string (like a
+    /// CE `string`) rather than a 4-byte length + trailing bytes. Halo 2
+    /// V1/V2 (`ambl`/`LAMB`).
+    fn legacy_strings(self) -> bool {
+        matches!(self, ClassicEngine::Halo2V1 | ClassicEngine::Halo2V2)
+    }
+
+    /// `useless_pad` fields occupy their real `length` on disk rather than
+    /// 0 bytes. Halo 2 V1/V2/V3 (`ambl`/`LAMB`/`MLAB`).
+    fn legacy_padding(self) -> bool {
+        matches!(
+            self,
+            ClassicEngine::Halo2V1 | ClassicEngine::Halo2V2 | ClassicEngine::Halo2V3
+        )
     }
 }
 
@@ -86,6 +127,12 @@ pub enum ClassicError {
     },
     /// Body had trailing bytes the layout-driven walk never consumed.
     TrailingBytes { consumed: usize, total: usize },
+    /// A block/struct header's `count`/`element_size` pair is implausible
+    /// (count*size overflows, or a nonzero count with a zero element
+    /// size). Almost always a cursor desync that read garbage as a
+    /// header — caught here so a single tag fails cleanly instead of
+    /// driving `Vec::with_capacity(count)` into a multi-gigabyte alloc.
+    CorruptBlockHeader { count: usize, elem_size: usize },
 }
 
 impl std::fmt::Display for ClassicError {
@@ -98,6 +145,9 @@ impl std::fmt::Display for ClassicError {
             }
             ClassicError::TrailingBytes { consumed, total } => {
                 write!(f, "layout walk consumed {consumed} of {total} body bytes")
+            }
+            ClassicError::CorruptBlockHeader { count, elem_size } => {
+                write!(f, "corrupt block header: count={count} element_size={elem_size}")
             }
         }
     }
@@ -136,17 +186,23 @@ impl ClassicHeader {
         let be = u32::from_be_bytes(raw_engine);
         let le = u32::from_le_bytes(raw_engine);
 
-        // CE: big-endian "blam". H2: little-endian "BLM!"/"LAMB"/"MLAB"/"BALM".
+        // CE: big-endian "blam". H2: little-endian — the on-disk word
+        // reversed (== `le.to_be_bytes()`) gives the logical engine tag.
+        // Each H2 logical tag selects a sub-version with its own legacy
+        // read rules: ambl=V1, LAMB=V2, MLAB=V3, BLM!=V4 (latest/MCC).
         let (engine, group_tag, eng_le) = if be == u32::from_be_bytes(*b"blam") {
             (ClassicEngine::HaloCe, raw_group, false)
-        } else if matches!(
-            &le.to_be_bytes(),
-            b"BLM!" | b"LAMB" | b"MLAB" | b"BALM"
-        ) {
+        } else if let Some(h2) = match &le.to_be_bytes() {
+            b"ambl" => Some(ClassicEngine::Halo2V1),
+            b"LAMB" => Some(ClassicEngine::Halo2V2),
+            b"MLAB" => Some(ClassicEngine::Halo2V3),
+            b"BLM!" => Some(ClassicEngine::Halo2V4),
+            _ => None,
+        } {
             // Reverse the on-disk (little-endian) bytes to get logical order.
             let mut g = raw_group;
             g.reverse();
-            (ClassicEngine::Halo2, g, true)
+            (h2, g, true)
         } else {
             return None;
         };
@@ -165,7 +221,7 @@ impl ClassicHeader {
         let cb: [u8; 4] = bytes[40..44].try_into().ok()?;
         let (version, checksum) = match engine {
             ClassicEngine::HaloCe => (u16::from_be_bytes(vb), u32::from_be_bytes(cb)),
-            ClassicEngine::Halo2 => (u16::from_le_bytes(vb), u32::from_le_bytes(cb)),
+            _ => (u16::from_le_bytes(vb), u32::from_le_bytes(cb)),
         };
         Some((
             ClassicHeader { group_tag, engine: engine_logical, version, checksum },
@@ -216,6 +272,105 @@ fn rd_i32(raw: &[u8], off: usize, endian: Endian) -> i32 {
     rd_u32(raw, off, endian) as i32
 }
 
+/// Resolve a base (latest) struct index to the variant for on-disk
+/// `version`, using the layout's per-base version table. Returns `base`
+/// for single-version structs, an out-of-range version, or any engine
+/// with an empty table (MCC / Halo CE). See
+/// [`TagLayout::struct_version_table`].
+fn resolve_version_variant(layout: &TagLayout, base: u32, version: u32) -> u32 {
+    match layout.struct_version_table.get(base as usize) {
+        Some(Some(v)) => v.get(version as usize).copied().unwrap_or(base),
+        _ => base,
+    }
+}
+
+/// Extract the `version` field from a 12/16-byte Halo 2 block/struct
+/// header (little-endian): an `i32` at +4 for the modern 16-byte form, an
+/// `i16` at +4 for the legacy 12-byte (`4s2hi`) form.
+fn header_version(h: &[u8], engine: ClassicEngine) -> u32 {
+    if engine.legacy_header() {
+        i16::from_le_bytes([h[4], h[5]]) as u32
+    } else {
+        u32::from_le_bytes([h[4], h[5], h[6], h[7]])
+    }
+}
+
+/// The struct index to use when statically sizing an inline `<Struct>`
+/// field. An UNTAGGED inline struct is always on-disk version 0 (HABT
+/// picks `version==0`), so it resolves to its v0 variant. A TAGGED inline
+/// struct (one that carries a block-style header, e.g. `MAPP`) selects
+/// its version from that header at decode time — statically we use the
+/// base (latest); the decoder/encoder override the size from the live
+/// element's resolved `struct_index`.
+fn inline_struct_static_index(layout: &TagLayout, base: u32) -> u32 {
+    let tagged = layout.struct_tags.get(base as usize).copied().unwrap_or(0) != 0;
+    if tagged {
+        base
+    } else {
+        resolve_version_variant(layout, base, 0)
+    }
+}
+
+/// On-disk size (bytes) of a single struct field for `engine`, using
+/// classic packed layout (no alignment). Two field kinds change width
+/// across the Halo 2 legacy variants, so the running offset has to be
+/// computed per engine rather than read from the precomputed
+/// `field.offset` (which always reflects the non-legacy form):
+/// - `useless_pad`: its real `length` when legacy-padding, else 0.
+/// - `old_string_id`: a 32-byte inline string when legacy-strings, else
+///   the modern 4-byte length slot.
+fn classic_field_size(layout: &TagLayout, field: &TagFieldLayout, engine: ClassicEngine) -> usize {
+    match field.field_type {
+        TagFieldType::Terminator => 0,
+        TagFieldType::Struct => {
+            classic_struct_size(layout, inline_struct_static_index(layout, field.definition), engine)
+        }
+        TagFieldType::Array => {
+            // Array element structs are versionless on disk (always v0,
+            // like an untagged inline struct).
+            let a = &layout.array_layouts[field.definition as usize];
+            let esi = resolve_version_variant(layout, a.struct_index, 0);
+            classic_struct_size(layout, esi, engine) * a.count as usize
+        }
+        TagFieldType::Pad | TagFieldType::Skip => field.definition as usize,
+        TagFieldType::UselessPad => {
+            if engine.legacy_padding() {
+                field.definition as usize
+            } else {
+                0
+            }
+        }
+        TagFieldType::OldStringId => {
+            if engine.legacy_strings() {
+                32
+            } else {
+                4
+            }
+        }
+        TagFieldType::Custom => field.definition as usize,
+        _ => layout.field_types[field.type_index as usize].size as usize,
+    }
+}
+
+/// On-disk size of a struct's fixed region for `engine` (sum of its
+/// fields). For non-legacy engines this equals `struct_layouts[i].size`;
+/// for legacy variants it grows by the `useless_pad` / `old_string_id`
+/// deltas above. Field offsets within a struct are the running prefix
+/// sums of [`classic_field_size`].
+fn classic_struct_size(layout: &TagLayout, struct_index: u32, engine: ClassicEngine) -> usize {
+    let mut size = 0;
+    let mut fi = layout.struct_layouts[struct_index as usize].first_field_index as usize;
+    loop {
+        let f = &layout.fields[fi];
+        if f.field_type == TagFieldType::Terminator {
+            break;
+        }
+        size += classic_field_size(layout, f, engine);
+        fi += 1;
+    }
+    size
+}
+
 /// Decode then re-encode a classic tag body, returning the re-encoded
 /// bytes. The byte-exact roundtrip gate: `classic_roundtrip(body, ..) ==
 /// body` for a well-formed tag. Keeps the internal
@@ -226,7 +381,7 @@ pub fn classic_roundtrip(
     engine: ClassicEngine,
 ) -> Result<Vec<u8>, ClassicError> {
     let root = read_classic_body(body, layout, engine)?;
-    Ok(write_classic_body(layout, &root))
+    Ok(write_classic_body(layout, &root, engine))
 }
 
 /// Read a complete classic (Halo CE / H2) tag into a [`TagFile`], using
@@ -302,7 +457,7 @@ pub fn classic_checksum(body: &[u8]) -> u32 {
 /// `0xFFFFFFFF` sentinel (some HEK tags) is preserved so an unmodified
 /// tag round-trips byte-exact.
 pub(crate) fn write_classic_tag(file: &TagFile, engine: ClassicEngine, header: &[u8]) -> Vec<u8> {
-    let body = write_classic_body(&file.tag_stream.layout, &file.tag_stream.data);
+    let body = write_classic_body(&file.tag_stream.layout, &file.tag_stream.data, engine);
     let checksum = if file.header.checksum == 0xFFFF_FFFF {
         0xFFFF_FFFF
     } else {
@@ -310,7 +465,7 @@ pub(crate) fn write_classic_tag(file: &TagFile, engine: ClassicEngine, header: &
     };
     let checksum_bytes = match engine {
         ClassicEngine::HaloCe => checksum.to_be_bytes(),
-        ClassicEngine::Halo2 => checksum.to_le_bytes(),
+        _ => checksum.to_le_bytes(),
     };
 
     let mut out = Vec::with_capacity(64 + body.len());
@@ -320,15 +475,45 @@ pub(crate) fn write_classic_tag(file: &TagFile, engine: ClassicEngine, header: &
     out
 }
 
-/// Read a Halo 2 block header (16 bytes, little-endian): `4cc name +
-/// version(i32) + count(i32) + size(i32)`. The `size` is the element
-/// struct size (H2 blocks are self-describing). Returns the raw header
-/// bytes (preserved for write) plus the count + element size.
-fn read_h2_block_header(cur: &mut Cursor) -> Result<(Vec<u8>, usize, usize), ClassicError> {
-    let h = cur.take(16, "h2 block header")?.to_vec();
-    let count = u32::from_le_bytes([h[8], h[9], h[10], h[11]]) as usize;
-    let size = u32::from_le_bytes([h[12], h[13], h[14], h[15]]) as usize;
-    Ok((h, count, size))
+/// Read a Halo 2 block header, little-endian. The modern (V2/V3/V4) form
+/// is 16 bytes — `4cc name + version(i32) + count(i32) + size(i32)`. The
+/// legacy V1 (`ambl`) form is 12 bytes — `4cc + version(i16) + count(i16)
+/// + size(i32)`. The `size` is the element struct size (H2 blocks are
+/// self-describing). Returns the raw header bytes (preserved for write)
+/// plus the count + element size.
+fn read_h2_block_header(
+    cur: &mut Cursor,
+    engine: ClassicEngine,
+) -> Result<(Vec<u8>, usize, usize), ClassicError> {
+    if engine.legacy_header() {
+        let h = cur.take(12, "h2 block header (legacy)")?.to_vec();
+        let count = i16::from_le_bytes([h[6], h[7]]) as usize;
+        let size = u32::from_le_bytes([h[8], h[9], h[10], h[11]]) as usize;
+        Ok((h, count, size))
+    } else {
+        let h = cur.take(16, "h2 block header")?.to_vec();
+        let count = u32::from_le_bytes([h[8], h[9], h[10], h[11]]) as usize;
+        let size = u32::from_le_bytes([h[12], h[13], h[14], h[15]]) as usize;
+        Ok((h, count, size))
+    }
+}
+
+/// Validate a block/struct header's `(count, element_size)` and return
+/// the total fixed-region byte length, guarding against the allocation
+/// blow-ups a desynced cursor can trigger. A garbage header may carry an
+/// enormous `count` (the legacy 12-byte form reads it as an `i16`, so a
+/// negative value sign-extends to ~1.8e19) and/or a zero `element_size`;
+/// either lets the subsequent `cur.take` pass while
+/// `Vec::with_capacity(count)` allocates gigabytes from one tag. We reject
+/// a nonzero count with a zero element size and use a checked multiply;
+/// the `take` that follows then bounds `count` by the remaining bytes.
+fn checked_block_extent(count: usize, elem_size: usize) -> Result<usize, ClassicError> {
+    if elem_size == 0 && count != 0 {
+        return Err(ClassicError::CorruptBlockHeader { count, elem_size });
+    }
+    count
+        .checked_mul(elem_size)
+        .ok_or(ClassicError::CorruptBlockHeader { count, elem_size })
 }
 
 /// Halo 2 only: if struct `child_si` is tagged (e.g. `MAPP`) and the
@@ -341,7 +526,7 @@ fn read_h2_struct_header(
     cur: &mut Cursor,
     engine: ClassicEngine,
 ) -> Result<Option<Vec<u8>>, ClassicError> {
-    if engine != ClassicEngine::Halo2 {
+    if !engine.is_halo2() {
         return Ok(None);
     }
     let tag = layout.struct_tags.get(child_si as usize).copied().unwrap_or(0);
@@ -350,7 +535,8 @@ fn read_h2_struct_header(
     }
     let rem = &cur.data[cur.pos..];
     if rem.len() >= 4 && u32::from_le_bytes([rem[0], rem[1], rem[2], rem[3]]) == tag {
-        Ok(Some(cur.take(16, "h2 struct header")?.to_vec()))
+        let n = if engine.legacy_header() { 12 } else { 16 };
+        Ok(Some(cur.take(n, "h2 struct header")?.to_vec()))
     } else {
         Ok(None)
     }
@@ -369,27 +555,42 @@ pub(crate) fn read_classic_body(
     let root_block_index = layout.header.tag_group_block_index;
     let struct_index = layout.block_layouts[root_block_index as usize].struct_index;
 
-    // Halo 2: a 16-byte block header (count + element size) leads the
-    // body. Halo CE: headerless — the single root element leads directly.
-    let (header, count, elem_size) = match engine {
-        ClassicEngine::HaloCe => (None, 1usize, layout.struct_layouts[struct_index as usize].size),
-        ClassicEngine::Halo2 => {
-            let (h, c, s) = read_h2_block_header(&mut cur)?;
-            (Some(h), c, s)
-        }
+    // Halo 2: a block header (count + element size) leads the body.
+    // Halo CE: headerless — the single root element leads directly.
+    let (header, count, elem_size) = if engine.is_halo2() {
+        let (h, c, s) = read_h2_block_header(&mut cur, engine)?;
+        (Some(h), c, s)
+    } else {
+        (None, 1usize, layout.struct_layouts[struct_index as usize].size)
     };
 
-    let raw_data = cur.take(count * elem_size, "root struct").map(<[u8]>::to_vec)?;
+    // The root block header's version selects the root struct FieldSet.
+    let version = header.as_ref().map_or(0, |h| header_version(h, engine));
+    let struct_index = resolve_version_variant(layout, struct_index, version);
+
+    let total = checked_block_extent(count, elem_size)?;
+    let raw_data = cur.take(total, "root struct").map(<[u8]>::to_vec)?;
     let mut elements = Vec::with_capacity(count);
     for i in 0..count {
         let elem_raw = raw_data[i * elem_size..(i + 1) * elem_size].to_vec();
-        let sub = decode_struct_trailing(layout, struct_index, &elem_raw, &mut cur, engine, endian)?;
+        let sub = decode_struct_element(layout, struct_index, &elem_raw, &mut cur, engine, endian)?;
         elements.push(TagStructData { struct_index, sub_chunks: sub, classic_struct_header: None });
     }
 
-    if cur.pos != body.len() {
-        return Err(ClassicError::TrailingBytes { consumed: cur.pos, total: body.len() });
-    }
+    // Bytes after the structured body are appended sample/cache data that
+    // no layout field references (e.g. multi-MB ambience-sound audio).
+    // Both we and HABT read only the fixed structure (the trailing is
+    // loaded by offset/cache, not via a tag field); preserve it verbatim
+    // for a byte-exact round-trip. Halo CE has no such appendage, so any
+    // CE trailing is a real desync and still errors.
+    let classic_trailing = if cur.pos != body.len() {
+        if !engine.is_halo2() {
+            return Err(ClassicError::TrailingBytes { consumed: cur.pos, total: body.len() });
+        }
+        Some(body[cur.pos..].to_vec())
+    } else {
+        None
+    };
 
     Ok(TagBlockData {
         block_index: root_block_index,
@@ -398,16 +599,38 @@ pub(crate) fn read_classic_body(
         endian,
         elements,
         classic_block_header: header,
+        classic_trailing,
     })
 }
 
-/// Walk a struct's sub-chunk-bearing fields in order, pulling each
-/// field's trailing/variable data from the cursor and building the
-/// `sub_chunks` list. `raw` is the struct's already-read fixed bytes.
+/// Decode one struct element: walk its fields from offset 0 of `raw`.
+/// Thin wrapper over [`decode_struct_trailing`] for the block/root
+/// callers (which pass a whole element's fixed bytes).
+fn decode_struct_element(
+    layout: &TagLayout,
+    struct_index: u32,
+    raw: &[u8],
+    cur: &mut Cursor,
+    engine: ClassicEngine,
+    endian: Endian,
+) -> Result<Vec<TagSubChunkEntry>, ClassicError> {
+    let mut off = 0usize;
+    decode_struct_trailing(layout, struct_index, raw, &mut off, cur, engine, endian)
+}
+
+/// Walk a struct's fields in order, pulling each field's trailing/variable
+/// data from the cursor and building the `sub_chunks` list. `raw` is the
+/// enclosing element's fixed bytes and `off` the running position into it,
+/// shared with the parent: an inline `<Struct>` (and array elements) keep
+/// reading from the SAME `raw`/`off`, so a tag'd struct whose on-disk
+/// version makes it wider/narrower advances the parent's cursor by exactly
+/// what it consumes — mirroring HABT's sequential read of the fixed-data
+/// stream. The block header's element size stays authoritative for `raw`.
 fn decode_struct_trailing(
     layout: &TagLayout,
     struct_index: u32,
     raw: &[u8],
+    off: &mut usize,
     cur: &mut Cursor,
     engine: ClassicEngine,
     endian: Endian,
@@ -420,42 +643,87 @@ fn decode_struct_trailing(
         if field.field_type == TagFieldType::Terminator {
             break;
         }
-        let off = field.offset as usize;
-        // Guard against a desynced cursor (e.g. an unhandled H2 inline
-        // struct header) leaving `off` past this element's fixed bytes —
-        // fail cleanly instead of panicking on an out-of-range slice.
+        // Truncated element: when an on-disk element is shorter than its
+        // (newer/larger) layout, the trailing fields simply aren't present
+        // — HABT clamps reads to the available bytes and treats the rest as
+        // absent defaults (tag_interface.py:1487). Offsets only grow, so
+        // once `*off` reaches the element end every remaining field is
+        // absent: no fixed bytes (they aren't in `raw`/`raw_data` either,
+        // so re-emitting `raw_data` stays byte-exact), no trailing data, no
+        // sub-chunk. Stop here. (E.g. a v1 `model` element stored at the
+        // older 208-byte size: fields past 208 carry no `default dialogue`
+        // tag_reference, etc.)
+        if *off >= raw.len() {
+            break;
+        }
+        // Inline structs/arrays recurse on the shared `raw`/`off` and
+        // advance it themselves; every other field reads `fsize` fixed
+        // bytes at `*off` then advances past them.
+        if field.field_type == TagFieldType::Struct {
+            // A TAGGED inline struct carries a block-style header (4cc +
+            // version + count + size) at the front of the trailing stream;
+            // its version selects the FieldSet variant. Consume + preserve
+            // it. An untagged inline struct is always version 0.
+            let base_si = field.definition;
+            let struct_header = read_h2_struct_header(layout, base_si, cur, engine)?;
+            let version = struct_header.as_ref().map_or(0, |h| header_version(h, engine));
+            let child_si = resolve_version_variant(layout, base_si, version);
+            let child_sub =
+                decode_struct_trailing(layout, child_si, raw, off, cur, engine, endian)?;
+            entries.push(TagSubChunkEntry {
+                field_index: Some(fi as u32),
+                content: TagSubChunkContent::Struct(TagStructData {
+                    struct_index: child_si,
+                    sub_chunks: child_sub,
+                    classic_struct_header: struct_header,
+                }),
+            });
+            fi += 1;
+            continue;
+        }
+        if field.field_type == TagFieldType::Array {
+            let array = &layout.array_layouts[field.definition as usize];
+            let count = array.count as usize;
+            // Array element structs are versionless (always v0).
+            let asi = resolve_version_variant(layout, array.struct_index, 0);
+            let mut elems = Vec::with_capacity(count);
+            for _ in 0..count {
+                let sub = decode_struct_trailing(layout, asi, raw, off, cur, engine, endian)?;
+                elems.push(TagStructData {
+                    struct_index: asi,
+                    sub_chunks: sub,
+                    classic_struct_header: None,
+                });
+            }
+            entries.push(TagSubChunkEntry {
+                field_index: Some(fi as u32),
+                content: TagSubChunkContent::Array(elems),
+            });
+            fi += 1;
+            continue;
+        }
+
+        let fsize = classic_field_size(layout, field, engine);
+        // A sub-chunk field needs its 4-byte inline slot (count / size /
+        // length) fully present to know whether — and how much — trailing
+        // data to read. At a truncated element's tail that slot can fall
+        // partly past the end; like HABT's clamp, treat such a field as
+        // absent (no sub-chunk, no trailing) and advance past its nominal
+        // fixed bytes. Plain fields carry no sub-chunk and need no guard.
         if matches!(
             field.field_type,
-            TagFieldType::Block
-                | TagFieldType::Data
-                | TagFieldType::TagReference
-                | TagFieldType::StringId
-                | TagFieldType::OldStringId
-                | TagFieldType::Struct
-                | TagFieldType::Array
-        ) {
-            let end = match field.field_type {
-                TagFieldType::Struct => {
-                    off + layout.struct_layouts[field.definition as usize].size
-                }
-                TagFieldType::Array => {
-                    let a = &layout.array_layouts[field.definition as usize];
-                    off + layout.struct_layouts[a.struct_index as usize].size * a.count as usize
-                }
-                TagFieldType::TagReference => off + 16,
-                _ => off + 4,
-            };
-            if end > raw.len() {
-                return Err(ClassicError::UnexpectedEof {
-                    context: "struct fixed field (cursor desync?)",
-                    need: end,
-                    have: raw.len(),
-                });
+            TagFieldType::Block | TagFieldType::Data | TagFieldType::TagReference | TagFieldType::StringId
+        ) || (field.field_type == TagFieldType::OldStringId && !engine.legacy_strings())
+        {
+            if *off + 4 > raw.len() {
+                *off += fsize;
+                fi += 1;
+                continue;
             }
         }
         match field.field_type {
             TagFieldType::Block => {
-                let count = rd_u32(raw, off, endian) as usize;
+                let count = rd_u32(raw, *off, endian) as usize;
                 let block = decode_block(layout, field.definition, count, cur, engine, endian)?;
                 entries.push(TagSubChunkEntry {
                     field_index: Some(fi as u32),
@@ -463,7 +731,7 @@ fn decode_struct_trailing(
                 });
             }
             TagFieldType::Data => {
-                let len = rd_u32(raw, off, endian) as usize;
+                let len = rd_u32(raw, *off, endian) as usize;
                 let blob = cur.take(len, "data blob")?.to_vec();
                 entries.push(TagSubChunkEntry {
                     field_index: Some(fi as u32),
@@ -471,22 +739,21 @@ fn decode_struct_trailing(
                 });
             }
             TagFieldType::TagReference => {
-                let group = rd_i32(raw, off, endian);
+                let group = rd_i32(raw, *off, endian);
                 // The length is signed: H2 null references carry a valid
                 // group but length -1 (CE used group == -1). Treat any
-                // non-positive length as "no path".
-                let len_i = rd_i32(raw, off + 8, endian);
+                // non-positive length as "no path". At a truncated tail the
+                // group (off..off+4) can be present while the length word
+                // (off+8..off+12) is past the end — then there's no path.
+                let len_i = if *off + 12 <= raw.len() { rd_i32(raw, *off + 8, endian) } else { 0 };
                 let len = if len_i > 0 { len_i as usize } else { 0 };
                 // The MCC `TagReference` payload is `group_tag(4) +
                 // null-terminated path`. The classic inline header keeps
                 // the group (raw[off..off+4]); only `path + NUL` is
-                // trailing. Prepend the inline group bytes so the
-                // payload matches the MCC convention the field
-                // readers/renderers expect — the encoder strips them
-                // back off (the group stays in raw_data, so byte-exact).
-                let mut payload = raw[off..off + 4].to_vec();
+                // trailing. Prepend the inline group bytes so the payload
+                // matches the MCC convention; the encoder strips them back.
+                let mut payload = raw[*off..*off + 4].to_vec();
                 if group != -1 && len != 0 {
-                    // path + NUL terminator are stored trailing.
                     payload.extend_from_slice(cur.take(len + 1, "tag_reference path")?);
                 }
                 entries.push(TagSubChunkEntry {
@@ -494,57 +761,35 @@ fn decode_struct_trailing(
                     content: TagSubChunkContent::TagReference(payload),
                 });
             }
-            TagFieldType::StringId | TagFieldType::OldStringId => {
-                // H2: inline (pad:u16, length:u16) big-endian, then
-                // `length` trailing string bytes. (Non-legacy MCC H2
-                // treats old_string_id identically to string_id.)
-                let len = u16::from_be_bytes([raw[off + 2], raw[off + 3]]) as usize;
+            TagFieldType::StringId => {
+                // Inline (pad:u16, length:u16) big-endian, then `length`
+                // trailing string bytes.
+                let len = u16::from_be_bytes([raw[*off + 2], raw[*off + 3]]) as usize;
                 let s = cur.take(len, "string_id value")?.to_vec();
-                let content = if field.field_type == TagFieldType::OldStringId {
-                    TagSubChunkContent::OldStringId(s)
+                entries.push(TagSubChunkEntry {
+                    field_index: Some(fi as u32),
+                    content: TagSubChunkContent::StringId(s),
+                });
+            }
+            TagFieldType::OldStringId => {
+                if engine.legacy_strings() {
+                    // Legacy (ambl/LAMB): a 32-byte inline null-terminated
+                    // string living entirely in the fixed bytes — no
+                    // trailing data, no sub-chunk for a byte-exact round.
                 } else {
-                    TagSubChunkContent::StringId(s)
-                };
-                entries.push(TagSubChunkEntry { field_index: Some(fi as u32), content });
-            }
-            TagFieldType::Struct => {
-                let child_si = field.definition;
-                let child_size = layout.struct_layouts[child_si as usize].size;
-                let child_raw = &raw[off..off + child_size];
-                // H2: a tag'd inline struct (e.g. MAPP) carries a 16-byte
-                // block-style header in the trailing stream before its
-                // nested data. Consume + preserve it if present.
-                let struct_header = read_h2_struct_header(layout, child_si, cur, engine)?;
-                let child_sub =
-                    decode_struct_trailing(layout, child_si, child_raw, cur, engine, endian)?;
-                entries.push(TagSubChunkEntry {
-                    field_index: Some(fi as u32),
-                    content: TagSubChunkContent::Struct(TagStructData {
-                        struct_index: child_si,
-                        sub_chunks: child_sub,
-                        classic_struct_header: struct_header,
-                    }),
-                });
-            }
-            TagFieldType::Array => {
-                let array = &layout.array_layouts[field.definition as usize];
-                let (asi, count) = (array.struct_index, array.count as usize);
-                let es = layout.struct_layouts[asi as usize].size;
-                let mut elems = Vec::with_capacity(count);
-                for i in 0..count {
-                    let elem_raw = &raw[off + i * es..off + (i + 1) * es];
-                    let sub = decode_struct_trailing(layout, asi, elem_raw, cur, engine, endian)?;
-                    elems.push(TagStructData { struct_index: asi, sub_chunks: sub, classic_struct_header: None });
+                    let len = u16::from_be_bytes([raw[*off + 2], raw[*off + 3]]) as usize;
+                    let s = cur.take(len, "old_string_id value")?.to_vec();
+                    entries.push(TagSubChunkEntry {
+                        field_index: Some(fi as u32),
+                        content: TagSubChunkContent::OldStringId(s),
+                    });
                 }
-                entries.push(TagSubChunkEntry {
-                    field_index: Some(fi as u32),
-                    content: TagSubChunkContent::Array(elems),
-                });
             }
-            // Everything else lives entirely in the struct's fixed bytes
-            // (already captured in `raw`) — nothing trailing to read.
+            // Everything else lives entirely in the fixed bytes (already
+            // captured in `raw`) — nothing trailing to read.
             _ => {}
         }
+        *off += fsize;
         fi += 1;
     }
     Ok(entries)
@@ -571,27 +816,31 @@ fn decode_block(
             endian,
             elements: Vec::new(),
             classic_block_header: None,
+            classic_trailing: None,
         });
     }
 
-    // Halo 2: a 16-byte block header (authoritative count + element
-    // size) precedes the elements. Halo CE: headerless, size from layout.
-    let (header, count, elem_size) = match engine {
-        ClassicEngine::HaloCe => {
-            (None, inline_count, layout.struct_layouts[struct_index as usize].size)
-        }
-        ClassicEngine::Halo2 => {
-            let (h, c, s) = read_h2_block_header(cur)?;
-            (Some(h), c, s)
-        }
+    // Halo 2: a block header (authoritative count + element size)
+    // precedes the elements. Halo CE: headerless, size from layout.
+    let (header, count, elem_size) = if engine.is_halo2() {
+        let (h, c, s) = read_h2_block_header(cur, engine)?;
+        (Some(h), c, s)
+    } else {
+        (None, inline_count, layout.struct_layouts[struct_index as usize].size)
     };
 
-    let raw_data = cur.take(count * elem_size, "block elements")?.to_vec();
+    // The block header's version selects which FieldSet variant the
+    // elements use (older versions have a different on-disk layout).
+    let version = header.as_ref().map_or(0, |h| header_version(h, engine));
+    let struct_index = resolve_version_variant(layout, struct_index, version);
+
+    let total = checked_block_extent(count, elem_size)?;
+    let raw_data = cur.take(total, "block elements")?.to_vec();
 
     let mut elements = Vec::with_capacity(count);
     for i in 0..count {
         let elem_raw = raw_data[i * elem_size..(i + 1) * elem_size].to_vec();
-        let sub = decode_struct_trailing(layout, struct_index, &elem_raw, cur, engine, endian)?;
+        let sub = decode_struct_element(layout, struct_index, &elem_raw, cur, engine, endian)?;
         elements.push(TagStructData { struct_index, sub_chunks: sub, classic_struct_header: None });
     }
 
@@ -602,6 +851,7 @@ fn decode_block(
         endian,
         elements,
         classic_block_header: header,
+        classic_trailing: None,
     })
 }
 
@@ -613,11 +863,20 @@ fn decode_block(
 /// edits (add/remove block elements, resize data) serialize correctly.
 /// The adjacent runtime-pointer bytes are left untouched. For an
 /// unmodified tree this is a no-op, so read→write stays byte-exact.
-pub(crate) fn write_classic_body(layout: &TagLayout, root: &TagBlockData) -> Vec<u8> {
+pub(crate) fn write_classic_body(
+    layout: &TagLayout,
+    root: &TagBlockData,
+    engine: ClassicEngine,
+) -> Vec<u8> {
     let mut out = Vec::new();
     // The root is just a block (1 element) — emit it the same way,
     // including the Halo 2 block header if present.
-    encode_block(layout, root, &mut out);
+    encode_block(layout, root, engine, &mut out);
+    // Re-emit any appended sample/cache data captured past the structured
+    // body (Halo 2 root only — preserved verbatim for byte-exactness).
+    if let Some(trailing) = &root.classic_trailing {
+        out.extend_from_slice(trailing);
+    }
     out
 }
 
@@ -630,10 +889,31 @@ fn wr_u32(raw: &mut [u8], off: usize, v: u32, endian: Endian) {
     raw[off..off + 4].copy_from_slice(&b);
 }
 
+/// Rewrite one element's inline count/length slots from the live model.
+/// Thin wrapper over [`sync_fixed_counts`] for the block encoder.
+fn sync_fixed_counts_element(
+    layout: &TagLayout,
+    raw: &mut [u8],
+    elem: &TagStructData,
+    engine: ClassicEngine,
+    endian: Endian,
+) {
+    let mut off = 0usize;
+    sync_fixed_counts(layout, raw, &mut off, elem, engine, endian);
+}
+
 /// Rewrite a struct's inline count/length slots from the live model,
-/// recursing through inline structs/arrays. Leaves runtime-pointer bytes
-/// (the words after each count/size) intact.
-fn sync_fixed_counts(layout: &TagLayout, raw: &mut [u8], elem: &TagStructData, endian: Endian) {
+/// recursing through inline structs/arrays on the shared `raw`/`off` (so a
+/// version-resized inline struct advances the parent's cursor exactly as
+/// the decoder did). Leaves runtime-pointer bytes intact.
+fn sync_fixed_counts(
+    layout: &TagLayout,
+    raw: &mut [u8],
+    off: &mut usize,
+    elem: &TagStructData,
+    engine: ClassicEngine,
+    endian: Endian,
+) {
     let first = layout.struct_layouts[elem.struct_index as usize].first_field_index as usize;
     let mut fi = first;
     loop {
@@ -641,59 +921,84 @@ fn sync_fixed_counts(layout: &TagLayout, raw: &mut [u8], elem: &TagStructData, e
         if field.field_type == TagFieldType::Terminator {
             break;
         }
-        let off = field.offset as usize;
+        // Mirror the decoder's truncation rule: once past the on-disk
+        // element end, every remaining field is absent (no sub-chunk to
+        // sync, no inline slot to write).
+        if *off >= raw.len() {
+            break;
+        }
         let content = elem
             .sub_chunks
             .iter()
             .find(|e| e.field_index == Some(fi as u32))
             .map(|e| &e.content);
+        // Inline structs/arrays recurse on the shared `raw`/`off`,
+        // advancing it through the child's fields (its resolved
+        // `struct_index` gives the right widths). Other fields write at
+        // `*off` then step past their `fsize` fixed bytes.
         match (field.field_type, content) {
+            (TagFieldType::Struct, Some(TagSubChunkContent::Struct(child))) => {
+                sync_fixed_counts(layout, raw, off, child, engine, endian);
+                fi += 1;
+                continue;
+            }
+            (TagFieldType::Array, Some(TagSubChunkContent::Array(elems))) => {
+                for child in elems.iter() {
+                    sync_fixed_counts(layout, raw, off, child, engine, endian);
+                }
+                fi += 1;
+                continue;
+            }
             (TagFieldType::Block, Some(TagSubChunkContent::Block(b))) => {
-                // count(i32) + 2 runtime pointers; rewrite only the count.
-                wr_u32(raw, off, b.elements.len() as u32, endian);
+                // count(i32) + 2 runtime pointers. On CE the inline count
+                // is authoritative, so sync it. On H2 the element count
+                // lives in the block's own trailing header (synced in
+                // `encode_block`) and this inline word is runtime garbage —
+                // preserve it verbatim (some tags, e.g. speedtree foliage,
+                // store a non-count value here that must round-trip).
+                if !engine.is_halo2() {
+                    wr_u32(raw, *off, b.elements.len() as u32, endian);
+                }
             }
             (TagFieldType::Data, Some(TagSubChunkContent::Data(blob))) => {
                 // size(i32) + 4 runtime words; rewrite only the size.
-                wr_u32(raw, off, blob.len() as u32, endian);
+                wr_u32(raw, *off, blob.len() as u32, endian);
             }
             (TagFieldType::TagReference, Some(TagSubChunkContent::TagReference(p))) => {
                 // 16-byte inline header: group(4) + ptr(4) + length(4) +
                 // tag_id(4). Payload is `group(4) + path + NUL`. Sync the
                 // group + the path length (excluding the NUL).
                 if p.len() >= 4 {
-                    raw[off..off + 4].copy_from_slice(&p[0..4]);
+                    raw[*off..*off + 4].copy_from_slice(&p[0..4]);
                 }
                 // Only rewrite the length when a path is present; null
                 // references preserve their original length field (H2
                 // stores -1 there, not 0).
                 if p.len() > 4 {
                     let path_len = p.len() - 5; // minus 4 group + 1 NUL
-                    wr_u32(raw, off + 8, path_len as u32, endian);
+                    wr_u32(raw, *off + 8, path_len as u32, endian);
                 }
             }
             (TagFieldType::StringId, Some(TagSubChunkContent::StringId(s)))
             | (TagFieldType::OldStringId, Some(TagSubChunkContent::OldStringId(s))) => {
-                // H2 inline: (pad:u16, length:u16) big-endian. Sync length.
-                raw[off + 2..off + 4].copy_from_slice(&(s.len() as u16).to_be_bytes());
-            }
-            (TagFieldType::Struct, Some(TagSubChunkContent::Struct(child))) => {
-                let csz = layout.struct_layouts[child.struct_index as usize].size;
-                sync_fixed_counts(layout, &mut raw[off..off + csz], child, endian);
-            }
-            (TagFieldType::Array, Some(TagSubChunkContent::Array(elems))) => {
-                let asi = layout.array_layouts[field.definition as usize].struct_index;
-                let es = layout.struct_layouts[asi as usize].size;
-                for (i, child) in elems.iter().enumerate() {
-                    sync_fixed_counts(layout, &mut raw[off + i * es..off + (i + 1) * es], child, endian);
-                }
+                // Inline (pad:u16, length:u16) big-endian. Sync length.
+                // (Legacy 32-byte inline old_string_id has no sub-chunk and
+                // is preserved verbatim, so it never reaches this arm.)
+                raw[*off + 2..*off + 4].copy_from_slice(&(s.len() as u16).to_be_bytes());
             }
             _ => {}
         }
+        *off += classic_field_size(layout, field, engine);
         fi += 1;
     }
 }
 
-fn encode_struct_trailing(layout: &TagLayout, elem: &TagStructData, out: &mut Vec<u8>) {
+fn encode_struct_trailing(
+    layout: &TagLayout,
+    elem: &TagStructData,
+    engine: ClassicEngine,
+    out: &mut Vec<u8>,
+) {
     let first = layout.struct_layouts[elem.struct_index as usize].first_field_index as usize;
     let mut fi = first;
     loop {
@@ -718,7 +1023,7 @@ fn encode_struct_trailing(layout: &TagLayout, elem: &TagStructData, out: &mut Ve
                 .map(|e| &e.content);
             if let Some(content) = content {
                 match content {
-                    TagSubChunkContent::Block(block) => encode_block(layout, block, out),
+                    TagSubChunkContent::Block(block) => encode_block(layout, block, engine, out),
                     TagSubChunkContent::Data(blob) => out.extend_from_slice(blob),
                     // Payload is `group_tag(4) + path + NUL`; the group
                     // already lives in raw_data, so only `path + NUL`
@@ -736,11 +1041,11 @@ fn encode_struct_trailing(layout: &TagLayout, elem: &TagStructData, out: &mut Ve
                         if let Some(hdr) = &child.classic_struct_header {
                             out.extend_from_slice(hdr);
                         }
-                        encode_struct_trailing(layout, child, out);
+                        encode_struct_trailing(layout, child, engine, out);
                     }
                     TagSubChunkContent::Array(elems) => {
                         for child in elems {
-                            encode_struct_trailing(layout, child, out);
+                            encode_struct_trailing(layout, child, engine, out);
                         }
                     }
                     _ => {}
@@ -766,7 +1071,7 @@ mod tests {
     }
 }
 
-fn encode_block(layout: &TagLayout, block: &TagBlockData, out: &mut Vec<u8>) {
+fn encode_block(layout: &TagLayout, block: &TagBlockData, engine: ClassicEngine, out: &mut Vec<u8>) {
     let elem_count = block.elements.len();
     // Use the on-disk element size (raw_data is preserved verbatim) so
     // the Halo 2 header's authoritative size is honoured even when the
@@ -775,19 +1080,24 @@ fn encode_block(layout: &TagLayout, block: &TagBlockData, out: &mut Vec<u8>) {
     let mut raw = block.raw_data.clone();
     if sz > 0 {
         for (i, elem) in block.elements.iter().enumerate() {
-            sync_fixed_counts(layout, &mut raw[i * sz..(i + 1) * sz], elem, block.endian);
+            sync_fixed_counts_element(layout, &mut raw[i * sz..(i + 1) * sz], elem, engine, block.endian);
         }
     }
-    // Halo 2: re-emit the 16-byte block header, re-syncing the count
-    // (offset 8, LE i32) from the live element count. Empty H2 blocks
-    // carry no header (None).
+    // Halo 2: re-emit the block header, re-syncing the count from the live
+    // element count. The modern 16-byte header stores count as an LE i32
+    // at offset 8; the legacy 12-byte (`ambl`) header stores it as an LE
+    // i16 at offset 6. Empty H2 blocks carry no header (None).
     if let Some(hdr) = &block.classic_block_header {
         let mut h = hdr.clone();
-        h[8..12].copy_from_slice(&(elem_count as u32).to_le_bytes());
+        if h.len() == 12 {
+            h[6..8].copy_from_slice(&(elem_count as u16).to_le_bytes());
+        } else {
+            h[8..12].copy_from_slice(&(elem_count as u32).to_le_bytes());
+        }
         out.extend_from_slice(&h);
     }
     out.extend_from_slice(&raw);
     for elem in &block.elements {
-        encode_struct_trailing(layout, elem, out);
+        encode_struct_trailing(layout, elem, engine, out);
     }
 }

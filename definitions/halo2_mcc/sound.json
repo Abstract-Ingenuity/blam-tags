@@ -5,6 +5,21 @@
  "flags": 0,
  "block": "sound_block",
  "blocks": {
+  "old_sound_permutations_block_2": {
+   "max_count": 1024,
+   "max_count_string": "1024",
+   "struct": "old_sound_permutations_block"
+  },
+  "old_sound_permutation_info_block_2": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "old_sound_permutation_info_block"
+  },
+  "old_sound_pitch_range_block_2": {
+   "max_count": 9,
+   "max_count_string": "9",
+   "struct": "old_sound_pitch_range_block"
+  },
   "sound_promotion_rule_block_2": {
    "max_count": 9,
    "max_count_string": "9",
@@ -15,20 +30,35 @@
    "max_count_string": "9",
    "struct": "sound_promotion_runtime_timer_block"
   },
+  "real_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "real_block"
+  },
+  "byte_block_2": {
+   "max_count": 1024,
+   "max_count_string": "1024",
+   "struct": "byte_block"
+  },
   "sound_permutation_chunk_block_2": {
    "max_count": 32767,
    "max_count_string": "32767",
    "struct": "sound_permutation_chunk_block"
   },
-  "sound_permutations_block_2": {
+  "sound_permutation_marker_block_2": {
+   "max_count": 65535,
+   "max_count_string": "65535",
+   "struct": "sound_permutation_marker_block"
+  },
+  "large_sound_permutations_block_2": {
    "max_count": 32,
    "max_count_string": "32",
-   "struct": "sound_permutations_block"
+   "struct": "large_sound_permutations_block"
   },
-  "sound_pitch_range_block_2": {
+  "large_sound_pitch_range_block_2": {
    "max_count": 9,
    "max_count_string": "9",
-   "struct": "sound_pitch_range_block"
+   "struct": "large_sound_pitch_range_block"
   },
   "platform_sound_override_mixbins_block_2": {
    "max_count": 8,
@@ -54,11 +84,6 @@
    "max_count": 16,
    "max_count_string": "16",
    "struct": "sound_effect_component_block"
-  },
-  "byte_block_2": {
-   "max_count": 1024,
-   "max_count_string": "1024",
-   "struct": "byte_block"
   },
   "sound_effect_override_parameters_block_2": {
    "max_count": 128,
@@ -115,12 +140,67 @@
    "max_count_string": "1",
    "struct": "sound_platform_sound_playback_block"
   },
-  "sound_permutation_marker_block_2": {
+  "large_sound_pitch_range_block_3": {
+   "max_count": 9,
+   "max_count_string": "9",
+   "struct": "large_sound_pitch_range_block"
+  },
+  "sound_platform_sound_playback_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_platform_sound_playback_block"
+  },
+  "large_sound_pitch_range_block_4": {
+   "max_count": 9,
+   "max_count_string": "9",
+   "struct": "large_sound_pitch_range_block"
+  },
+  "sound_platform_sound_playback_block_4": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_platform_sound_playback_block"
+  },
+  "sound_permutation_chunk_block_3": {
+   "max_count": 32767,
+   "max_count_string": "32767",
+   "struct": "sound_permutation_chunk_block"
+  },
+  "sound_permutations_block_2": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "sound_permutations_block"
+  },
+  "sound_pitch_range_block_2": {
+   "max_count": 9,
+   "max_count_string": "9",
+   "struct": "sound_pitch_range_block"
+  },
+  "sound_platform_sound_playback_block_5": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_platform_sound_playback_block"
+  },
+  "sound_permutation_marker_block_3": {
    "max_count": 65535,
    "max_count_string": "65535",
    "struct": "sound_permutation_marker_block"
   },
-  "sound_permutation_chunk_block_3": {
+  "sound_permutation_marker_block_4": {
+   "max_count": 65535,
+   "max_count_string": "65535",
+   "struct": "sound_permutation_marker_block"
+  },
+  "sound_permutation_raw_info_block_old_2": {
+   "max_count": 18,
+   "max_count_string": "18",
+   "struct": "sound_permutation_raw_info_block_old"
+  },
+  "sound_permutation_marker_block_5": {
+   "max_count": 65535,
+   "max_count_string": "65535",
+   "struct": "sound_permutation_marker_block"
+  },
+  "sound_permutation_chunk_block_4": {
    "max_count": 32767,
    "max_count_string": "32767",
    "struct": "sound_permutation_chunk_block"
@@ -155,10 +235,55 @@
    "max_count_string": "1",
    "struct": "sound_extra_info_block"
   },
+  "sound_pitch_range_block_3": {
+   "max_count": 9,
+   "max_count_string": "9",
+   "struct": "sound_pitch_range_block"
+  },
+  "sound_platform_sound_playback_block_6": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_platform_sound_playback_block"
+  },
+  "sound_extra_info_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_extra_info_block"
+  },
+  "sound_pitch_range_block_4": {
+   "max_count": 9,
+   "max_count_string": "9",
+   "struct": "sound_pitch_range_block"
+  },
+  "sound_platform_sound_playback_block_7": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_platform_sound_playback_block"
+  },
+  "sound_extra_info_block_4": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_extra_info_block"
+  },
   "sound_reflection_block_2": {
    "max_count": 16,
    "max_count_string": "16",
    "struct": "sound_reflection_block"
+  },
+  "sound_pitch_range_block_5": {
+   "max_count": 9,
+   "max_count_string": "9",
+   "struct": "sound_pitch_range_block"
+  },
+  "sound_platform_sound_playback_block_8": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_platform_sound_playback_block"
+  },
+  "sound_extra_info_block_5": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "sound_extra_info_block"
   },
   "sound_block": {
    "max_count": 1,
@@ -167,48 +292,127 @@
   }
  },
  "structs": {
-  "sound_block_struct": {
+  "sound_block_struct__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 220,
+   "size": 164,
    "fields": [
-    {
-     "type": "tag_reference",
-     "name": "remastered sound"
-    },
     {
      "type": "long_flags",
      "name": "flags",
      "definition": "flags_flags"
     },
     {
-     "type": "char_enum",
+     "type": "short_enum",
      "name": "class",
      "definition": "class_enum"
     },
     {
-     "type": "char_enum",
+     "type": "short_enum",
      "name": "sample rate",
      "definition": "sample_rate_enum"
     },
     {
-     "type": "char_enum",
-     "name": null,
-     "definition": "unnamed_enum"
+     "type": "real",
+     "name": "minimum distance"
     },
     {
-     "type": "char_enum",
+     "type": "real",
+     "name": "maximum distance"
+    },
+    {
+     "type": "real_fraction",
+     "name": "skip fraction"
+    },
+    {
+     "type": "real_bounds",
+     "name": "random pitch bounds"
+    },
+    {
+     "type": "angle",
+     "name": "inner cone angle"
+    },
+    {
+     "type": "angle",
+     "name": "outer cone angle"
+    },
+    {
+     "type": "real",
+     "name": "outer cone gain"
+    },
+    {
+     "type": "real",
+     "name": "gain modifier"
+    },
+    {
+     "type": "real",
+     "name": "maximum bend per second"
+    },
+    {
+     "type": "short_enum",
+     "name": "output effect",
+     "definition": "output_effect_enum"
+    },
+    {
+     "type": "short_enum",
      "name": "import type",
      "definition": "import_type_enum"
     },
     {
-     "type": "struct",
-     "name": "playback",
-     "definition": "sound_playback_parameters_struct"
+     "type": "pad",
+     "name": null,
+     "definition": 8
     },
     {
-     "type": "struct",
-     "name": "scale",
-     "definition": "sound_scale_modifiers_struct"
+     "type": "real_fraction",
+     "name": "skip fraction modifier"
+    },
+    {
+     "type": "real",
+     "name": "gain modifier"
+    },
+    {
+     "type": "real",
+     "name": "pitch modifier"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "real_fraction",
+     "name": "skip fraction modifier"
+    },
+    {
+     "type": "real",
+     "name": "gain modifier"
+    },
+    {
+     "type": "real",
+     "name": "pitch modifier"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "short_enum",
+     "name": "encoding",
+     "definition": "encoding_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "tag_reference",
+     "name": "promotion sound"
+    },
+    {
+     "type": "short_integer",
+     "name": "promotion count"
     },
     {
      "type": "pad",
@@ -216,12 +420,188 @@
      "definition": 2
     },
     {
-     "type": "char_enum",
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "block",
+     "name": "pitch ranges",
+     "definition": "old_sound_pitch_range_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "old_sound_pitch_range_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 84,
+   "fields": [
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "real",
+     "name": "natural pitch"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bend bounds"
+    },
+    {
+     "type": "short_integer",
+     "name": "actual permutation count"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "permutations",
+     "definition": "old_sound_permutations_block_2"
+    },
+    {
+     "type": "block",
+     "name": "permutation info",
+     "definition": "old_sound_permutation_info_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "old_sound_permutations_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 124,
+   "fields": [
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "real_fraction",
+     "name": "skip fraction"
+    },
+    {
+     "type": "real",
+     "name": "gain"
+    },
+    {
+     "type": "short_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "next permutation index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "data",
+     "name": "samples",
+     "definition": "samples_data"
+    },
+    {
+     "type": "data",
+     "name": "mouth data",
+     "definition": "mouth_data_data"
+    },
+    {
+     "type": "data",
+     "name": "subtitle data",
+     "definition": "subtitle_data_data"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "old_sound_permutation_info_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "data",
+     "name": "mouth data",
+     "definition": "mouth_data_data_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_block_struct__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 172,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "SOUND_PLAYBACK_ID"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "class",
+     "definition": "class_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "sample rate",
+     "definition": "sample_rate_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "output effect",
+     "definition": "output_effect_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "import type",
+     "definition": "import_type_enum"
+    },
+    {
+     "type": "struct",
+     "name": "playback",
+     "definition": "large_sound_playback_parameters_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scale",
+     "definition": "large_sound_scale_modifiers_struct"
+    },
+    {
+     "type": "short_enum",
      "name": "encoding",
      "definition": "encoding_enum"
     },
     {
-     "type": "char_enum",
+     "type": "short_enum",
      "name": "compression",
      "definition": "compression_enum"
     },
@@ -233,21 +613,12 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
-    },
-    {
-     "type": "real",
-     "name": "inner_silence_distance"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
+     "definition": 12
     },
     {
      "type": "block",
      "name": "pitch ranges",
-     "definition": "sound_pitch_range_block_2"
+     "definition": "large_sound_pitch_range_block_2"
     },
     {
      "type": "block",
@@ -255,38 +626,15 @@
      "definition": "sound_platform_sound_playback_block_2"
     },
     {
-     "type": "block",
-     "name": null,
-     "definition": "sound_extra_info_block_2"
-    },
-    {
-     "type": "struct",
-     "name": "reflections",
-     "definition": "sound_reflection_parameters_struct"
-    },
-    {
-     "type": "struct",
-     "name": "lowpass cut off parameters",
-     "definition": "sound_lowpass_struct"
-    },
-    {
      "type": "terminator",
      "name": null
     }
    ]
   },
-  "sound_playback_parameters_struct": {
+  "large_sound_playback_parameters_struct__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 56,
+   "size": 44,
    "fields": [
-    {
-     "type": "custom",
-     "name": "Clear distances"
-    },
-    {
-     "type": "custom",
-     "name": "Reset distances"
-    },
     {
      "type": "real",
      "name": "minimum distance"
@@ -304,10 +652,6 @@
      "name": "maximum bend per second"
     },
     {
-     "type": "custom",
-     "name": "Update gain bounds"
-    },
-    {
      "type": "real",
      "name": "gain base"
     },
@@ -316,7 +660,7 @@
      "name": "gain variance"
     },
     {
-     "type": "short_bounds",
+     "type": "real_bounds",
      "name": "random pitch bounds"
     },
     {
@@ -332,8 +676,55 @@
      "name": "outer cone gain"
     },
     {
-     "type": "custom",
-     "name": "Update location"
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "snpl"
+  },
+  "large_sound_playback_parameters_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 60,
+   "fields": [
+    {
+     "type": "real",
+     "name": "minimum distance"
+    },
+    {
+     "type": "real",
+     "name": "maximum distance"
+    },
+    {
+     "type": "real_fraction",
+     "name": "skip fraction"
+    },
+    {
+     "type": "real",
+     "name": "maximum bend per second"
+    },
+    {
+     "type": "real",
+     "name": "gain base"
+    },
+    {
+     "type": "real",
+     "name": "gain variance"
+    },
+    {
+     "type": "real_bounds",
+     "name": "random pitch bounds"
+    },
+    {
+     "type": "angle",
+     "name": "inner cone angle"
+    },
+    {
+     "type": "angle",
+     "name": "outer cone angle"
+    },
+    {
+     "type": "real",
+     "name": "outer cone gain"
     },
     {
      "type": "long_flags",
@@ -359,16 +750,16 @@
    ],
    "tag": "snpl"
   },
-  "sound_scale_modifiers_struct": {
+  "large_sound_scale_modifiers_struct": {
    "guid": "00000000000000000000000000000000",
-   "size": 20,
+   "size": 24,
    "fields": [
     {
      "type": "real_bounds",
      "name": "gain modifier"
     },
     {
-     "type": "short_bounds",
+     "type": "real_bounds",
      "name": "pitch modifier"
     },
     {
@@ -381,6 +772,35 @@
     }
    ],
    "tag": "snsc"
+  },
+  "sound_promotion_parameters_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 28,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "promotion sound"
+    },
+    {
+     "type": "short_integer",
+     "name": "promotion count"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "snpr"
   },
   "sound_promotion_parameters_struct": {
    "guid": "00000000000000000000000000000000",
@@ -456,40 +876,40 @@
     }
    ]
   },
-  "sound_pitch_range_block": {
+  "large_sound_pitch_range_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 32,
+   "size": 60,
    "fields": [
     {
      "type": "string_id",
      "name": "name"
     },
     {
-     "type": "short_integer",
+     "type": "real",
      "name": "natural pitch"
     },
     {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "short_bounds",
+     "type": "real_bounds",
      "name": "bend bounds"
     },
     {
-     "type": "short_bounds",
+     "type": "real_bounds",
      "name": null
+    },
+    {
+     "type": "struct",
+     "name": null,
+     "definition": "mapping_function"
     },
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 12
     },
     {
      "type": "block",
      "name": "permutations",
-     "definition": "sound_permutations_block_2"
+     "definition": "large_sound_permutations_block_2"
     },
     {
      "type": "terminator",
@@ -497,50 +917,217 @@
     }
    ]
   },
-  "sound_permutations_block": {
+  "mapping_function__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 32,
    "fields": [
     {
      "type": "custom",
-     "name": "'snpl'"
+     "name": "HIDE_GROUP_ID"
     },
     {
-     "type": "string_id",
-     "name": "name"
+     "type": "char_integer",
+     "name": "Function Type"
+    },
+    {
+     "type": "byte_flags",
+     "name": "Flags",
+     "definition": "flags_flags_3"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 1"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 0"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 1"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 3"
+    },
+    {
+     "type": "block",
+     "name": "Values",
+     "definition": "real_block_2"
     },
     {
      "type": "custom",
-     "name": "Update skip fraction"
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "real_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "Value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "mapping_function": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "block",
+     "name": "data",
+     "definition": "byte_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "byte_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 1,
+   "fields": [
+    {
+     "type": "char_integer",
+     "name": "Value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_sound_permutations_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 100,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
     },
     {
      "type": "real_fraction",
      "name": "skip fraction"
     },
     {
-     "type": "custom",
-     "name": "Update gain"
-    },
-    {
      "type": "real",
      "name": "gain"
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data"
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data_2"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_permutation_chunk_block_2"
+    },
+    {
+     "type": "short_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data_3"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_permutation_marker_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_permutation_chunk_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "file offset"
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
     },
     {
      "type": "long_integer",
      "name": null
     },
     {
-     "type": "short_integer",
+     "type": "long_integer",
      "name": null
     },
     {
-     "type": "short_integer",
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_permutation_chunk_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "file offset"
+    },
+    {
+     "type": "long_integer",
      "name": null
     },
     {
-     "type": "block",
-     "name": null,
-     "definition": "sound_permutation_chunk_block_2"
+     "type": "long_integer",
+     "name": null
     },
     {
      "type": "terminator",
@@ -567,6 +1154,32 @@
     {
      "type": "long_integer",
      "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_permutation_marker_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "marker id"
+    },
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "long_integer",
+     "name": "sample offset"
+    },
+    {
+     "type": "custom",
+     "name": "'mkpl'"
     },
     {
      "type": "terminator",
@@ -606,7 +1219,7 @@
     {
      "type": "long_flags",
      "name": "flags",
-     "definition": "flags_flags_3"
+     "definition": "flags_flags_4"
     },
     {
      "type": "pad",
@@ -812,7 +1425,7 @@
     {
      "type": "data",
      "name": null,
-     "definition": "unnamed_data"
+     "definition": "unnamed_data_4"
     },
     {
      "type": "block",
@@ -841,7 +1454,7 @@
     {
      "type": "long_flags",
      "name": "flags",
-     "definition": "flags_flags_4"
+     "definition": "flags_flags_5"
     },
     {
      "type": "terminator",
@@ -861,6 +1474,28 @@
      "type": "block",
      "name": "overrides",
      "definition": "sound_effect_override_parameters_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_effect_override_parameters_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "long_integer",
+     "name": "integer value"
+    },
+    {
+     "type": "real",
+     "name": "real value"
     },
     {
      "type": "terminator",
@@ -904,44 +1539,6 @@
      "type": "struct",
      "name": "function value",
      "definition": "mapping_function"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "mapping_function": {
-   "guid": "00000000000000000000000000000000",
-   "size": 12,
-   "fields": [
-    {
-     "type": "custom",
-     "name": "HIDE_GROUP_ID"
-    },
-    {
-     "type": "block",
-     "name": "data",
-     "definition": "byte_block_2"
-    },
-    {
-     "type": "custom",
-     "name": "END_HIDE_GROUP_ID"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ],
-   "tag": "MAPP"
-  },
-  "byte_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 1,
-   "fields": [
-    {
-     "type": "char_integer",
-     "name": "Value"
     },
     {
      "type": "terminator",
@@ -1073,6 +1670,443 @@
     }
    ]
   },
+  "sound_block_struct__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 172,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "SOUND_PLAYBACK_ID"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "class",
+     "definition": "class_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "sample rate",
+     "definition": "sample_rate_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "output effect",
+     "definition": "output_effect_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "import type",
+     "definition": "import_type_enum"
+    },
+    {
+     "type": "struct",
+     "name": "playback",
+     "definition": "large_sound_playback_parameters_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scale",
+     "definition": "large_sound_scale_modifiers_struct"
+    },
+    {
+     "type": "short_enum",
+     "name": "encoding",
+     "definition": "encoding_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "struct",
+     "name": "promotion",
+     "definition": "sound_promotion_parameters_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "pitch ranges",
+     "definition": "large_sound_pitch_range_block_3"
+    },
+    {
+     "type": "block",
+     "name": "platform parameters",
+     "definition": "sound_platform_sound_playback_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_block_struct__v3": {
+   "guid": "00000000000000000000000000000000",
+   "size": 172,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "SOUND_PLAYBACK_ID"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "class",
+     "definition": "class_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "sample rate",
+     "definition": "sample_rate_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "output effect",
+     "definition": "output_effect_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "import type",
+     "definition": "import_type_enum"
+    },
+    {
+     "type": "struct",
+     "name": "playback",
+     "definition": "large_sound_playback_parameters_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scale",
+     "definition": "large_sound_scale_modifiers_struct"
+    },
+    {
+     "type": "short_enum",
+     "name": "encoding",
+     "definition": "encoding_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "struct",
+     "name": "promotion",
+     "definition": "sound_promotion_parameters_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "pitch ranges",
+     "definition": "large_sound_pitch_range_block_4"
+    },
+    {
+     "type": "block",
+     "name": "platform parameters",
+     "definition": "sound_platform_sound_playback_block_4"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_block_struct__v4": {
+   "guid": "00000000000000000000000000000000",
+   "size": 176,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "class",
+     "definition": "class_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "sample rate",
+     "definition": "sample_rate_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "output effect",
+     "definition": "output_effect_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "import type",
+     "definition": "import_type_enum"
+    },
+    {
+     "type": "struct",
+     "name": "playback",
+     "definition": "sound_playback_parameters_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scale",
+     "definition": "sound_scale_modifiers_struct"
+    },
+    {
+     "type": "short_enum",
+     "name": "encoding",
+     "definition": "encoding_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "struct",
+     "name": "promotion",
+     "definition": "sound_promotion_parameters_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "pitch ranges",
+     "definition": "sound_pitch_range_block_2"
+    },
+    {
+     "type": "block",
+     "name": "platform parameters",
+     "definition": "sound_platform_sound_playback_block_5"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_extra_info_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_playback_parameters_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 56,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "Clear distances"
+    },
+    {
+     "type": "custom",
+     "name": "Reset distances"
+    },
+    {
+     "type": "real",
+     "name": "minimum distance"
+    },
+    {
+     "type": "real",
+     "name": "maximum distance"
+    },
+    {
+     "type": "real_fraction",
+     "name": "skip fraction"
+    },
+    {
+     "type": "real",
+     "name": "maximum bend per second"
+    },
+    {
+     "type": "custom",
+     "name": "Update gain bounds"
+    },
+    {
+     "type": "real",
+     "name": "gain base"
+    },
+    {
+     "type": "real",
+     "name": "gain variance"
+    },
+    {
+     "type": "short_bounds",
+     "name": "random pitch bounds"
+    },
+    {
+     "type": "angle",
+     "name": "inner cone angle"
+    },
+    {
+     "type": "angle",
+     "name": "outer cone angle"
+    },
+    {
+     "type": "real",
+     "name": "outer cone gain"
+    },
+    {
+     "type": "custom",
+     "name": "Update location"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "angle",
+     "name": "azimuth"
+    },
+    {
+     "type": "real",
+     "name": "positional gain"
+    },
+    {
+     "type": "real",
+     "name": "first person gain"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "snpl"
+  },
+  "sound_scale_modifiers_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "real_bounds",
+     "name": "gain modifier"
+    },
+    {
+     "type": "short_bounds",
+     "name": "pitch modifier"
+    },
+    {
+     "type": "fraction_bounds",
+     "name": "skip fraction modifier"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "snsc"
+  },
+  "sound_pitch_range_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "short_integer",
+     "name": "natural pitch"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_bounds",
+     "name": "bend bounds"
+    },
+    {
+     "type": "short_bounds",
+     "name": null
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "block",
+     "name": "permutations",
+     "definition": "sound_permutations_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_permutations_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "'snpl'"
+    },
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "custom",
+     "name": "Update skip fraction"
+    },
+    {
+     "type": "real_fraction",
+     "name": "skip fraction"
+    },
+    {
+     "type": "custom",
+     "name": "Update gain"
+    },
+    {
+     "type": "real",
+     "name": "gain"
+    },
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_permutation_chunk_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "sound_extra_info_block": {
    "guid": "00000000000000000000000000000000",
    "size": 64,
@@ -1091,6 +2125,127 @@
      "type": "struct",
      "name": "geometry block info",
      "definition": "global_geometry_block_info_struct"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_definition_language_permutation_info_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 80,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "'snpl'"
+    },
+    {
+     "type": "string_id",
+     "name": "skip fraction name"
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data_5"
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data_6"
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data_7"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_permutation_marker_block_3"
+    },
+    {
+     "type": "short_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "language",
+     "definition": "language_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_definition_language_permutation_info_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "block",
+     "name": "raw info block",
+     "definition": "sound_permutation_raw_info_block_old_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_permutation_raw_info_block_old": {
+   "guid": "00000000000000000000000000000000",
+   "size": 80,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "'snpl'"
+    },
+    {
+     "type": "string_id",
+     "name": "skip fraction name"
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data_8"
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data_9"
+    },
+    {
+     "type": "data",
+     "name": null,
+     "definition": "unnamed_data_10"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_permutation_marker_block_4"
+    },
+    {
+     "type": "short_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "language",
+     "definition": "language_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
     },
     {
      "type": "terminator",
@@ -1128,22 +2283,22 @@
     {
      "type": "data",
      "name": null,
-     "definition": "unnamed_data_2"
+     "definition": "unnamed_data_11"
     },
     {
      "type": "data",
      "name": null,
-     "definition": "unnamed_data_3"
+     "definition": "unnamed_data_12"
     },
     {
      "type": "data",
      "name": null,
-     "definition": "unnamed_data_4"
+     "definition": "unnamed_data_13"
     },
     {
      "type": "block",
      "name": null,
-     "definition": "sound_permutation_marker_block_2"
+     "definition": "sound_permutation_marker_block_5"
     },
     {
      "type": "short_enum",
@@ -1163,37 +2318,11 @@
     {
      "type": "block",
      "name": null,
-     "definition": "sound_permutation_chunk_block_3"
+     "definition": "sound_permutation_chunk_block_4"
     },
     {
      "type": "long_integer",
      "name": null
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "sound_permutation_marker_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 12,
-   "fields": [
-    {
-     "type": "long_integer",
-     "name": "marker id"
-    },
-    {
-     "type": "string_id",
-     "name": "name"
-    },
-    {
-     "type": "long_integer",
-     "name": "sample offset"
-    },
-    {
-     "type": "custom",
-     "name": "'mkpl'"
     },
     {
      "type": "terminator",
@@ -1334,6 +2463,194 @@
     }
    ]
   },
+  "sound_block_struct__v5": {
+   "guid": "00000000000000000000000000000000",
+   "size": 172,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "char_enum",
+     "name": "class",
+     "definition": "class_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "sample rate",
+     "definition": "sample_rate_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": null,
+     "definition": "output_effect_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "import type",
+     "definition": "import_type_enum"
+    },
+    {
+     "type": "struct",
+     "name": "playback",
+     "definition": "sound_playback_parameters_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scale",
+     "definition": "sound_scale_modifiers_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "char_enum",
+     "name": "encoding",
+     "definition": "encoding_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "struct",
+     "name": "promotion",
+     "definition": "sound_promotion_parameters_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "pitch ranges",
+     "definition": "sound_pitch_range_block_3"
+    },
+    {
+     "type": "block",
+     "name": "platform parameters",
+     "definition": "sound_platform_sound_playback_block_6"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_extra_info_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_block_struct__v6": {
+   "guid": "00000000000000000000000000000000",
+   "size": 200,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "remastered sound"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "char_enum",
+     "name": "class",
+     "definition": "class_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "sample rate",
+     "definition": "sample_rate_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": null,
+     "definition": "output_effect_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "import type",
+     "definition": "import_type_enum"
+    },
+    {
+     "type": "struct",
+     "name": "playback",
+     "definition": "sound_playback_parameters_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scale",
+     "definition": "sound_scale_modifiers_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "char_enum",
+     "name": "encoding",
+     "definition": "encoding_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "struct",
+     "name": "promotion",
+     "definition": "sound_promotion_parameters_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "real",
+     "name": "inner_silence_distance"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "block",
+     "name": "pitch ranges",
+     "definition": "sound_pitch_range_block_4"
+    },
+    {
+     "type": "block",
+     "name": "platform parameters",
+     "definition": "sound_platform_sound_playback_block_7"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_extra_info_block_4"
+    },
+    {
+     "type": "struct",
+     "name": "reflections",
+     "definition": "sound_reflection_parameters_struct"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "sound_reflection_parameters_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 12,
@@ -1365,6 +2682,114 @@
     {
      "type": "long_integer",
      "name": "reflection sound"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_block_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 220,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "remastered sound"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "char_enum",
+     "name": "class",
+     "definition": "class_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "sample rate",
+     "definition": "sample_rate_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": null,
+     "definition": "output_effect_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "import type",
+     "definition": "import_type_enum"
+    },
+    {
+     "type": "struct",
+     "name": "playback",
+     "definition": "sound_playback_parameters_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scale",
+     "definition": "sound_scale_modifiers_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "char_enum",
+     "name": "encoding",
+     "definition": "encoding_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "compression",
+     "definition": "compression_enum"
+    },
+    {
+     "type": "struct",
+     "name": "promotion",
+     "definition": "sound_promotion_parameters_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "real",
+     "name": "inner_silence_distance"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "block",
+     "name": "pitch ranges",
+     "definition": "sound_pitch_range_block_5"
+    },
+    {
+     "type": "block",
+     "name": "platform parameters",
+     "definition": "sound_platform_sound_playback_block_8"
+    },
+    {
+     "type": "block",
+     "name": null,
+     "definition": "sound_extra_info_block_5"
+    },
+    {
+     "type": "struct",
+     "name": "reflections",
+     "definition": "sound_reflection_parameters_struct"
+    },
+    {
+     "type": "struct",
+     "name": "lowpass cut off parameters",
+     "definition": "sound_lowpass_struct"
     },
     {
      "type": "terminator",
@@ -1485,7 +2910,7 @@
     "48kHz"
    ]
   },
-  "unnamed_enum": {
+  "output_effect_enum": {
    "options": [
     "none",
     "output front speakers",
@@ -1499,13 +2924,6 @@
     "single-shot",
     "single-layer",
     "multi-layer"
-   ]
-  },
-  "flags_flags_2": {
-   "options": [
-    "override azimuth",
-    "override 3d gain",
-    "override speaker gain"
    ]
   },
   "encoding_enum": {
@@ -1526,6 +2944,25 @@
     "opus"
    ]
   },
+  "flags_flags_2": {
+   "options": [
+    "override azimuth",
+    "override 3d gain",
+    "override speaker gain"
+   ]
+  },
+  "flags_flags_3": {
+   "options": [
+    "Range",
+    "Unused 0",
+    "Unused 1",
+    "Unused 2",
+    "Color Bit 0",
+    "Color Bit 1",
+    "Color Bit 2",
+    "Color Bit 3"
+   ]
+  },
   "mixbin_enum": {
    "options": [
     "front left",
@@ -1543,7 +2980,7 @@
     "default right speakers"
    ]
   },
-  "flags_flags_3": {
+  "flags_flags_4": {
    "options": [
     "use 3d radio hack"
    ]
@@ -1555,7 +2992,7 @@
     "both (only valid for mono)"
    ]
   },
-  "flags_flags_4": {
+  "flags_flags_5": {
    "options": [
     "don't play at start",
     "play on stop",
@@ -1595,6 +3032,30 @@
   }
  },
  "datas": {
+  "samples_data": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "mouth_data_data": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "subtitle_data_data": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "mouth_data_data_2": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
   "unnamed_data": {
    "alignment": 4,
    "flags": 0,
@@ -1619,6 +3080,60 @@
    "max_size": 0,
    "max_size_string": "0"
   },
+  "unnamed_data_5": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "unnamed_data_6": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "unnamed_data_7": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "unnamed_data_8": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "unnamed_data_9": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "unnamed_data_10": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "unnamed_data_11": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "unnamed_data_12": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "unnamed_data_13": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
   "encoded_data_data": {
    "alignment": 4,
    "flags": 0,
@@ -1627,5 +3142,43 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "large_sound_playback_parameters_struct": {
+   "0": "large_sound_playback_parameters_struct__v0",
+   "1": "large_sound_playback_parameters_struct"
+  },
+  "sound_promotion_parameters_struct": {
+   "0": "sound_promotion_parameters_struct__v0",
+   "1": "sound_promotion_parameters_struct"
+  },
+  "mapping_function": {
+   "0": "mapping_function__v0",
+   "1": "mapping_function"
+  },
+  "sound_permutation_chunk_block": {
+   "0": "sound_permutation_chunk_block__v0",
+   "1": "sound_permutation_chunk_block__v1",
+   "2": "sound_permutation_chunk_block"
+  },
+  "sound_effect_override_parameters_block": {
+   "0": "sound_effect_override_parameters_block__v0",
+   "1": "sound_effect_override_parameters_block"
+  },
+  "sound_definition_language_permutation_info_block": {
+   "0": "sound_definition_language_permutation_info_block__v0",
+   "1": "sound_definition_language_permutation_info_block__v1",
+   "2": "sound_definition_language_permutation_info_block"
+  },
+  "sound_block_struct": {
+   "0": "sound_block_struct__v0",
+   "1": "sound_block_struct__v1",
+   "2": "sound_block_struct__v2",
+   "3": "sound_block_struct__v3",
+   "4": "sound_block_struct__v4",
+   "5": "sound_block_struct__v5",
+   "6": "sound_block_struct__v6",
+   "7": "sound_block_struct"
+  }
+ }
 }

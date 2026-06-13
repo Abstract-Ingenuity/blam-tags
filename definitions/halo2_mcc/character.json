@@ -5,30 +5,30 @@
  "flags": 0,
  "block": "character_block",
  "blocks": {
-  "character_variants_block_2": {
-   "max_count": 64,
-   "max_count_string": "64",
-   "struct": "character_variants_block"
-  },
   "character_general_block_2": {
    "max_count": 1,
    "max_count_string": "1",
    "struct": "character_general_block"
-  },
-  "character_vitality_block_2": {
-   "max_count": 1,
-   "max_count_string": "1",
-   "struct": "character_vitality_block"
   },
   "character_placement_block_2": {
    "max_count": 1,
    "max_count_string": "1",
    "struct": "character_placement_block"
   },
+  "character_vitality_block_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_vitality_block"
+  },
   "character_perception_block_2": {
    "max_count": 4,
    "max_count_string": "4",
    "struct": "character_perception_block"
+  },
+  "character_retreat_block_2": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_retreat_block"
   },
   "character_look_block_2": {
    "max_count": 1,
@@ -40,25 +40,10 @@
    "max_count_string": "1",
    "struct": "character_movement_block"
   },
-  "character_swarm_block_2": {
-   "max_count": 3,
-   "max_count_string": "3",
-   "struct": "character_swarm_block"
-  },
-  "character_ready_block_2": {
-   "max_count": 3,
-   "max_count_string": "3",
-   "struct": "character_ready_block"
-  },
   "character_engage_block_2": {
    "max_count": 3,
    "max_count_string": "3",
    "struct": "character_engage_block"
-  },
-  "character_charge_block_2": {
-   "max_count": 3,
-   "max_count_string": "3",
-   "struct": "character_charge_block"
   },
   "character_evasion_block_2": {
    "max_count": 3,
@@ -70,11 +55,6 @@
    "max_count_string": "3",
    "struct": "character_cover_block"
   },
-  "character_retreat_block_2": {
-   "max_count": 3,
-   "max_count_string": "3",
-   "struct": "character_retreat_block"
-  },
   "character_search_block_2": {
    "max_count": 3,
    "max_count_string": "3",
@@ -85,7 +65,117 @@
    "max_count_string": "3",
    "struct": "character_presearch_block"
   },
+  "character_firing_pattern_block_2": {
+   "max_count": 2,
+   "max_count_string": "2",
+   "struct": "character_firing_pattern_block"
+  },
+  "character_weapons_block_2": {
+   "max_count": 100,
+   "max_count_string": "100",
+   "struct": "character_weapons_block"
+  },
+  "character_grenades_block_2": {
+   "max_count": 10,
+   "max_count_string": "10",
+   "struct": "character_grenades_block"
+  },
+  "character_charge_block_2": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_charge_block"
+  },
+  "character_ready_block_2": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_ready_block"
+  },
+  "character_vehicle_block_2": {
+   "max_count": 100,
+   "max_count_string": "100",
+   "struct": "character_vehicle_block"
+  },
   "character_idle_block_2": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_idle_block"
+  },
+  "character_general_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_general_block"
+  },
+  "character_vitality_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_vitality_block"
+  },
+  "character_placement_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_placement_block"
+  },
+  "character_perception_block_3": {
+   "max_count": 4,
+   "max_count_string": "4",
+   "struct": "character_perception_block"
+  },
+  "character_look_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_look_block"
+  },
+  "character_movement_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_movement_block"
+  },
+  "character_swarm_block_2": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_swarm_block"
+  },
+  "character_ready_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_ready_block"
+  },
+  "character_engage_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_engage_block"
+  },
+  "character_charge_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_charge_block"
+  },
+  "character_evasion_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_evasion_block"
+  },
+  "character_cover_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_cover_block"
+  },
+  "character_retreat_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_retreat_block"
+  },
+  "character_search_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_search_block"
+  },
+  "character_presearch_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_presearch_block"
+  },
+  "character_idle_block_3": {
    "max_count": 3,
    "max_count_string": "3",
    "struct": "character_idle_block"
@@ -95,22 +185,7 @@
    "max_count_string": "1",
    "struct": "character_vocalization_block"
   },
-  "character_boarding_block_2": {
-   "max_count": 1,
-   "max_count_string": "1",
-   "struct": "character_boarding_block"
-  },
-  "character_boss_block_2": {
-   "max_count": 1,
-   "max_count_string": "1",
-   "struct": "character_boss_block"
-  },
-  "character_firing_pattern_block_2": {
-   "max_count": 2,
-   "max_count_string": "2",
-   "struct": "character_firing_pattern_block"
-  },
-  "character_weapons_block_2": {
+  "character_weapons_block_3": {
    "max_count": 100,
    "max_count_string": "100",
    "struct": "character_weapons_block"
@@ -125,12 +200,132 @@
    "max_count_string": "100",
    "struct": "character_firing_pattern_properties_block"
   },
-  "character_grenades_block_2": {
+  "character_grenades_block_3": {
    "max_count": 10,
    "max_count_string": "10",
    "struct": "character_grenades_block"
   },
-  "character_vehicle_block_2": {
+  "character_vehicle_block_3": {
+   "max_count": 100,
+   "max_count_string": "100",
+   "struct": "character_vehicle_block"
+  },
+  "character_variants_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "character_variants_block"
+  },
+  "character_general_block_4": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_general_block"
+  },
+  "character_vitality_block_4": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_vitality_block"
+  },
+  "character_placement_block_4": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_placement_block"
+  },
+  "character_perception_block_4": {
+   "max_count": 4,
+   "max_count_string": "4",
+   "struct": "character_perception_block"
+  },
+  "character_look_block_4": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_look_block"
+  },
+  "character_movement_block_4": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_movement_block"
+  },
+  "character_swarm_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_swarm_block"
+  },
+  "character_ready_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_ready_block"
+  },
+  "character_engage_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_engage_block"
+  },
+  "character_charge_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_charge_block"
+  },
+  "character_evasion_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_evasion_block"
+  },
+  "character_cover_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_cover_block"
+  },
+  "character_retreat_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_retreat_block"
+  },
+  "character_search_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_search_block"
+  },
+  "character_presearch_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_presearch_block"
+  },
+  "character_idle_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "character_idle_block"
+  },
+  "character_vocalization_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_vocalization_block"
+  },
+  "character_boarding_block_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_boarding_block"
+  },
+  "character_boss_block_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "character_boss_block"
+  },
+  "character_weapons_block_4": {
+   "max_count": 100,
+   "max_count_string": "100",
+   "struct": "character_weapons_block"
+  },
+  "character_firing_pattern_properties_block_3": {
+   "max_count": 100,
+   "max_count_string": "100",
+   "struct": "character_firing_pattern_properties_block"
+  },
+  "character_grenades_block_4": {
+   "max_count": 10,
+   "max_count_string": "10",
+   "struct": "character_grenades_block"
+  },
+  "character_vehicle_block_4": {
    "max_count": 100,
    "max_count_string": "100",
    "struct": "character_vehicle_block"
@@ -157,9 +352,9 @@
   }
  },
  "structs": {
-  "character_block_struct": {
+  "character_block_struct__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 408,
+   "size": 288,
    "fields": [
     {
      "type": "long_flags",
@@ -169,7 +364,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "tag_reference",
@@ -181,35 +376,25 @@
     },
     {
      "type": "tag_reference",
-     "name": "creature"
-    },
-    {
-     "type": "tag_reference",
      "name": "style"
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "tag_reference",
      "name": "major character"
     },
     {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "block",
-     "name": "variants",
-     "definition": "character_variants_block_2"
+     "type": "string_id",
+     "name": "model variant"
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 76
     },
     {
      "type": "block",
@@ -218,13 +403,13 @@
     },
     {
      "type": "block",
-     "name": "vitality properties",
-     "definition": "character_vitality_block_2"
+     "name": "placement properties",
+     "definition": "character_placement_block_2"
     },
     {
      "type": "block",
-     "name": "placement properties",
-     "definition": "character_placement_block_2"
+     "name": "vitality properties",
+     "definition": "character_vitality_block_2"
     },
     {
      "type": "block",
@@ -233,53 +418,33 @@
     },
     {
      "type": "block",
-     "name": "look properties",
+     "name": "retreat properties",
+     "definition": "character_retreat_block_2"
+    },
+    {
+     "type": "block",
+     "name": "Look properties",
      "definition": "character_look_block_2"
     },
     {
      "type": "block",
-     "name": "movement properties",
+     "name": "Movement properties",
      "definition": "character_movement_block_2"
     },
     {
      "type": "block",
-     "name": "swarm properties",
-     "definition": "character_swarm_block_2"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "block",
-     "name": "ready properties",
-     "definition": "character_ready_block_2"
-    },
-    {
-     "type": "block",
-     "name": "engage properties",
+     "name": "Engage properties",
      "definition": "character_engage_block_2"
     },
     {
      "type": "block",
-     "name": "charge properties",
-     "definition": "character_charge_block_2"
-    },
-    {
-     "type": "block",
-     "name": "evasion properties",
+     "name": "Evasion properties",
      "definition": "character_evasion_block_2"
     },
     {
      "type": "block",
-     "name": "cover properties",
+     "name": "Cover properties",
      "definition": "character_cover_block_2"
-    },
-    {
-     "type": "block",
-     "name": "retreat properties",
-     "definition": "character_retreat_block_2"
     },
     {
      "type": "block",
@@ -293,43 +458,13 @@
     },
     {
      "type": "block",
-     "name": "idle properties",
-     "definition": "character_idle_block_2"
-    },
-    {
-     "type": "block",
-     "name": "vocalization properties",
-     "definition": "character_vocalization_block_2"
-    },
-    {
-     "type": "block",
-     "name": "boarding properties",
-     "definition": "character_boarding_block_2"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "block",
-     "name": "boss properties",
-     "definition": "character_boss_block_2"
-    },
-    {
-     "type": "block",
      "name": "weapons properties",
      "definition": "character_weapons_block_2"
     },
     {
-     "type": "block",
-     "name": "firing pattern properties",
-     "definition": "character_firing_pattern_properties_block_2"
-    },
-    {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "block",
@@ -337,9 +472,14 @@
      "definition": "character_grenades_block_2"
     },
     {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
+     "type": "block",
+     "name": "charge properties",
+     "definition": "character_charge_block_2"
+    },
+    {
+     "type": "block",
+     "name": "ready properties",
+     "definition": "character_ready_block_2"
     },
     {
      "type": "block",
@@ -348,45 +488,8 @@
     },
     {
      "type": "block",
-     "name": "morph properties",
-     "definition": "g_null_block_2"
-    },
-    {
-     "type": "block",
-     "name": "equipment definitions",
-     "definition": "g_null_block_3"
-    },
-    {
-     "type": "block",
-     "name": "campaign metagame bucket",
-     "definition": "campaign_metagame_bucket_block_2"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "character_variants_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 12,
-   "fields": [
-    {
-     "type": "string_id",
-     "name": "variant name"
-    },
-    {
-     "type": "short_integer",
-     "name": "variant index"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "string_id",
-     "name": "variant designator"
+     "name": "idle properties",
+     "definition": "character_idle_block_2"
     },
     {
      "type": "terminator",
@@ -416,7 +519,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 100
     },
     {
      "type": "real",
@@ -448,150 +551,6 @@
     }
    ],
    "tag": "cmtb"
-  },
-  "character_vitality_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 112,
-   "fields": [
-    {
-     "type": "long_flags",
-     "name": "vitality flags",
-     "definition": "vitality_flags_flags"
-    },
-    {
-     "type": "real",
-     "name": "normal body vitality"
-    },
-    {
-     "type": "real",
-     "name": "normal shield vitality"
-    },
-    {
-     "type": "real",
-     "name": "legendary body vitality"
-    },
-    {
-     "type": "real",
-     "name": "legendary shield vitality"
-    },
-    {
-     "type": "real",
-     "name": "body recharge fraction"
-    },
-    {
-     "type": "real",
-     "name": "soft ping threshold (with shields)"
-    },
-    {
-     "type": "real",
-     "name": "soft ping threshold (no shields)"
-    },
-    {
-     "type": "real",
-     "name": "soft ping min interrupt time"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "hard ping threshold (with shields)"
-    },
-    {
-     "type": "real",
-     "name": "hard ping threshold (no shields)"
-    },
-    {
-     "type": "real",
-     "name": "hard ping min interrupt time"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "current damage decay delay"
-    },
-    {
-     "type": "real",
-     "name": "current damage decay time"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "recent damage decay delay"
-    },
-    {
-     "type": "real",
-     "name": "recent damage decay time"
-    },
-    {
-     "type": "real",
-     "name": "body recharge delay time"
-    },
-    {
-     "type": "real",
-     "name": "body recharge time"
-    },
-    {
-     "type": "real",
-     "name": "shield recharge delay time"
-    },
-    {
-     "type": "real",
-     "name": "shield recharge time"
-    },
-    {
-     "type": "real",
-     "name": "stun threshold"
-    },
-    {
-     "type": "real_bounds",
-     "name": "stun time bounds"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "extended shield damage threshold"
-    },
-    {
-     "type": "real",
-     "name": "extended body damage threshold"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "suicide radius"
-    },
-    {
-     "type": "real",
-     "name": "runtime_body_recharge_velocity"
-    },
-    {
-     "type": "real",
-     "name": "runtime_shield_recharge_velocity"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
   },
   "character_placement_block": {
    "guid": "00000000000000000000000000000000",
@@ -656,6 +615,150 @@
     }
    ]
   },
+  "character_vitality_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 112,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "vitality flags",
+     "definition": "vitality_flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "normal body vitality"
+    },
+    {
+     "type": "real",
+     "name": "normal shield vitality"
+    },
+    {
+     "type": "real",
+     "name": "legendary body vitality"
+    },
+    {
+     "type": "real",
+     "name": "legendary shield vitality"
+    },
+    {
+     "type": "real",
+     "name": "body recharge fraction"
+    },
+    {
+     "type": "real",
+     "name": "soft ping threshold (with shields)"
+    },
+    {
+     "type": "real",
+     "name": "soft ping threshold (no shields)"
+    },
+    {
+     "type": "real",
+     "name": "soft ping min interrupt time"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "real",
+     "name": "hard ping threshold (with shields)"
+    },
+    {
+     "type": "real",
+     "name": "hard ping threshold (no shields)"
+    },
+    {
+     "type": "real",
+     "name": "hard ping min interrupt time"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "real",
+     "name": "current damage decay delay"
+    },
+    {
+     "type": "real",
+     "name": "current damage decay time"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "real",
+     "name": "recent damage decay delay"
+    },
+    {
+     "type": "real",
+     "name": "recent damage decay time"
+    },
+    {
+     "type": "real",
+     "name": "body recharge delay time"
+    },
+    {
+     "type": "real",
+     "name": "body recharge time"
+    },
+    {
+     "type": "real",
+     "name": "shield recharge delay time"
+    },
+    {
+     "type": "real",
+     "name": "shield recharge time"
+    },
+    {
+     "type": "real",
+     "name": "stun threshold"
+    },
+    {
+     "type": "real_bounds",
+     "name": "stun time bounds"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "real",
+     "name": "extended shield damage threshold"
+    },
+    {
+     "type": "real",
+     "name": "extended body damage threshold"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "real",
+     "name": "suicide radius"
+    },
+    {
+     "type": "real",
+     "name": "runtime_body_recharge_velocity"
+    },
+    {
+     "type": "real",
+     "name": "runtime_shield_recharge_velocity"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "character_perception_block": {
    "guid": "00000000000000000000000000000000",
    "size": 52,
@@ -680,7 +783,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "angle",
@@ -693,12 +796,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real",
@@ -715,7 +818,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "real",
@@ -732,11 +835,111 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real",
      "name": "first ack. surprise distance"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_retreat_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 84,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Retreat flags",
+     "definition": "retreat_flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "Shield threshold"
+    },
+    {
+     "type": "real",
+     "name": "Scary target threshold"
+    },
+    {
+     "type": "real",
+     "name": "Danger threshold"
+    },
+    {
+     "type": "real",
+     "name": "Proximity threshold"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "real_bounds",
+     "name": "min/max forced cower time bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "min/max cower timeout bounds"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "real",
+     "name": "proximity ambush threshold"
+    },
+    {
+     "type": "real",
+     "name": "awareness ambush threshold"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "real",
+     "name": "leader dead retreat chance"
+    },
+    {
+     "type": "real",
+     "name": "peer dead retreat chance"
+    },
+    {
+     "type": "real",
+     "name": "second peer dead retreat chance"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "angle",
+     "name": "zig-zag angle"
+    },
+    {
+     "type": "real",
+     "name": "zig-zag period"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "real",
+     "name": "retreat grenade chance"
+    },
+    {
+     "type": "tag_reference",
+     "name": "backup weapon"
     },
     {
      "type": "terminator",
@@ -822,7 +1025,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "real",
@@ -831,7 +1034,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "short_enum",
@@ -878,86 +1081,6 @@
     }
    ]
   },
-  "character_swarm_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 40,
-   "fields": [
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "short_integer",
-     "name": "scatter killed count"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "real",
-     "name": "scatter radius"
-    },
-    {
-     "type": "real",
-     "name": "scatter time"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "hound min distance"
-    },
-    {
-     "type": "real",
-     "name": "hound max distance"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "perlin offset scale"
-    },
-    {
-     "type": "real_bounds",
-     "name": "offset period"
-    },
-    {
-     "type": "real",
-     "name": "perlin idle movement threshold"
-    },
-    {
-     "type": "real",
-     "name": "perlin combat movement threshold"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "character_ready_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 8,
-   "fields": [
-    {
-     "type": "real_bounds",
-     "name": "ready time bounds"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
   "character_engage_block": {
    "guid": "00000000000000000000000000000000",
    "size": 16,
@@ -970,7 +1093,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real",
@@ -990,78 +1113,6 @@
     }
    ]
   },
-  "character_charge_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 72,
-   "fields": [
-    {
-     "type": "long_flags",
-     "name": "Charge flags",
-     "definition": "charge_flags_flags"
-    },
-    {
-     "type": "real",
-     "name": "melee consider range"
-    },
-    {
-     "type": "real",
-     "name": "melee chance"
-    },
-    {
-     "type": "real",
-     "name": "melee attack range"
-    },
-    {
-     "type": "real",
-     "name": "melee abort range"
-    },
-    {
-     "type": "real",
-     "name": "melee attack timeout"
-    },
-    {
-     "type": "real",
-     "name": "melee attack delay timer"
-    },
-    {
-     "type": "real_bounds",
-     "name": "melee leap range"
-    },
-    {
-     "type": "real",
-     "name": "melee leap chance"
-    },
-    {
-     "type": "real",
-     "name": "ideal leap velocity"
-    },
-    {
-     "type": "real",
-     "name": "max leap velocity"
-    },
-    {
-     "type": "real",
-     "name": "melee leap ballistic"
-    },
-    {
-     "type": "real",
-     "name": "melee delay timer"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "tag_reference",
-     "name": "berserk weapon"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
   "character_evasion_block": {
    "guid": "00000000000000000000000000000000",
    "size": 20,
@@ -1069,7 +1120,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -1090,7 +1141,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real",
@@ -1118,7 +1169,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -1159,7 +1210,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real",
@@ -1168,7 +1219,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "real",
@@ -1177,106 +1228,6 @@
     {
      "type": "real",
      "name": "scary target threshold"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "character_retreat_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 84,
-   "fields": [
-    {
-     "type": "long_flags",
-     "name": "Retreat flags",
-     "definition": "retreat_flags_flags"
-    },
-    {
-     "type": "real",
-     "name": "Shield threshold"
-    },
-    {
-     "type": "real",
-     "name": "Scary target threshold"
-    },
-    {
-     "type": "real",
-     "name": "Danger threshold"
-    },
-    {
-     "type": "real",
-     "name": "Proximity threshold"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real_bounds",
-     "name": "min/max forced cower time bounds"
-    },
-    {
-     "type": "real_bounds",
-     "name": "min/max cower timeout bounds"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "proximity ambush threshold"
-    },
-    {
-     "type": "real",
-     "name": "awareness ambush threshold"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "leader dead retreat chance"
-    },
-    {
-     "type": "real",
-     "name": "peer dead retreat chance"
-    },
-    {
-     "type": "real",
-     "name": "second peer dead retreat chance"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "angle",
-     "name": "zig-zag angle"
-    },
-    {
-     "type": "real",
-     "name": "zig-zag period"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "retreat grenade chance"
-    },
-    {
-     "type": "tag_reference",
-     "name": "backup weapon"
     },
     {
      "type": "terminator",
@@ -1296,7 +1247,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real_bounds",
@@ -1305,11 +1256,43 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real_bounds",
      "name": "Uncover distance bounds"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_presearch_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Pre-search flags",
+     "definition": "character_flags_flags"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "real_bounds",
+     "name": "Min/Max pre-search bounds"
+    },
+    {
+     "type": "real",
+     "name": "Min certainty radius"
+    },
+    {
+     "type": "real",
+     "name": "Max uncover distance"
     },
     {
      "type": "terminator",
@@ -1352,101 +1335,175 @@
     }
    ]
   },
-  "character_idle_block": {
+  "character_weapons_block__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 12,
-   "fields": [
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real_bounds",
-     "name": "idle pose delay time"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "character_vocalization_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 8,
-   "fields": [
-    {
-     "type": "real",
-     "name": "look comment time"
-    },
-    {
-     "type": "real",
-     "name": "look long comment time"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "character_boarding_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 16,
+   "size": 204,
    "fields": [
     {
      "type": "long_flags",
-     "name": "flags",
-     "definition": "flags_flags_2"
+     "name": "weapons flags",
+     "definition": "weapons_flags_flags"
+    },
+    {
+     "type": "tag_reference",
+     "name": "weapon"
     },
     {
      "type": "real",
-     "name": "max distance"
+     "name": "maximum firing distance"
     },
     {
      "type": "real",
-     "name": "abort distance"
+     "name": "rate of fire"
+    },
+    {
+     "type": "angle",
+     "name": "projectile error"
+    },
+    {
+     "type": "real_bounds",
+     "name": "first burst delay time"
+    },
+    {
+     "type": "real",
+     "name": "surprise delay time"
+    },
+    {
+     "type": "real",
+     "name": "surprise fire-wildly time"
+    },
+    {
+     "type": "real",
+     "name": "death fire-wildly chance"
+    },
+    {
+     "type": "real",
+     "name": "death fire-wildly time"
+    },
+    {
+     "type": "real_bounds",
+     "name": "desired combat range"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "custom stand gun offset"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "custom crouch gun offset"
+    },
+    {
+     "type": "real",
+     "name": "target tracking"
+    },
+    {
+     "type": "real",
+     "name": "target leading"
+    },
+    {
+     "type": "real",
+     "name": "weapon damage modifier"
+    },
+    {
+     "type": "real",
+     "name": "minimum firing range"
+    },
+    {
+     "type": "real",
+     "name": "burst origin radius"
+    },
+    {
+     "type": "angle",
+     "name": "burst origin angle"
+    },
+    {
+     "type": "real_bounds",
+     "name": "burst return length"
+    },
+    {
+     "type": "angle",
+     "name": "burst return angle"
+    },
+    {
+     "type": "real_bounds",
+     "name": "burst duration"
+    },
+    {
+     "type": "real_bounds",
+     "name": "burst separation"
+    },
+    {
+     "type": "angle",
+     "name": "burst angular velocity"
     },
     {
      "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "max speed"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "character_boss_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 12,
-   "fields": [
-    {
-     "type": "pad",
      "name": null,
      "definition": 4
     },
     {
+     "type": "real",
+     "name": "special damage modifier"
+    },
+    {
+     "type": "angle",
+     "name": "special projectile error"
+    },
+    {
+     "type": "real",
+     "name": "super-ballistic range"
+    },
+    {
+     "type": "real",
+     "name": "bombardment range"
+    },
+    {
+     "type": "short_enum",
+     "name": "special-fire mode",
+     "definition": "special_fire_mode_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "special-fire situation",
+     "definition": "special_fire_situation_enum"
+    },
+    {
+     "type": "real",
+     "name": "special-fire chance"
+    },
+    {
+     "type": "real",
+     "name": "special-fire delay"
+    },
+    {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
+    },
+    {
+     "type": "real_bounds",
+     "name": "drop weapon loaded"
+    },
+    {
+     "type": "short_bounds",
+     "name": "drop weapon ammo"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
     },
     {
      "type": "real",
-     "name": "flurry damage threshold"
+     "name": "Max special target distance"
     },
     {
-     "type": "real",
-     "name": "flurry time"
+     "type": "real_bounds",
+     "name": "Ballistic firing bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "Ballistic fraction bounds"
     },
     {
      "type": "terminator",
@@ -1470,7 +1527,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real",
@@ -1515,7 +1572,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real_bounds",
@@ -1540,7 +1597,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real_vector_3d",
@@ -1553,7 +1610,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "short_enum",
@@ -1584,7 +1641,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real_bounds",
@@ -1597,7 +1654,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real_bounds",
@@ -1610,7 +1667,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real_bounds",
@@ -1623,7 +1680,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real_bounds",
@@ -1636,12 +1693,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 48
     },
     {
      "type": "block",
@@ -1709,7 +1766,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "angle",
@@ -1718,30 +1775,6 @@
     {
      "type": "angle",
      "name": "maximum error angle"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "character_firing_pattern_properties_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 28,
-   "fields": [
-    {
-     "type": "tag_reference",
-     "name": "weapon"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "block",
-     "name": "firing patterns",
-     "definition": "character_firing_pattern_block_3"
     },
     {
      "type": "terminator",
@@ -1808,7 +1841,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real_fraction",
@@ -1817,7 +1850,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real_fraction",
@@ -1826,7 +1859,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "short_bounds",
@@ -1835,6 +1868,408 @@
     {
      "type": "real",
      "name": "dont drop grenades chance"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_charge_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 40,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Charge flags",
+     "definition": "character_flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "melee attack range"
+    },
+    {
+     "type": "real",
+     "name": "melee abort range"
+    },
+    {
+     "type": "real",
+     "name": "melee attack timeout"
+    },
+    {
+     "type": "real",
+     "name": "melee attack delay timer"
+    },
+    {
+     "type": "real_bounds",
+     "name": "melee leap range"
+    },
+    {
+     "type": "real",
+     "name": "melee leap velocity"
+    },
+    {
+     "type": "real",
+     "name": "melee leap chance"
+    },
+    {
+     "type": "real",
+     "name": "melee leap ballistic"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_charge_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 44,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Charge flags",
+     "definition": "character_flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "melee consider range"
+    },
+    {
+     "type": "real",
+     "name": "melee attack range"
+    },
+    {
+     "type": "real",
+     "name": "melee abort range"
+    },
+    {
+     "type": "real",
+     "name": "melee attack timeout"
+    },
+    {
+     "type": "real",
+     "name": "melee attack delay timer"
+    },
+    {
+     "type": "real_bounds",
+     "name": "melee leap range"
+    },
+    {
+     "type": "real",
+     "name": "melee leap velocity"
+    },
+    {
+     "type": "real",
+     "name": "melee leap chance"
+    },
+    {
+     "type": "real",
+     "name": "melee leap ballistic"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_charge_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 48,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Charge flags",
+     "definition": "character_flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "melee consider range"
+    },
+    {
+     "type": "real",
+     "name": "melee attack range"
+    },
+    {
+     "type": "real",
+     "name": "melee abort range"
+    },
+    {
+     "type": "real",
+     "name": "melee attack timeout"
+    },
+    {
+     "type": "real",
+     "name": "melee attack delay timer"
+    },
+    {
+     "type": "real_bounds",
+     "name": "melee leap range"
+    },
+    {
+     "type": "real",
+     "name": "ideal leap velocity"
+    },
+    {
+     "type": "real",
+     "name": "max leap velocity"
+    },
+    {
+     "type": "real",
+     "name": "melee leap chance"
+    },
+    {
+     "type": "real",
+     "name": "melee leap ballistic"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_charge_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 72,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Charge flags",
+     "definition": "charge_flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "melee consider range"
+    },
+    {
+     "type": "real",
+     "name": "melee chance"
+    },
+    {
+     "type": "real",
+     "name": "melee attack range"
+    },
+    {
+     "type": "real",
+     "name": "melee abort range"
+    },
+    {
+     "type": "real",
+     "name": "melee attack timeout"
+    },
+    {
+     "type": "real",
+     "name": "melee attack delay timer"
+    },
+    {
+     "type": "real_bounds",
+     "name": "melee leap range"
+    },
+    {
+     "type": "real",
+     "name": "melee leap chance"
+    },
+    {
+     "type": "real",
+     "name": "ideal leap velocity"
+    },
+    {
+     "type": "real",
+     "name": "max leap velocity"
+    },
+    {
+     "type": "real",
+     "name": "melee leap ballistic"
+    },
+    {
+     "type": "real",
+     "name": "melee delay timer"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "tag_reference",
+     "name": "berserk weapon"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_ready_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "real_bounds",
+     "name": "ready time bounds"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_vehicle_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 128,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "unit"
+    },
+    {
+     "type": "long_flags",
+     "name": "vehicle flags",
+     "definition": "character_flags_flags"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "real",
+     "name": "ai pathfinding radius"
+    },
+    {
+     "type": "real",
+     "name": "ai destination radius"
+    },
+    {
+     "type": "real",
+     "name": "ai deceleration distance"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "real",
+     "name": "ai turning radius"
+    },
+    {
+     "type": "real",
+     "name": "ai inner turning radius (< tr)"
+    },
+    {
+     "type": "real",
+     "name": "ai ideal turning radius (> tr)"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "angle",
+     "name": "ai banshee steering maximum"
+    },
+    {
+     "type": "real",
+     "name": "ai max steering angle"
+    },
+    {
+     "type": "real",
+     "name": "ai max steering delta"
+    },
+    {
+     "type": "real",
+     "name": "ai oversteering scale"
+    },
+    {
+     "type": "angle_bounds",
+     "name": "ai oversteering bounds"
+    },
+    {
+     "type": "real",
+     "name": "ai sideslip distance"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "real",
+     "name": "ai throttle maximum"
+    },
+    {
+     "type": "real",
+     "name": "ai goal min throttle scale"
+    },
+    {
+     "type": "real",
+     "name": "ai turn min throttle scale"
+    },
+    {
+     "type": "real",
+     "name": "ai direction min throttle scale"
+    },
+    {
+     "type": "real",
+     "name": "ai acceleration scale"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "real",
+     "name": "ai charge repeat timeout"
+    },
+    {
+     "type": "real",
+     "name": "DEPRECATED (ai strafing abort range)"
+    },
+    {
+     "type": "real",
+     "name": "ai avoidance distance"
+    },
+    {
+     "type": "real",
+     "name": "ai charge look-ahead time"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "angle",
+     "name": "ai allowable aim deviation angle"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "real",
+     "name": "ai cover min distance"
+    },
+    {
+     "type": "real",
+     "name": "ai cover time"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "real",
+     "name": "ai charge consider distance"
+    },
+    {
+     "type": "real",
+     "name": "ai charge abort distance"
     },
     {
      "type": "terminator",
@@ -1857,7 +2292,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "long_flags",
@@ -1867,7 +2302,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "real",
@@ -1884,7 +2319,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "real",
@@ -1901,7 +2336,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "angle",
@@ -1938,7 +2373,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -1975,7 +2410,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "angle",
@@ -1984,7 +2419,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real",
@@ -2013,7 +2448,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -2026,7 +2461,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -2059,7 +2494,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "short_enum",
@@ -2070,6 +2505,614 @@
      "type": "pad",
      "name": null,
      "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_idle_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "real_bounds",
+     "name": "idle pose delay time"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_block_struct__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 340,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Character flags",
+     "definition": "character_flags_flags"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "tag_reference",
+     "name": "parent character"
+    },
+    {
+     "type": "tag_reference",
+     "name": "unit"
+    },
+    {
+     "type": "tag_reference",
+     "name": "style"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "tag_reference",
+     "name": "major character"
+    },
+    {
+     "type": "string_id",
+     "name": "model variant"
+    },
+    {
+     "type": "tag_reference",
+     "name": "creature"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "block",
+     "name": "general properties",
+     "definition": "character_general_block_3"
+    },
+    {
+     "type": "block",
+     "name": "vitality properties",
+     "definition": "character_vitality_block_3"
+    },
+    {
+     "type": "block",
+     "name": "placement properties",
+     "definition": "character_placement_block_3"
+    },
+    {
+     "type": "block",
+     "name": "perception properties",
+     "definition": "character_perception_block_3"
+    },
+    {
+     "type": "block",
+     "name": "look properties",
+     "definition": "character_look_block_3"
+    },
+    {
+     "type": "block",
+     "name": "movement properties",
+     "definition": "character_movement_block_3"
+    },
+    {
+     "type": "block",
+     "name": "swarm properties",
+     "definition": "character_swarm_block_2"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 36
+    },
+    {
+     "type": "block",
+     "name": "ready properties",
+     "definition": "character_ready_block_3"
+    },
+    {
+     "type": "block",
+     "name": "engage properties",
+     "definition": "character_engage_block_3"
+    },
+    {
+     "type": "block",
+     "name": "charge properties",
+     "definition": "character_charge_block_3"
+    },
+    {
+     "type": "block",
+     "name": "evasion properties",
+     "definition": "character_evasion_block_3"
+    },
+    {
+     "type": "block",
+     "name": "cover properties",
+     "definition": "character_cover_block_3"
+    },
+    {
+     "type": "block",
+     "name": "retreat properties",
+     "definition": "character_retreat_block_3"
+    },
+    {
+     "type": "block",
+     "name": "search properties",
+     "definition": "character_search_block_3"
+    },
+    {
+     "type": "block",
+     "name": "pre-search properties",
+     "definition": "character_presearch_block_3"
+    },
+    {
+     "type": "block",
+     "name": "idle properties",
+     "definition": "character_idle_block_3"
+    },
+    {
+     "type": "block",
+     "name": "vocalization properties",
+     "definition": "character_vocalization_block_2"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 36
+    },
+    {
+     "type": "block",
+     "name": "weapons properties",
+     "definition": "character_weapons_block_3"
+    },
+    {
+     "type": "block",
+     "name": "firing pattern properties",
+     "definition": "character_firing_pattern_properties_block_2"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "block",
+     "name": "grenades properties",
+     "definition": "character_grenades_block_3"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "block",
+     "name": "vehicle properties",
+     "definition": "character_vehicle_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_swarm_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 40,
+   "fields": [
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 48
+    },
+    {
+     "type": "short_integer",
+     "name": "scatter killed count"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "real",
+     "name": "scatter radius"
+    },
+    {
+     "type": "real",
+     "name": "scatter time"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "real",
+     "name": "hound min distance"
+    },
+    {
+     "type": "real",
+     "name": "hound max distance"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "real",
+     "name": "perlin offset scale"
+    },
+    {
+     "type": "real_bounds",
+     "name": "offset period"
+    },
+    {
+     "type": "real",
+     "name": "perlin idle movement threshold"
+    },
+    {
+     "type": "real",
+     "name": "perlin combat movement threshold"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_vocalization_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "real",
+     "name": "look comment time"
+    },
+    {
+     "type": "real",
+     "name": "look long comment time"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_firing_pattern_properties_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 28,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "weapon"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "block",
+     "name": "firing patterns",
+     "definition": "character_firing_pattern_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_block_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 408,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Character flags",
+     "definition": "character_flags_flags"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "tag_reference",
+     "name": "parent character"
+    },
+    {
+     "type": "tag_reference",
+     "name": "unit"
+    },
+    {
+     "type": "tag_reference",
+     "name": "creature"
+    },
+    {
+     "type": "tag_reference",
+     "name": "style"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "tag_reference",
+     "name": "major character"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "variants",
+     "definition": "character_variants_block_2"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 36
+    },
+    {
+     "type": "block",
+     "name": "general properties",
+     "definition": "character_general_block_4"
+    },
+    {
+     "type": "block",
+     "name": "vitality properties",
+     "definition": "character_vitality_block_4"
+    },
+    {
+     "type": "block",
+     "name": "placement properties",
+     "definition": "character_placement_block_4"
+    },
+    {
+     "type": "block",
+     "name": "perception properties",
+     "definition": "character_perception_block_4"
+    },
+    {
+     "type": "block",
+     "name": "look properties",
+     "definition": "character_look_block_4"
+    },
+    {
+     "type": "block",
+     "name": "movement properties",
+     "definition": "character_movement_block_4"
+    },
+    {
+     "type": "block",
+     "name": "swarm properties",
+     "definition": "character_swarm_block_3"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 36
+    },
+    {
+     "type": "block",
+     "name": "ready properties",
+     "definition": "character_ready_block_4"
+    },
+    {
+     "type": "block",
+     "name": "engage properties",
+     "definition": "character_engage_block_4"
+    },
+    {
+     "type": "block",
+     "name": "charge properties",
+     "definition": "character_charge_block_4"
+    },
+    {
+     "type": "block",
+     "name": "evasion properties",
+     "definition": "character_evasion_block_4"
+    },
+    {
+     "type": "block",
+     "name": "cover properties",
+     "definition": "character_cover_block_4"
+    },
+    {
+     "type": "block",
+     "name": "retreat properties",
+     "definition": "character_retreat_block_4"
+    },
+    {
+     "type": "block",
+     "name": "search properties",
+     "definition": "character_search_block_4"
+    },
+    {
+     "type": "block",
+     "name": "pre-search properties",
+     "definition": "character_presearch_block_4"
+    },
+    {
+     "type": "block",
+     "name": "idle properties",
+     "definition": "character_idle_block_4"
+    },
+    {
+     "type": "block",
+     "name": "vocalization properties",
+     "definition": "character_vocalization_block_3"
+    },
+    {
+     "type": "block",
+     "name": "boarding properties",
+     "definition": "character_boarding_block_2"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "boss properties",
+     "definition": "character_boss_block_2"
+    },
+    {
+     "type": "block",
+     "name": "weapons properties",
+     "definition": "character_weapons_block_4"
+    },
+    {
+     "type": "block",
+     "name": "firing pattern properties",
+     "definition": "character_firing_pattern_properties_block_3"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "block",
+     "name": "grenades properties",
+     "definition": "character_grenades_block_4"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "block",
+     "name": "vehicle properties",
+     "definition": "character_vehicle_block_4"
+    },
+    {
+     "type": "block",
+     "name": "morph properties",
+     "definition": "g_null_block_2"
+    },
+    {
+     "type": "block",
+     "name": "equipment definitions",
+     "definition": "g_null_block_3"
+    },
+    {
+     "type": "block",
+     "name": "campaign metagame bucket",
+     "definition": "campaign_metagame_bucket_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_variants_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "variant name"
+    },
+    {
+     "type": "short_integer",
+     "name": "variant index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "string_id",
+     "name": "variant designator"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_boarding_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "real",
+     "name": "max distance"
+    },
+    {
+     "type": "real",
+     "name": "abort distance"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "real",
+     "name": "max speed"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "character_boss_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 36
+    },
+    {
+     "type": "real",
+     "name": "flurry damage threshold"
+    },
+    {
+     "type": "real",
+     "name": "flurry time"
     },
     {
      "type": "terminator",
@@ -2217,6 +3260,12 @@
     "unused"
    ]
   },
+  "retreat_flags_flags": {
+   "options": [
+    "Zig-zag when fleeing",
+    "Unused1"
+   ]
+  },
   "movement_flags_flags": {
    "options": [
     "danger crouch allow movement",
@@ -2278,27 +3327,10 @@
     "flight fight constant movement"
    ]
   },
-  "charge_flags_flags": {
-   "options": [
-    "offhand melee allowed",
-    "berserk whenever charge"
-   ]
-  },
-  "retreat_flags_flags": {
-   "options": [
-    "Zig-zag when fleeing",
-    "Unused1"
-   ]
-  },
   "search_flags_flags": {
    "options": [
     "crouch on investigate",
     "walk on pursuit"
-   ]
-  },
-  "flags_flags_2": {
-   "options": [
-    "airborne boarding"
    ]
   },
   "weapons_flags_flags": {
@@ -2336,13 +3368,49 @@
     "bounce"
    ]
   },
+  "charge_flags_flags": {
+   "options": [
+    "offhand melee allowed",
+    "berserk whenever charge"
+   ]
+  },
   "vehicle_flags_flags": {
    "options": [
     "passengers adopt original squad"
+   ]
+  },
+  "flags_flags_2": {
+   "options": [
+    "airborne boarding"
    ]
   }
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "character_presearch_block": {
+   "0": "character_presearch_block__v0",
+   "1": "character_presearch_block"
+  },
+  "character_weapons_block": {
+   "0": "character_weapons_block__v0",
+   "1": "character_weapons_block"
+  },
+  "character_charge_block": {
+   "0": "character_charge_block__v0",
+   "1": "character_charge_block__v1",
+   "2": "character_charge_block__v2",
+   "3": "character_charge_block"
+  },
+  "character_vehicle_block": {
+   "0": "character_vehicle_block__v0",
+   "1": "character_vehicle_block"
+  },
+  "character_block_struct": {
+   "0": "character_block_struct__v0",
+   "1": "character_block_struct__v1",
+   "2": "character_block_struct"
+  }
+ }
 }

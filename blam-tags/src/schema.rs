@@ -130,6 +130,11 @@ struct TagSchema {
     #[serde(default)] datas: BTreeMap<String, TagDataSchema>,
     #[serde(default)] resources: BTreeMap<String, PageableResourceSchema>,
     #[serde(default)] interops: BTreeMap<String, ApiInteropSchema>,
+    /// Classic Halo 2 only: base (latest) struct name -> { on-disk version
+    /// -> variant struct name }. Present for multi-version layouts; the
+    /// classic decoder selects the FieldSet matching a block/struct
+    /// header's version field. Absent/empty for MCC + single-version.
+    #[serde(default)] struct_versions: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 impl TagSchema {
@@ -696,6 +701,34 @@ fn build_layout_from_schema(
         })
         .collect();
 
+    // Classic Halo 2 per-version struct variant table, parallel to
+    // struct_layouts order. `Some(v)` only for a base (multi-version)
+    // struct: `v[n]` is the struct index of the variant for on-disk
+    // version `n`, gaps padded with the base index. `None` everywhere
+    // else (single-version structs + the variant entries themselves).
+    let struct_version_table: Vec<Option<Vec<u32>>> = schema
+        .structs
+        .keys()
+        .map(|name| {
+            let vmap = schema.struct_versions.get(name)?;
+            let base_idx = schema.struct_index(name)?;
+            let max_ver = vmap
+                .keys()
+                .filter_map(|k| k.parse::<usize>().ok())
+                .max()
+                .unwrap_or(0);
+            let mut v = vec![base_idx; max_ver + 1];
+            for (ver_str, variant) in vmap {
+                if let (Ok(ver), Some(idx)) = (ver_str.parse::<usize>(), schema.struct_index(variant)) {
+                    if ver < v.len() {
+                        v[ver] = idx;
+                    }
+                }
+            }
+            Some(v)
+        })
+        .collect();
+
     let mut result = TagLayout {
         root_data_size: schema_root_size,
         guid: layout_guid,
@@ -717,6 +750,7 @@ fn build_layout_from_schema(
         interop_layouts,
         struct_layouts,
         struct_tags,
+        struct_version_table,
     };
 
     // Compute struct sizes + field offsets. First pass with tmpl

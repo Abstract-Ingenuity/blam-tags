@@ -20,12 +20,52 @@
    "max_count_string": "512",
    "struct": "structure_collision_materials_block"
   },
-  "bsp3d_nodes_block_2": {
+  "large_bsp3d_nodes_block_2": {
    "max_count": 131072,
    "max_count_string": "131072",
-   "struct": "bsp3d_nodes_block"
+   "struct": "large_bsp3d_nodes_block"
   },
   "planes_block_2": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "planes_block"
+  },
+  "large_leaves_block_2": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "large_leaves_block"
+  },
+  "large_bsp2d_references_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_bsp2d_references_block"
+  },
+  "large_bsp2d_nodes_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_bsp2d_nodes_block"
+  },
+  "large_surfaces_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_surfaces_block"
+  },
+  "large_edges_block_2": {
+   "max_count": 262144,
+   "max_count_string": "262144",
+   "struct": "large_edges_block"
+  },
+  "large_vertices_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_vertices_block"
+  },
+  "small_bsp3d_nodes_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "small_bsp3d_nodes_block"
+  },
+  "planes_block_3": {
    "max_count": 65536,
    "max_count_string": "65536",
    "struct": "planes_block"
@@ -56,6 +96,46 @@
    "struct": "edges_block"
   },
   "vertices_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "vertices_block"
+  },
+  "bsp3d_nodes_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "bsp3d_nodes_block"
+  },
+  "planes_block_4": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "planes_block"
+  },
+  "leaves_block_3": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "leaves_block"
+  },
+  "bsp2d_references_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "bsp2d_references_block"
+  },
+  "bsp2d_nodes_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "bsp2d_nodes_block"
+  },
+  "surfaces_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "surfaces_block"
+  },
+  "edges_block_3": {
+   "max_count": 262144,
+   "max_count_string": "262144",
+   "struct": "edges_block"
+  },
+  "vertices_block_3": {
    "max_count": 131072,
    "max_count_string": "131072",
    "struct": "vertices_block"
@@ -135,15 +215,25 @@
    "max_count_string": "1",
    "struct": "structure_bsp_detail_object_data_block"
   },
-  "global_geometry_compression_info_block_2": {
-   "max_count": 1,
-   "max_count_string": "1",
-   "struct": "global_geometry_compression_info_block"
+  "global_geometry_section_raw_vertex_block_2": {
+   "max_count": 32767,
+   "max_count_string": "32767",
+   "struct": "global_geometry_section_raw_vertex_block"
   },
-  "global_geometry_block_resource_block_2": {
-   "max_count": 1024,
-   "max_count_string": "1024",
-   "struct": "global_geometry_block_resource_block"
+  "global_geometry_section_vertex_buffer_block_2": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "global_geometry_section_vertex_buffer_block"
+  },
+  "global_geometry_section_strip_index_block_2": {
+   "max_count": 65535,
+   "max_count_string": "65535",
+   "struct": "global_geometry_section_strip_index_block"
+  },
+  "global_geometry_part_block_2": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "global_geometry_part_block"
   },
   "global_geometry_part_block_new_2": {
    "max_count": 255,
@@ -160,30 +250,45 @@
    "max_count_string": "32768",
    "struct": "global_visibility_bounds_block"
   },
-  "global_geometry_section_raw_vertex_block_2": {
+  "global_geometry_section_raw_vertex_block_3": {
    "max_count": 32767,
    "max_count_string": "32767",
    "struct": "global_geometry_section_raw_vertex_block"
-  },
-  "global_geometry_section_strip_index_block_2": {
-   "max_count": 65535,
-   "max_count_string": "65535",
-   "struct": "global_geometry_section_strip_index_block"
   },
   "global_geometry_section_strip_index_block_3": {
    "max_count": 65535,
    "max_count_string": "65535",
    "struct": "global_geometry_section_strip_index_block"
   },
-  "global_geometry_section_vertex_buffer_block_2": {
+  "global_geometry_section_strip_index_block_4": {
+   "max_count": 65535,
+   "max_count_string": "65535",
+   "struct": "global_geometry_section_strip_index_block"
+  },
+  "global_geometry_section_vertex_buffer_block_3": {
    "max_count": 512,
    "max_count_string": "512",
    "struct": "global_geometry_section_vertex_buffer_block"
   },
-  "structure_bsp_cluster_data_block_new_2": {
+  "global_geometry_compression_info_block_2": {
    "max_count": 1,
    "max_count_string": "1",
-   "struct": "structure_bsp_cluster_data_block_new"
+   "struct": "global_geometry_compression_info_block"
+  },
+  "structure_indices_segment_block_2": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_indices_segment_block"
+  },
+  "structure_indices_segment_reference_block_2": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_indices_segment_reference_block"
+  },
+  "structure_subcluster_block_2": {
+   "max_count": 32768,
+   "max_count_string": "32768",
+   "struct": "structure_subcluster_block"
   },
   "predicted_resource_block_2": {
    "max_count": 2048,
@@ -195,12 +300,187 @@
    "max_count_string": "512",
    "struct": "structure_bsp_cluster_portal_index_block"
   },
+  "global_geometry_plane_block_2": {
+   "max_count": 65535,
+   "max_count_string": "65535",
+   "struct": "global_geometry_plane_block"
+  },
+  "global_geometry_rigid_plane_group_block_2": {
+   "max_count": 65280,
+   "max_count_string": "65280",
+   "struct": "global_geometry_rigid_plane_group_block"
+  },
+  "global_geometry_explicit_edge_block_2": {
+   "max_count": 65535,
+   "max_count_string": "65535",
+   "struct": "global_geometry_explicit_edge_block"
+  },
+  "structure_shared_edge_block_2": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_shared_edge_block"
+  },
+  "structure_shared_edge_group_block_2": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "structure_shared_edge_group_block"
+  },
+  "structure_shared_edge_block_3": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_shared_edge_block"
+  },
+  "structure_shared_edge_group_block_3": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "structure_shared_edge_group_block"
+  },
+  "structure_subcluster_boundary_block_2": {
+   "max_count": 6144,
+   "max_count_string": "6144",
+   "struct": "structure_subcluster_boundary_block"
+  },
+  "structure_strip_segment_first_triangle_index_block_2": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_strip_segment_first_triangle_index_block"
+  },
+  "structure_bsp_cluster_lightmap_index_block_2": {
+   "max_count": 20000,
+   "max_count_string": "20000",
+   "struct": "structure_bsp_cluster_lightmap_index_block"
+  },
+  "structure_bsp_cluster_lightmap_texture_coordinate_block_2": {
+   "max_count": 32767,
+   "max_count_string": "32767",
+   "struct": "structure_bsp_cluster_lightmap_texture_coordinate_block"
+  },
+  "structure_bsp_cluster_lightmap_duplicate_index_block_2": {
+   "max_count": 32767,
+   "max_count_string": "32767",
+   "struct": "structure_bsp_cluster_lightmap_duplicate_index_block"
+  },
+  "structure_bsp_cluster_lightmap_data_block_2": {
+   "max_count": 128,
+   "max_count_string": "128",
+   "struct": "structure_bsp_cluster_lightmap_data_block"
+  },
+  "structure_lightmap_bsp_leaf_block_2": {
+   "max_count": 4096,
+   "max_count_string": "4096",
+   "struct": "structure_lightmap_bsp_leaf_block"
+  },
+  "structure_lightmap_surface_block_2": {
+   "max_count": 4096,
+   "max_count_string": "4096",
+   "struct": "structure_lightmap_surface_block"
+  },
+  "structure_lightmap_sampling_info_block_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "structure_lightmap_sampling_info_block"
+  },
+  "global_geometry_block_resource_block_2": {
+   "max_count": 1024,
+   "max_count_string": "1024",
+   "struct": "global_geometry_block_resource_block"
+  },
+  "structure_indices_segment_block_3": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_indices_segment_block"
+  },
+  "structure_indices_segment_reference_block_3": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_indices_segment_reference_block"
+  },
+  "structure_shared_edge_block_4": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_shared_edge_block"
+  },
+  "structure_shared_edge_group_block_4": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "structure_shared_edge_group_block"
+  },
+  "structure_shared_edge_block_5": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_shared_edge_block"
+  },
+  "structure_shared_edge_group_block_5": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "structure_shared_edge_group_block"
+  },
+  "structure_subcluster_boundary_block_3": {
+   "max_count": 6144,
+   "max_count_string": "6144",
+   "struct": "structure_subcluster_boundary_block"
+  },
+  "structure_strip_segment_first_triangle_index_block_3": {
+   "max_count": 16384,
+   "max_count_string": "16384",
+   "struct": "structure_strip_segment_first_triangle_index_block"
+  },
+  "structure_bsp_cluster_data_block_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "structure_bsp_cluster_data_block"
+  },
+  "structure_subcluster_block_3": {
+   "max_count": 32768,
+   "max_count_string": "32768",
+   "struct": "structure_subcluster_block"
+  },
+  "predicted_resource_block_3": {
+   "max_count": 2048,
+   "max_count_string": "2048",
+   "struct": "predicted_resource_block"
+  },
+  "structure_bsp_cluster_portal_index_block_3": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "structure_bsp_cluster_portal_index_block"
+  },
+  "structure_bsp_cluster_visibility_mopp_leaf_block_2": {
+   "max_count": 32768,
+   "max_count_string": "32768",
+   "struct": "structure_bsp_cluster_visibility_mopp_leaf_block"
+  },
   "structure_bsp_cluster_instanced_geometry_index_block_2": {
    "max_count": 1024,
    "max_count_string": "1024",
    "struct": "structure_bsp_cluster_instanced_geometry_index_block"
   },
-  "global_geometry_section_strip_index_block_4": {
+  "visibility_mopp_reorder_table_block_2": {
+   "max_count": 32768,
+   "max_count_string": "32768",
+   "struct": "visibility_mopp_reorder_table_block"
+  },
+  "structure_bsp_cluster_data_block_new_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "structure_bsp_cluster_data_block_new"
+  },
+  "predicted_resource_block_4": {
+   "max_count": 2048,
+   "max_count_string": "2048",
+   "struct": "predicted_resource_block"
+  },
+  "structure_bsp_cluster_portal_index_block_4": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "structure_bsp_cluster_portal_index_block"
+  },
+  "structure_bsp_cluster_instanced_geometry_index_block_3": {
+   "max_count": 1024,
+   "max_count_string": "1024",
+   "struct": "structure_bsp_cluster_instanced_geometry_index_block"
+  },
+  "global_geometry_section_strip_index_block_5": {
    "max_count": 65535,
    "max_count_string": "65535",
    "struct": "global_geometry_section_strip_index_block"
@@ -265,12 +545,27 @@
    "max_count_string": "65535",
    "struct": "sector_vertex_block"
   },
+  "ref_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "ref_block"
+  },
   "environment_object_bsp_refs_2": {
    "max_count": 1024,
    "max_count_string": "1024",
    "struct": "environment_object_bsp_refs"
   },
   "environment_object_nodes_2": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "environment_object_nodes"
+  },
+  "environment_object_bsp_refs_3": {
+   "max_count": 1024,
+   "max_count_string": "1024",
+   "struct": "environment_object_bsp_refs"
+  },
+  "environment_object_nodes_3": {
    "max_count": 255,
    "max_count_string": "255",
    "struct": "environment_object_nodes"
@@ -475,52 +770,142 @@
    "max_count_string": "350",
    "struct": "structure_bsp_precomputed_lighting_block"
   },
+  "structure_bsp_cluster_data_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "structure_bsp_cluster_data_block"
+  },
+  "structure_subcluster_block_4": {
+   "max_count": 32768,
+   "max_count_string": "32768",
+   "struct": "structure_subcluster_block"
+  },
   "structure_bsp_cluster_data_block_new_3": {
    "max_count": 1,
    "max_count_string": "1",
    "struct": "structure_bsp_cluster_data_block_new"
   },
-  "global_geometry_section_strip_index_block_5": {
+  "global_geometry_section_strip_index_block_6": {
    "max_count": 65535,
    "max_count_string": "65535",
    "struct": "global_geometry_section_strip_index_block"
+  },
+  "large_bsp3d_nodes_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_bsp3d_nodes_block"
+  },
+  "planes_block_5": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "planes_block"
+  },
+  "large_leaves_block_3": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "large_leaves_block"
+  },
+  "large_bsp2d_references_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_bsp2d_references_block"
+  },
+  "large_bsp2d_nodes_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_bsp2d_nodes_block"
+  },
+  "large_surfaces_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_surfaces_block"
+  },
+  "large_edges_block_3": {
+   "max_count": 262144,
+   "max_count_string": "262144",
+   "struct": "large_edges_block"
+  },
+  "large_vertices_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_vertices_block"
+  },
+  "small_bsp3d_nodes_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "small_bsp3d_nodes_block"
+  },
+  "planes_block_6": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "planes_block"
+  },
+  "leaves_block_4": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "leaves_block"
+  },
+  "bsp2d_references_block_4": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "bsp2d_references_block"
+  },
+  "bsp2d_nodes_block_4": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "bsp2d_nodes_block"
+  },
+  "surfaces_block_4": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "surfaces_block"
+  },
+  "edges_block_4": {
+   "max_count": 262144,
+   "max_count_string": "262144",
+   "struct": "edges_block"
+  },
+  "vertices_block_4": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "vertices_block"
   },
   "bsp3d_nodes_block_3": {
    "max_count": 131072,
    "max_count_string": "131072",
    "struct": "bsp3d_nodes_block"
   },
-  "planes_block_3": {
+  "planes_block_7": {
    "max_count": 65536,
    "max_count_string": "65536",
    "struct": "planes_block"
   },
-  "leaves_block_3": {
+  "leaves_block_5": {
    "max_count": 65536,
    "max_count_string": "65536",
    "struct": "leaves_block"
   },
-  "bsp2d_references_block_3": {
+  "bsp2d_references_block_5": {
    "max_count": 131072,
    "max_count_string": "131072",
    "struct": "bsp2d_references_block"
   },
-  "bsp2d_nodes_block_3": {
+  "bsp2d_nodes_block_5": {
    "max_count": 131072,
    "max_count_string": "131072",
    "struct": "bsp2d_nodes_block"
   },
-  "surfaces_block_3": {
+  "surfaces_block_5": {
    "max_count": 131072,
    "max_count_string": "131072",
    "struct": "surfaces_block"
   },
-  "edges_block_3": {
+  "edges_block_5": {
    "max_count": 262144,
    "max_count_string": "262144",
    "struct": "edges_block"
   },
-  "vertices_block_3": {
+  "vertices_block_5": {
    "max_count": 131072,
    "max_count_string": "131072",
    "struct": "vertices_block"
@@ -721,6 +1106,11 @@
    "struct": "structure_bsp_fake_lightprobes_block"
   },
   "decorator_placement_block_2": {
+   "max_count": 32768,
+   "max_count_string": "32768",
+   "struct": "decorator_placement_block"
+  },
+  "decorator_placement_block_3": {
    "max_count": 32768,
    "max_count_string": "32768",
    "struct": "decorator_placement_block"
@@ -1182,19 +1572,251 @@
     }
    ]
   },
-  "global_collision_bsp_block": {
+  "global_collision_bsp_block__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 96,
    "fields": [
     {
      "type": "block",
      "name": "bsp3d nodes",
-     "definition": "bsp3d_nodes_block_2"
+     "definition": "large_bsp3d_nodes_block_2"
     },
     {
      "type": "block",
      "name": "planes",
      "definition": "planes_block_2"
+    },
+    {
+     "type": "block",
+     "name": "leaves",
+     "definition": "large_leaves_block_2"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d references",
+     "definition": "large_bsp2d_references_block_2"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d nodes",
+     "definition": "large_bsp2d_nodes_block_2"
+    },
+    {
+     "type": "block",
+     "name": "surfaces",
+     "definition": "large_surfaces_block_2"
+    },
+    {
+     "type": "block",
+     "name": "edges",
+     "definition": "large_edges_block_2"
+    },
+    {
+     "type": "block",
+     "name": "vertices",
+     "definition": "large_vertices_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_bsp3d_nodes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "plane"
+    },
+    {
+     "type": "long_integer",
+     "name": "back child"
+    },
+    {
+     "type": "long_integer",
+     "name": "front child"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "planes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "real_plane_3d",
+     "name": "plane"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_leaves_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "bsp2d reference count"
+    },
+    {
+     "type": "long_integer",
+     "name": "first bsp2d reference"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_bsp2d_references_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "plane"
+    },
+    {
+     "type": "long_integer",
+     "name": "bsp2d node"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_bsp2d_nodes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "real_plane_2d",
+     "name": "plane"
+    },
+    {
+     "type": "long_integer",
+     "name": "left child"
+    },
+    {
+     "type": "long_integer",
+     "name": "right child"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_surfaces_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "plane"
+    },
+    {
+     "type": "long_integer",
+     "name": "first edge"
+    },
+    {
+     "type": "byte_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "char_integer",
+     "name": "breakable surface"
+    },
+    {
+     "type": "short_integer",
+     "name": "material"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_edges_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "start vertex"
+    },
+    {
+     "type": "long_integer",
+     "name": "end vertex"
+    },
+    {
+     "type": "long_integer",
+     "name": "forward edge"
+    },
+    {
+     "type": "long_integer",
+     "name": "reverse edge"
+    },
+    {
+     "type": "long_integer",
+     "name": "left surface"
+    },
+    {
+     "type": "long_integer",
+     "name": "right surface"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_vertices_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "real_point_3d",
+     "name": "point"
+    },
+    {
+     "type": "long_integer",
+     "name": "first edge"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_collision_bsp_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 96,
+   "fields": [
+    {
+     "type": "block",
+     "name": "bsp3d nodes",
+     "definition": "small_bsp3d_nodes_block_2"
+    },
+    {
+     "type": "block",
+     "name": "planes",
+     "definition": "planes_block_3"
     },
     {
      "type": "block",
@@ -1232,28 +1854,26 @@
     }
    ]
   },
-  "bsp3d_nodes_block": {
+  "small_bsp3d_nodes_block": {
    "guid": "00000000000000000000000000000000",
    "size": 8,
    "fields": [
     {
-     "type": "skip",
-     "name": null,
-     "definition": 8
+     "type": "short_integer",
+     "name": "plane"
     },
     {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "planes_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 16,
-   "fields": [
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
     {
-     "type": "real_plane_3d",
-     "name": "plane"
+     "type": "short_integer",
+     "name": "back child"
+    },
+    {
+     "type": "short_integer",
+     "name": "front child"
     },
     {
      "type": "terminator",
@@ -1355,6 +1975,45 @@
     }
    ]
   },
+  "edges_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "start vertex"
+    },
+    {
+     "type": "short_integer",
+     "name": "end vertex"
+    },
+    {
+     "type": "short_integer",
+     "name": "forward edge"
+    },
+    {
+     "type": "short_integer",
+     "name": "reverse edge"
+    },
+    {
+     "type": "short_integer",
+     "name": "left surface"
+    },
+    {
+     "type": "short_integer",
+     "name": "right surface"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "edges_block": {
    "guid": "00000000000000000000000000000000",
    "size": 12,
@@ -1412,6 +2071,71 @@
     }
    ]
   },
+  "global_collision_bsp_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 96,
+   "fields": [
+    {
+     "type": "block",
+     "name": "bsp3d nodes",
+     "definition": "bsp3d_nodes_block_2"
+    },
+    {
+     "type": "block",
+     "name": "planes",
+     "definition": "planes_block_4"
+    },
+    {
+     "type": "block",
+     "name": "leaves",
+     "definition": "leaves_block_3"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d references",
+     "definition": "bsp2d_references_block_3"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d nodes",
+     "definition": "bsp2d_nodes_block_3"
+    },
+    {
+     "type": "block",
+     "name": "surfaces",
+     "definition": "surfaces_block_3"
+    },
+    {
+     "type": "block",
+     "name": "edges",
+     "definition": "edges_block_3"
+    },
+    {
+     "type": "block",
+     "name": "vertices",
+     "definition": "vertices_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "bsp3d_nodes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "unused_structure_bsp_node_block": {
    "guid": "00000000000000000000000000000000",
    "size": 6,
@@ -1420,6 +2144,38 @@
      "type": "skip",
      "name": null,
      "definition": 6
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_leaf_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 6
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "cluster"
+    },
+    {
+     "type": "short_integer",
+     "name": "surface reference count"
+    },
+    {
+     "type": "long_integer",
+     "name": "first surface reference index"
     },
     {
      "type": "terminator",
@@ -1442,6 +2198,33 @@
     {
      "type": "long_integer",
      "name": "first surface reference index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_surface_reference_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "strip index"
+    },
+    {
+     "type": "long_integer",
+     "name": "bsp node index"
+    },
+    {
+     "type": "long_integer",
+     "name": "lightmap triangle index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
     },
     {
      "type": "terminator",
@@ -1801,24 +2584,19 @@
     }
    ]
   },
-  "structure_bsp_cluster_block": {
+  "structure_bsp_cluster_block__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 216,
+   "size": 456,
    "fields": [
+    {
+     "type": "struct",
+     "name": "section",
+     "definition": "global_geometry_section_struct"
+    },
     {
      "type": "struct",
      "name": "section info",
      "definition": "global_geometry_section_info_struct"
-    },
-    {
-     "type": "struct",
-     "name": "geometry block info",
-     "definition": "global_geometry_block_info_struct"
-    },
-    {
-     "type": "block",
-     "name": "cluster data",
-     "definition": "structure_bsp_cluster_data_block_new_2"
     },
     {
      "type": "real_bounds",
@@ -1833,28 +2611,16 @@
      "name": "bounds z"
     },
     {
-     "type": "char_integer",
-     "name": "scenario sky index"
+     "type": "short_integer",
+     "name": "sky index"
     },
     {
-     "type": "char_integer",
-     "name": "media index"
+     "type": "short_integer",
+     "name": "visible sky index"
     },
     {
-     "type": "char_integer",
-     "name": "scenario visible sky index"
-    },
-    {
-     "type": "char_integer",
-     "name": "scenario atmospheric fog index"
-    },
-    {
-     "type": "char_integer",
+     "type": "short_integer",
      "name": "planar fog designator"
-    },
-    {
-     "type": "char_integer",
-     "name": "visible fog plane index"
     },
     {
      "type": "short_integer",
@@ -1869,8 +2635,9 @@
      "name": "weather"
     },
     {
-     "type": "short_integer",
-     "name": "transition structure bsp"
+     "type": "pad",
+     "name": null,
+     "definition": 2
     },
     {
      "type": "pad",
@@ -1883,14 +2650,24 @@
      "definition": 4
     },
     {
-     "type": "word_flags",
-     "name": "flags",
-     "definition": "flags_flags_6"
-    },
-    {
      "type": "pad",
      "name": null,
-     "definition": 2
+     "definition": 4
+    },
+    {
+     "type": "block",
+     "name": "strip segments",
+     "definition": "structure_indices_segment_block_2"
+    },
+    {
+     "type": "block",
+     "name": "strip segment references",
+     "definition": "structure_indices_segment_reference_block_2"
+    },
+    {
+     "type": "block",
+     "name": "subclusters",
+     "definition": "structure_subcluster_block_2"
     },
     {
      "type": "block",
@@ -1903,23 +2680,629 @@
      "definition": "structure_bsp_cluster_portal_index_block_2"
     },
     {
+     "type": "struct",
+     "name": "isq info",
+     "definition": "global_geometry_isq_info_struct"
+    },
+    {
+     "type": "block",
+     "name": "forward edges",
+     "definition": "structure_shared_edge_block_2"
+    },
+    {
+     "type": "block",
+     "name": "forward edge groups",
+     "definition": "structure_shared_edge_group_block_2"
+    },
+    {
+     "type": "block",
+     "name": "backward edges",
+     "definition": "structure_shared_edge_block_3"
+    },
+    {
+     "type": "block",
+     "name": "backward edge groups",
+     "definition": "structure_shared_edge_group_block_3"
+    },
+    {
+     "type": "block",
+     "name": "subcluster boundaries",
+     "definition": "structure_subcluster_boundary_block_2"
+    },
+    {
+     "type": "block",
+     "name": "first triangle indices",
+     "definition": "structure_strip_segment_first_triangle_index_block_2"
+    },
+    {
+     "type": "block",
+     "name": "lightmap fragments",
+     "definition": "structure_bsp_cluster_lightmap_data_block_2"
+    },
+    {
+     "type": "block",
+     "name": "lightmap sampling info",
+     "definition": "structure_lightmap_sampling_info_block_2"
+    },
+    {
      "type": "long_integer",
      "name": "checksum from structure"
     },
     {
+     "type": "pointer",
+     "name": "runtime_dx9_index_buffer"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_geometry_section_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 272,
+   "fields": [
+    {
      "type": "block",
-     "name": "instanced geometry indices",
-     "definition": "structure_bsp_cluster_instanced_geometry_index_block_2"
+     "name": "raw vertices",
+     "definition": "global_geometry_section_raw_vertex_block_2"
+    },
+    {
+     "type": "array",
+     "name": "old vertex buffers",
+     "definition": "old_vertex_buffers_array"
+    },
+    {
+     "type": "vertex_buffer",
+     "name": "transparent position"
     },
     {
      "type": "block",
-     "name": "index reorder table",
-     "definition": "global_geometry_section_strip_index_block_4"
+     "name": "vertex buffers",
+     "definition": "global_geometry_section_vertex_buffer_block_2"
+    },
+    {
+     "type": "block",
+     "name": "strip indices",
+     "definition": "global_geometry_section_strip_index_block_2"
+    },
+    {
+     "type": "block",
+     "name": "parts",
+     "definition": "global_geometry_part_block_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 96
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "SECT"
+  },
+  "global_geometry_section_raw_vertex_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 196,
+   "fields": [
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "array",
+     "name": "node indices (OLD)",
+     "definition": "node_indices_old_array"
+    },
+    {
+     "type": "array",
+     "name": "node weights",
+     "definition": "node_weights_array"
+    },
+    {
+     "type": "array",
+     "name": "node indices (NEW)",
+     "definition": "node_indices_new_array"
+    },
+    {
+     "type": "long_integer",
+     "name": "use new node indices"
+    },
+    {
+     "type": "long_integer",
+     "name": "adjusted compound node index"
+    },
+    {
+     "type": "real_point_2d",
+     "name": "texcoord"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "normal"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "binormal"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "tangent"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "anisotropic binormal"
+    },
+    {
+     "type": "real_point_2d",
+     "name": "secondary texcoord"
+    },
+    {
+     "type": "real_rgb_color",
+     "name": "primary lightmap color"
+    },
+    {
+     "type": "real_point_2d",
+     "name": "primary lightmap texcoord"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "primary lightmap incident direction"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_indices_old_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "node index (OLD)"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_weights_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "node_weight"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_indices_new_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "node index (NEW)"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "old_vertex_buffers_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "vertex_buffer",
+     "name": "vertex buffer"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_geometry_section_vertex_buffer_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "vertex_buffer",
+     "name": "vertex buffer"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_geometry_section_strip_index_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_geometry_part_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 100,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "type",
+     "definition": "type_enum"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "short_integer",
+     "name": "material"
+    },
+    {
+     "type": "short_enum",
+     "name": "geometry subclassification",
+     "definition": "geometry_subclassification_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "strip start index"
+    },
+    {
+     "type": "short_integer",
+     "name": "strip length"
+    },
+    {
+     "type": "short_integer",
+     "name": "first strip segment index"
+    },
+    {
+     "type": "short_integer",
+     "name": "strip segment count"
+    },
+    {
+     "type": "short_integer",
+     "name": "first vertex index"
+    },
+    {
+     "type": "short_integer",
+     "name": "vertex count"
+    },
+    {
+     "type": "short_integer",
+     "name": "first triangle index"
+    },
+    {
+     "type": "short_integer",
+     "name": "triangle count"
+    },
+    {
+     "type": "char_integer",
+     "name": "max nodes/vertex"
+    },
+    {
+     "type": "char_integer",
+     "name": "contributing compound node count"
+    },
+    {
+     "type": "word_flags",
+     "name": "vertex usage flags",
+     "definition": "vertex_usage_flags_flags"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 3
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "array",
+     "name": "node indices",
+     "definition": "node_indices_array"
+    },
+    {
+     "type": "array",
+     "name": "node weights",
+     "definition": "node_weights_array_2"
+    },
+    {
+     "type": "real",
+     "name": "lod mipmap magic number"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_indices_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 1,
+   "fields": [
+    {
+     "type": "char_integer",
+     "name": "node index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_weights_struct_2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "node weight"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_geometry_section_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 108,
+   "fields": [
+    {
+     "type": "block",
+     "name": "parts",
+     "definition": "global_geometry_part_block_new_2"
+    },
+    {
+     "type": "block",
+     "name": "subparts",
+     "definition": "global_subparts_block_2"
+    },
+    {
+     "type": "block",
+     "name": "visibility bounds",
+     "definition": "global_visibility_bounds_block_2"
+    },
+    {
+     "type": "block",
+     "name": "raw vertices",
+     "definition": "global_geometry_section_raw_vertex_block_3"
+    },
+    {
+     "type": "block",
+     "name": "strip indices",
+     "definition": "global_geometry_section_strip_index_block_3"
     },
     {
      "type": "data",
-     "name": "collision mopp code",
-     "definition": "collision_mopp_code_data"
+     "name": "visibility mopp code",
+     "definition": "visibility_mopp_code_data"
+    },
+    {
+     "type": "block",
+     "name": "mopp reorder table",
+     "definition": "global_geometry_section_strip_index_block_4"
+    },
+    {
+     "type": "block",
+     "name": "vertex buffers",
+     "definition": "global_geometry_section_vertex_buffer_block_3"
+    },
+    {
+     "type": "pointer",
+     "name": "index_buffer"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "SECT"
+  },
+  "global_geometry_part_block_new": {
+   "guid": "00000000000000000000000000000000",
+   "size": 72,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "type",
+     "definition": "type_enum"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "short_integer",
+     "name": "material"
+    },
+    {
+     "type": "short_integer",
+     "name": "strip start index"
+    },
+    {
+     "type": "short_integer",
+     "name": "strip length"
+    },
+    {
+     "type": "short_integer",
+     "name": "first subpart index"
+    },
+    {
+     "type": "short_integer",
+     "name": "subpart count"
+    },
+    {
+     "type": "char_integer",
+     "name": "max nodes/vertex"
+    },
+    {
+     "type": "char_integer",
+     "name": "contributing compound node count"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "array",
+     "name": "node indices",
+     "definition": "node_indices_array_2"
+    },
+    {
+     "type": "array",
+     "name": "node weights",
+     "definition": "node_weights_array_3"
+    },
+    {
+     "type": "real",
+     "name": "lod mipmap magic number"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_indices_struct_2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 1,
+   "fields": [
+    {
+     "type": "char_integer",
+     "name": "node index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_weights_struct_3": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "node weight"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_subparts_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "indices_start_index"
+    },
+    {
+     "type": "short_integer",
+     "name": "indices_length"
+    },
+    {
+     "type": "short_integer",
+     "name": "visibility_bounds_index"
+    },
+    {
+     "type": "short_integer",
+     "name": "part index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_visibility_bounds_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "real",
+     "name": "position x"
+    },
+    {
+     "type": "real",
+     "name": "position y"
+    },
+    {
+     "type": "real",
+     "name": "position z"
+    },
+    {
+     "type": "real",
+     "name": "radius"
+    },
+    {
+     "type": "char_integer",
+     "name": "node 0"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 3
     },
     {
      "type": "terminator",
@@ -2056,6 +3439,670 @@
     }
    ]
   },
+  "structure_indices_segment_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "strip start index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_indices_segment_reference_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "strip segment index"
+    },
+    {
+     "type": "char_integer",
+     "name": "part index"
+    },
+    {
+     "type": "char_integer",
+     "name": "lightmap fragment index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_subcluster_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "real_bounds",
+     "name": "bounds x"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bounds y"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bounds z"
+    },
+    {
+     "type": "short_integer",
+     "name": "first strip reference index"
+    },
+    {
+     "type": "short_integer",
+     "name": "strip reference count"
+    },
+    {
+     "type": "short_integer",
+     "name": "first explicit edge index"
+    },
+    {
+     "type": "short_integer",
+     "name": "explicit edge count"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "predicted_resource_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "type",
+     "definition": "type_enum_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "resource index"
+    },
+    {
+     "type": "long_integer",
+     "name": "tag index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_portal_index_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "portal index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_geometry_isq_info_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 92,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_6"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "block",
+     "name": "raw planes",
+     "definition": "global_geometry_plane_block_2"
+    },
+    {
+     "type": "data",
+     "name": "runtime plane data",
+     "definition": "runtime_plane_data_data"
+    },
+    {
+     "type": "block",
+     "name": "rigid plane groups",
+     "definition": "global_geometry_rigid_plane_group_block_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "block",
+     "name": "explicit edges",
+     "definition": "global_geometry_explicit_edge_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "ISQI"
+  },
+  "global_geometry_plane_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "real_plane_3d",
+     "name": "plane"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_geometry_rigid_plane_group_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "char_integer",
+     "name": "rigid node index"
+    },
+    {
+     "type": "char_integer",
+     "name": "part index"
+    },
+    {
+     "type": "short_integer",
+     "name": "triangle count"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_geometry_explicit_edge_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "array",
+     "name": "vertex indices",
+     "definition": "vertex_indices_array"
+    },
+    {
+     "type": "array",
+     "name": "triangle indices",
+     "definition": "triangle_indices_array"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "vertex_indices_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "vertex index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "triangle_indices_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "triangle index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_shared_edge_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "array",
+     "name": "vertex indices",
+     "definition": "vertex_indices_array_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "triangle index"
+    },
+    {
+     "type": "short_integer",
+     "name": "adjacent cluster shared edge index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "vertex_indices_struct_2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "vertex index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_shared_edge_group_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "first shared edge index"
+    },
+    {
+     "type": "short_integer",
+     "name": "shared edge count"
+    },
+    {
+     "type": "short_integer",
+     "name": "adjacent cluster index"
+    },
+    {
+     "type": "short_integer",
+     "name": "subcluster index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_subcluster_boundary_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "lower subcluster index"
+    },
+    {
+     "type": "short_integer",
+     "name": "upper subcluster index"
+    },
+    {
+     "type": "short_integer",
+     "name": "first explicit edge index"
+    },
+    {
+     "type": "short_integer",
+     "name": "explicit edge count"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_strip_segment_first_triangle_index_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "triangle index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_lightmap_data_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 48,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "type",
+     "definition": "type_enum_3"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_7"
+    },
+    {
+     "type": "long_integer",
+     "name": "lightmap group index"
+    },
+    {
+     "type": "long_integer",
+     "name": "lightmap group index"
+    },
+    {
+     "type": "block",
+     "name": "indices",
+     "definition": "structure_bsp_cluster_lightmap_index_block_2"
+    },
+    {
+     "type": "block",
+     "name": "texture coordinates",
+     "definition": "structure_bsp_cluster_lightmap_texture_coordinate_block_2"
+    },
+    {
+     "type": "block",
+     "name": "duplicate indices",
+     "definition": "structure_bsp_cluster_lightmap_duplicate_index_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_lightmap_index_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "triangle index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_lightmap_texture_coordinate_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "real_point_2d",
+     "name": "texture coordinate"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_lightmap_duplicate_index_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "duplicate vertex index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_lightmap_sampling_info_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "block",
+     "name": "leaves",
+     "definition": "structure_lightmap_bsp_leaf_block_2"
+    },
+    {
+     "type": "block",
+     "name": "surfaces",
+     "definition": "structure_lightmap_surface_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_lightmap_bsp_leaf_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 10,
+   "fields": [
+    {
+     "type": "char_integer",
+     "name": "bounds min x"
+    },
+    {
+     "type": "char_integer",
+     "name": "bounds min y"
+    },
+    {
+     "type": "char_integer",
+     "name": "bounds min z"
+    },
+    {
+     "type": "char_integer",
+     "name": "bounds max x"
+    },
+    {
+     "type": "char_integer",
+     "name": "bounds max y"
+    },
+    {
+     "type": "char_integer",
+     "name": "bounds max z"
+    },
+    {
+     "type": "short_integer",
+     "name": "first surface index"
+    },
+    {
+     "type": "short_integer",
+     "name": "surface count"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_lightmap_surface_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "plane designator"
+    },
+    {
+     "type": "short_integer",
+     "name": "strip segment reference index"
+    },
+    {
+     "type": "short_integer",
+     "name": "strip triangle index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 304,
+   "fields": [
+    {
+     "type": "struct",
+     "name": "section info",
+     "definition": "global_geometry_section_info_struct"
+    },
+    {
+     "type": "struct",
+     "name": "geometry block info",
+     "definition": "global_geometry_block_info_struct"
+    },
+    {
+     "type": "block",
+     "name": "cluster data",
+     "definition": "structure_bsp_cluster_data_block_2"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bounds x"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bounds y"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bounds z"
+    },
+    {
+     "type": "char_integer",
+     "name": "scenario sky index"
+    },
+    {
+     "type": "char_integer",
+     "name": "media index"
+    },
+    {
+     "type": "char_integer",
+     "name": "scenario visible sky index"
+    },
+    {
+     "type": "char_integer",
+     "name": "scenario atmospheric fog index"
+    },
+    {
+     "type": "char_integer",
+     "name": "planar fog designator"
+    },
+    {
+     "type": "char_integer",
+     "name": "visible fog plane index"
+    },
+    {
+     "type": "short_integer",
+     "name": "background sound"
+    },
+    {
+     "type": "short_integer",
+     "name": "sound environment"
+    },
+    {
+     "type": "short_integer",
+     "name": "weather"
+    },
+    {
+     "type": "short_integer",
+     "name": "transition structure bsp"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_8"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "block",
+     "name": "subclusters",
+     "definition": "structure_subcluster_block_3"
+    },
+    {
+     "type": "block",
+     "name": "predicted resources",
+     "definition": "predicted_resource_block_3"
+    },
+    {
+     "type": "block",
+     "name": "portals",
+     "definition": "structure_bsp_cluster_portal_index_block_3"
+    },
+    {
+     "type": "long_integer",
+     "name": "checksum from structure"
+    },
+    {
+     "type": "data",
+     "name": "visibility mopp code",
+     "definition": "visibility_mopp_code_data_2"
+    },
+    {
+     "type": "struct",
+     "name": "mopp shape",
+     "definition": "structure_bsp_cluster_mopp_shape"
+    },
+    {
+     "type": "block",
+     "name": "visibility mopp leaves",
+     "definition": "structure_bsp_cluster_visibility_mopp_leaf_block_2"
+    },
+    {
+     "type": "data",
+     "name": "visibility subcluster bitvector",
+     "definition": "visibility_subcluster_bitvector_data"
+    },
+    {
+     "type": "struct",
+     "name": "cluster mopp shape",
+     "definition": "structure_bsp_cluster_havok_shape"
+    },
+    {
+     "type": "block",
+     "name": "instanced geometry indices",
+     "definition": "structure_bsp_cluster_instanced_geometry_index_block_2"
+    },
+    {
+     "type": "block",
+     "name": "visibility mopp reorder table",
+     "definition": "visibility_mopp_reorder_table_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "global_geometry_block_info_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 40,
@@ -2114,7 +4161,7 @@
     {
      "type": "char_enum",
      "name": "type",
-     "definition": "type_enum"
+     "definition": "type_enum_4"
     },
     {
      "type": "pad",
@@ -2143,9 +4190,9 @@
     }
    ]
   },
-  "structure_bsp_cluster_data_block_new": {
+  "structure_bsp_cluster_data_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 108,
+   "size": 300,
    "fields": [
     {
      "type": "struct",
@@ -2153,128 +4200,101 @@
      "definition": "global_geometry_section_struct"
     },
     {
+     "type": "block",
+     "name": "strip segments",
+     "definition": "structure_indices_segment_block_3"
+    },
+    {
+     "type": "block",
+     "name": "strip segment references",
+     "definition": "structure_indices_segment_reference_block_3"
+    },
+    {
+     "type": "struct",
+     "name": "isq info",
+     "definition": "global_geometry_isq_info_struct"
+    },
+    {
+     "type": "block",
+     "name": "forward edges",
+     "definition": "structure_shared_edge_block_4"
+    },
+    {
+     "type": "block",
+     "name": "forward edge groups",
+     "definition": "structure_shared_edge_group_block_4"
+    },
+    {
+     "type": "block",
+     "name": "backward edges",
+     "definition": "structure_shared_edge_block_5"
+    },
+    {
+     "type": "block",
+     "name": "backward edge groups",
+     "definition": "structure_shared_edge_group_block_5"
+    },
+    {
+     "type": "block",
+     "name": "subcluster boundaries",
+     "definition": "structure_subcluster_boundary_block_3"
+    },
+    {
+     "type": "block",
+     "name": "first triangle indices",
+     "definition": "structure_strip_segment_first_triangle_index_block_3"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 0
+    },
+    {
+     "type": "pointer",
+     "name": "runtime_dx9_index_buffer"
+    },
+    {
      "type": "terminator",
      "name": null
     }
    ]
   },
-  "global_geometry_section_struct": {
+  "structure_bsp_cluster_mopp_shape": {
    "guid": "00000000000000000000000000000000",
-   "size": 108,
+   "size": 20,
    "fields": [
     {
-     "type": "block",
-     "name": "parts",
-     "definition": "global_geometry_part_block_new_2"
-    },
-    {
-     "type": "block",
-     "name": "subparts",
-     "definition": "global_subparts_block_2"
-    },
-    {
-     "type": "block",
-     "name": "visibility bounds",
-     "definition": "global_visibility_bounds_block_2"
-    },
-    {
-     "type": "block",
-     "name": "raw vertices",
-     "definition": "global_geometry_section_raw_vertex_block_2"
-    },
-    {
-     "type": "block",
-     "name": "strip indices",
-     "definition": "global_geometry_section_strip_index_block_2"
-    },
-    {
-     "type": "data",
-     "name": "visibility mopp code",
-     "definition": "visibility_mopp_code_data"
-    },
-    {
-     "type": "block",
-     "name": "mopp reorder table",
-     "definition": "global_geometry_section_strip_index_block_3"
-    },
-    {
-     "type": "block",
-     "name": "vertex buffers",
-     "definition": "global_geometry_section_vertex_buffer_block_2"
-    },
-    {
-     "type": "pointer",
-     "name": "index_buffer"
+     "type": "pad",
+     "name": null,
+     "definition": 20
     },
     {
      "type": "terminator",
      "name": null
     }
    ],
-   "tag": "SECT"
+   "tag": "scms"
   },
-  "global_geometry_part_block_new": {
+  "structure_bsp_cluster_visibility_mopp_leaf_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 72,
+   "size": 4,
    "fields": [
     {
-     "type": "short_enum",
-     "name": "type",
-     "definition": "type_enum_2"
+     "type": "long_integer",
+     "name": "identifier"
     },
     {
-     "type": "word_flags",
-     "name": "flags",
-     "definition": "flags_flags_5"
-    },
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_havok_shape": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
     {
-     "type": "short_integer",
-     "name": "material"
-    },
-    {
-     "type": "short_integer",
-     "name": "strip start index"
-    },
-    {
-     "type": "short_integer",
-     "name": "strip length"
-    },
-    {
-     "type": "short_integer",
-     "name": "first subpart index"
-    },
-    {
-     "type": "short_integer",
-     "name": "subpart count"
-    },
-    {
-     "type": "char_integer",
-     "name": "max nodes/vertex"
-    },
-    {
-     "type": "char_integer",
-     "name": "contributing compound node count"
-    },
-    {
-     "type": "real_point_3d",
-     "name": "position"
-    },
-    {
-     "type": "array",
-     "name": "node indices",
-     "definition": "node_indices_array"
-    },
-    {
-     "type": "array",
-     "name": "node weights",
-     "definition": "node_weights_array"
-    },
-    {
-     "type": "real",
-     "name": "lod mipmap magic number"
-    },
-    {
-     "type": "skip",
+     "type": "pad",
      "name": null,
      "definition": 24
     },
@@ -2282,291 +4302,8 @@
      "type": "terminator",
      "name": null
     }
-   ]
-  },
-  "node_indices_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 1,
-   "fields": [
-    {
-     "type": "char_integer",
-     "name": "node index"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "node_weights_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 4,
-   "fields": [
-    {
-     "type": "real",
-     "name": "node weight"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "global_subparts_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 8,
-   "fields": [
-    {
-     "type": "short_integer",
-     "name": "indices_start_index"
-    },
-    {
-     "type": "short_integer",
-     "name": "indices_length"
-    },
-    {
-     "type": "short_integer",
-     "name": "visibility_bounds_index"
-    },
-    {
-     "type": "short_integer",
-     "name": "part index"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "global_visibility_bounds_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 20,
-   "fields": [
-    {
-     "type": "real",
-     "name": "position x"
-    },
-    {
-     "type": "real",
-     "name": "position y"
-    },
-    {
-     "type": "real",
-     "name": "position z"
-    },
-    {
-     "type": "real",
-     "name": "radius"
-    },
-    {
-     "type": "char_integer",
-     "name": "node 0"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 3
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "global_geometry_section_raw_vertex_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 196,
-   "fields": [
-    {
-     "type": "real_point_3d",
-     "name": "position"
-    },
-    {
-     "type": "array",
-     "name": "node indices (OLD)",
-     "definition": "node_indices_old_array"
-    },
-    {
-     "type": "array",
-     "name": "node weights",
-     "definition": "node_weights_array_2"
-    },
-    {
-     "type": "array",
-     "name": "node indices (NEW)",
-     "definition": "node_indices_new_array"
-    },
-    {
-     "type": "long_integer",
-     "name": "use new node indices"
-    },
-    {
-     "type": "long_integer",
-     "name": "adjusted compound node index"
-    },
-    {
-     "type": "real_point_2d",
-     "name": "texcoord"
-    },
-    {
-     "type": "real_vector_3d",
-     "name": "normal"
-    },
-    {
-     "type": "real_vector_3d",
-     "name": "binormal"
-    },
-    {
-     "type": "real_vector_3d",
-     "name": "tangent"
-    },
-    {
-     "type": "real_vector_3d",
-     "name": "anisotropic binormal"
-    },
-    {
-     "type": "real_point_2d",
-     "name": "secondary texcoord"
-    },
-    {
-     "type": "real_rgb_color",
-     "name": "primary lightmap color"
-    },
-    {
-     "type": "real_point_2d",
-     "name": "primary lightmap texcoord"
-    },
-    {
-     "type": "real_vector_3d",
-     "name": "primary lightmap incident direction"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 12
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 8
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 12
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "node_indices_old_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 4,
-   "fields": [
-    {
-     "type": "long_integer",
-     "name": "node index (OLD)"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "node_weights_struct_2": {
-   "guid": "00000000000000000000000000000000",
-   "size": 4,
-   "fields": [
-    {
-     "type": "real",
-     "name": "node_weight"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "node_indices_new_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 4,
-   "fields": [
-    {
-     "type": "long_integer",
-     "name": "node index (NEW)"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "global_geometry_section_strip_index_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 2,
-   "fields": [
-    {
-     "type": "short_integer",
-     "name": "index"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "global_geometry_section_vertex_buffer_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 32,
-   "fields": [
-    {
-     "type": "vertex_buffer",
-     "name": "vertex buffer"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "predicted_resource_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 8,
-   "fields": [
-    {
-     "type": "short_enum",
-     "name": "type",
-     "definition": "type_enum_3"
-    },
-    {
-     "type": "short_integer",
-     "name": "resource index"
-    },
-    {
-     "type": "long_integer",
-     "name": "tag index"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "structure_bsp_cluster_portal_index_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 2,
-   "fields": [
-    {
-     "type": "short_integer",
-     "name": "portal index"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
+   ],
+   "tag": "schs"
   },
   "structure_bsp_cluster_instanced_geometry_index_block": {
    "guid": "00000000000000000000000000000000",
@@ -2575,6 +4312,161 @@
     {
      "type": "short_integer",
      "name": "instanced geometry index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "visibility_mopp_reorder_table_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 2,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "mopp leaf index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 216,
+   "fields": [
+    {
+     "type": "struct",
+     "name": "section info",
+     "definition": "global_geometry_section_info_struct"
+    },
+    {
+     "type": "struct",
+     "name": "geometry block info",
+     "definition": "global_geometry_block_info_struct"
+    },
+    {
+     "type": "block",
+     "name": "cluster data",
+     "definition": "structure_bsp_cluster_data_block_new_2"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bounds x"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bounds y"
+    },
+    {
+     "type": "real_bounds",
+     "name": "bounds z"
+    },
+    {
+     "type": "char_integer",
+     "name": "scenario sky index"
+    },
+    {
+     "type": "char_integer",
+     "name": "media index"
+    },
+    {
+     "type": "char_integer",
+     "name": "scenario visible sky index"
+    },
+    {
+     "type": "char_integer",
+     "name": "scenario atmospheric fog index"
+    },
+    {
+     "type": "char_integer",
+     "name": "planar fog designator"
+    },
+    {
+     "type": "char_integer",
+     "name": "visible fog plane index"
+    },
+    {
+     "type": "short_integer",
+     "name": "background sound"
+    },
+    {
+     "type": "short_integer",
+     "name": "sound environment"
+    },
+    {
+     "type": "short_integer",
+     "name": "weather"
+    },
+    {
+     "type": "short_integer",
+     "name": "transition structure bsp"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_8"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "block",
+     "name": "predicted resources",
+     "definition": "predicted_resource_block_4"
+    },
+    {
+     "type": "block",
+     "name": "portals",
+     "definition": "structure_bsp_cluster_portal_index_block_4"
+    },
+    {
+     "type": "long_integer",
+     "name": "checksum from structure"
+    },
+    {
+     "type": "block",
+     "name": "instanced geometry indices",
+     "definition": "structure_bsp_cluster_instanced_geometry_index_block_3"
+    },
+    {
+     "type": "block",
+     "name": "index reorder table",
+     "definition": "global_geometry_section_strip_index_block_5"
+    },
+    {
+     "type": "data",
+     "name": "collision mopp code",
+     "definition": "collision_mopp_code_data"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_cluster_data_block_new": {
+   "guid": "00000000000000000000000000000000",
+   "size": 108,
+   "fields": [
+    {
+     "type": "struct",
+     "name": "section",
+     "definition": "global_geometry_section_struct"
     },
     {
      "type": "terminator",
@@ -2626,7 +4518,7 @@
     {
      "type": "short_enum",
      "name": "type",
-     "definition": "type_enum_4"
+     "definition": "type_enum_5"
     },
     {
      "type": "short_integer",
@@ -2773,6 +4665,61 @@
     }
    ]
   },
+  "sector_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "Path-finding sector flags",
+     "definition": "path_finding_sector_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint index"
+    },
+    {
+     "type": "long_integer",
+     "name": "source object (do not set manually)"
+    },
+    {
+     "type": "long_integer",
+     "name": "first link (do not set manually)"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sector_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "Path-finding sector flags",
+     "definition": "path_finding_sector_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint index"
+    },
+    {
+     "type": "short_integer",
+     "name": "first link (do not set manually)"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "sector_block": {
    "guid": "00000000000000000000000000000000",
    "size": 8,
@@ -2789,6 +4736,135 @@
     {
      "type": "long_integer",
      "name": "first link (do not set manually)"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sector_link_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 28,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "Index"
+    },
+    {
+     "type": "long_integer",
+     "name": "Index2 (for vertex-indices)"
+    },
+    {
+     "type": "word_flags",
+     "name": "link flags",
+     "definition": "link_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint index"
+    },
+    {
+     "type": "long_integer",
+     "name": "forward link"
+    },
+    {
+     "type": "long_integer",
+     "name": "reverse link"
+    },
+    {
+     "type": "long_integer",
+     "name": "left sector"
+    },
+    {
+     "type": "long_integer",
+     "name": "right sector"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sector_link_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "vertex 1"
+    },
+    {
+     "type": "short_integer",
+     "name": "vertex 2"
+    },
+    {
+     "type": "word_flags",
+     "name": "link flags",
+     "definition": "link_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint index"
+    },
+    {
+     "type": "short_integer",
+     "name": "forward link"
+    },
+    {
+     "type": "short_integer",
+     "name": "reverse link"
+    },
+    {
+     "type": "short_integer",
+     "name": "left sector"
+    },
+    {
+     "type": "short_integer",
+     "name": "right sector"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sector_link_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "vertex 1"
+    },
+    {
+     "type": "short_integer",
+     "name": "vertex 2"
+    },
+    {
+     "type": "word_flags",
+     "name": "link flags",
+     "definition": "link_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint index"
+    },
+    {
+     "type": "long_integer",
+     "name": "forward link"
+    },
+    {
+     "type": "long_integer",
+     "name": "reverse link"
+    },
+    {
+     "type": "short_integer",
+     "name": "left sector"
+    },
+    {
+     "type": "short_integer",
+     "name": "right sector"
     },
     {
      "type": "terminator",
@@ -2903,14 +4979,14 @@
     }
    ]
   },
-  "environment_object_refs": {
+  "environment_object_refs__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 36,
+   "size": 132,
    "fields": [
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_7"
+     "definition": "flags_flags_9"
     },
     {
      "type": "pad",
@@ -2926,6 +5002,11 @@
      "name": "last sector"
     },
     {
+     "type": "pad",
+     "name": null,
+     "definition": 48
+    },
+    {
      "type": "block",
      "name": "bsps",
      "definition": "environment_object_bsp_refs_2"
@@ -2934,6 +5015,52 @@
      "type": "block",
      "name": "nodes",
      "definition": "environment_object_nodes_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 48
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "environment_object_bsp_refs__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 72,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "bsp reference"
+    },
+    {
+     "type": "long_integer",
+     "name": "first sector"
+    },
+    {
+     "type": "long_integer",
+     "name": "last sector"
+    },
+    {
+     "type": "short_integer",
+     "name": "node_index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 44
+    },
+    {
+     "type": "block",
+     "name": "bsp2d refs",
+     "definition": "ref_block_3"
     },
     {
      "type": "terminator",
@@ -2972,6 +5099,30 @@
     }
    ]
   },
+  "environment_object_nodes__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "short_integer",
+     "name": "reference frame index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "environment_object_nodes": {
    "guid": "00000000000000000000000000000000",
    "size": 4,
@@ -2988,6 +5139,180 @@
      "type": "byte_flags",
      "name": "projection sign",
      "definition": "projection_sign_flags"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "environment_object_refs": {
+   "guid": "00000000000000000000000000000000",
+   "size": 36,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_9"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "long_integer",
+     "name": "first sector"
+    },
+    {
+     "type": "long_integer",
+     "name": "last sector"
+    },
+    {
+     "type": "block",
+     "name": "bsps",
+     "definition": "environment_object_bsp_refs_3"
+    },
+    {
+     "type": "block",
+     "name": "nodes",
+     "definition": "environment_object_nodes_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "pathfinding_hints_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 92,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "hint type",
+     "definition": "hint_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 84
+    },
+    {
+     "type": "short_integer",
+     "name": "Next hint index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "pathfinding_hints_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "hint type",
+     "definition": "hint_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "Next hint index"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 0"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 1"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 2"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 3"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 4"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 5"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 6"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 7"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "pathfinding_hints_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "hint type",
+     "definition": "hint_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "Next hint index"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 0"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 1"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 2"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 3"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 4"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 5"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 6"
+    },
+    {
+     "type": "short_integer",
+     "name": "hint data 7"
     },
     {
      "type": "terminator",
@@ -3072,7 +5397,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 48
     },
     {
      "type": "block",
@@ -3102,7 +5427,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 48
     },
     {
      "type": "block",
@@ -3130,6 +5455,20 @@
     }
    ]
   },
+  "user_hint_point_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "real_point_3d",
+     "name": "Point"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "user_hint_point_block": {
    "guid": "00000000000000000000000000000000",
    "size": 16,
@@ -3146,6 +5485,24 @@
      "type": "pad",
      "name": null,
      "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "user_hint_ray_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "real_point_3d",
+     "name": "Point"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "Vector"
     },
     {
      "type": "terminator",
@@ -3180,6 +5537,29 @@
     }
    ]
   },
+  "user_hint_line_segment_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 28,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Flags",
+     "definition": "flags_flags_10"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "Point 0"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "Point 1"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "user_hint_line_segment_block": {
    "guid": "00000000000000000000000000000000",
    "size": 36,
@@ -3187,7 +5567,7 @@
     {
      "type": "long_flags",
      "name": "Flags",
-     "definition": "flags_flags_8"
+     "definition": "flags_flags_10"
     },
     {
      "type": "real_point_3d",
@@ -3221,6 +5601,37 @@
     }
    ]
   },
+  "user_hint_parallelogram_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 52,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Flags",
+     "definition": "flags_flags_10"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "Point 0"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "Point 1"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "Point 2"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "Point 3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "user_hint_parallelogram_block": {
    "guid": "00000000000000000000000000000000",
    "size": 68,
@@ -3228,7 +5639,7 @@
     {
      "type": "long_flags",
      "name": "Flags",
-     "definition": "flags_flags_8"
+     "definition": "flags_flags_10"
     },
     {
      "type": "real_point_3d",
@@ -3295,7 +5706,7 @@
     {
      "type": "long_flags",
      "name": "Flags",
-     "definition": "flags_flags_8"
+     "definition": "flags_flags_10"
     },
     {
      "type": "block",
@@ -3315,7 +5726,7 @@
     {
      "type": "word_flags",
      "name": "Flags",
-     "definition": "flags_flags_8"
+     "definition": "flags_flags_10"
     },
     {
      "type": "short_integer",
@@ -3344,7 +5755,7 @@
     {
      "type": "word_flags",
      "name": "Flags",
-     "definition": "flags_flags_8"
+     "definition": "flags_flags_10"
     },
     {
      "type": "short_integer",
@@ -3363,7 +5774,7 @@
     {
      "type": "long_flags",
      "name": "flags",
-     "definition": "flags_flags_9"
+     "definition": "flags_flags_11"
     },
     {
      "type": "block",
@@ -3383,7 +5794,7 @@
     {
      "type": "short_enum",
      "name": "type",
-     "definition": "type_enum_5"
+     "definition": "type_enum_6"
     },
     {
      "type": "pad",
@@ -3424,7 +5835,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "block",
@@ -3798,7 +6209,7 @@
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_10"
+     "definition": "flags_flags_12"
     },
     {
      "type": "pad",
@@ -3838,7 +6249,7 @@
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_10"
+     "definition": "flags_flags_12"
     },
     {
      "type": "data",
@@ -3934,66 +6345,6 @@
     {
      "type": "array",
      "name": "node indices",
-     "definition": "node_indices_array_2"
-    },
-    {
-     "type": "array",
-     "name": "node weights",
-     "definition": "node_weights_array_3"
-    },
-    {
-     "type": "real_argb_color",
-     "name": "color"
-    },
-    {
-     "type": "real",
-     "name": "screen size"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "node_indices_struct_2": {
-   "guid": "00000000000000000000000000000000",
-   "size": 1,
-   "fields": [
-    {
-     "type": "char_integer",
-     "name": "node index"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "node_weights_struct_3": {
-   "guid": "00000000000000000000000000000000",
-   "size": 4,
-   "fields": [
-    {
-     "type": "real",
-     "name": "node weight"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "error_report_vectors_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 64,
-   "fields": [
-    {
-     "type": "real_point_3d",
-     "name": "position"
-    },
-    {
-     "type": "array",
-     "name": "node indices",
      "definition": "node_indices_array_3"
     },
     {
@@ -4006,12 +6357,8 @@
      "name": "color"
     },
     {
-     "type": "real_vector_3d",
-     "name": "normal"
-    },
-    {
      "type": "real",
-     "name": "screen length"
+     "name": "screen size"
     },
     {
      "type": "terminator",
@@ -4047,28 +6394,9 @@
     }
    ]
   },
-  "error_report_lines_block": {
+  "error_report_vectors_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 80,
-   "fields": [
-    {
-     "type": "array",
-     "name": "points",
-     "definition": "points_array"
-    },
-    {
-     "type": "real_argb_color",
-     "name": "color"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "points_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 32,
+   "size": 64,
    "fields": [
     {
      "type": "real_point_3d",
@@ -4083,6 +6411,18 @@
      "type": "array",
      "name": "node weights",
      "definition": "node_weights_array_5"
+    },
+    {
+     "type": "real_argb_color",
+     "name": "color"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "normal"
+    },
+    {
+     "type": "real",
+     "name": "screen length"
     },
     {
      "type": "terminator",
@@ -4118,14 +6458,14 @@
     }
    ]
   },
-  "error_report_triangles_block": {
+  "error_report_lines_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 112,
+   "size": 80,
    "fields": [
     {
      "type": "array",
      "name": "points",
-     "definition": "points_array_2"
+     "definition": "points_array"
     },
     {
      "type": "real_argb_color",
@@ -4137,7 +6477,7 @@
     }
    ]
   },
-  "points_struct_2": {
+  "points_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 32,
    "fields": [
@@ -4189,14 +6529,14 @@
     }
    ]
   },
-  "error_report_quads_block": {
+  "error_report_triangles_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 144,
+   "size": 112,
    "fields": [
     {
      "type": "array",
      "name": "points",
-     "definition": "points_array_3"
+     "definition": "points_array_2"
     },
     {
      "type": "real_argb_color",
@@ -4208,7 +6548,7 @@
     }
    ]
   },
-  "points_struct_3": {
+  "points_struct_2": {
    "guid": "00000000000000000000000000000000",
    "size": 32,
    "fields": [
@@ -4260,15 +6600,29 @@
     }
    ]
   },
-  "error_report_comments_block": {
+  "error_report_quads_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 68,
+   "size": 144,
    "fields": [
     {
-     "type": "data",
-     "name": "text",
-     "definition": "text_data_2"
+     "type": "array",
+     "name": "points",
+     "definition": "points_array_3"
     },
+    {
+     "type": "real_argb_color",
+     "name": "color"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "points_struct_3": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
     {
      "type": "real_point_3d",
      "name": "position"
@@ -4282,10 +6636,6 @@
      "type": "array",
      "name": "node weights",
      "definition": "node_weights_array_8"
-    },
-    {
-     "type": "real_argb_color",
-     "name": "color"
     },
     {
      "type": "terminator",
@@ -4308,6 +6658,67 @@
    ]
   },
   "node_weights_struct_8": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "node weight"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "error_report_comments_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 68,
+   "fields": [
+    {
+     "type": "data",
+     "name": "text",
+     "definition": "text_data_2"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "array",
+     "name": "node indices",
+     "definition": "node_indices_array_8"
+    },
+    {
+     "type": "array",
+     "name": "node weights",
+     "definition": "node_weights_array_9"
+    },
+    {
+     "type": "real_argb_color",
+     "name": "color"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_indices_struct_8": {
+   "guid": "00000000000000000000000000000000",
+   "size": 1,
+   "fields": [
+    {
+     "type": "char_integer",
+     "name": "node index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_weights_struct_9": {
    "guid": "00000000000000000000000000000000",
    "size": 4,
    "fields": [
@@ -4448,6 +6859,37 @@
     }
    ]
   },
+  "structure_instanced_geometry_render_info_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 108,
+   "fields": [
+    {
+     "type": "struct",
+     "name": "section info",
+     "definition": "global_geometry_section_info_struct"
+    },
+    {
+     "type": "struct",
+     "name": "geometry block info",
+     "definition": "global_geometry_block_info_struct"
+    },
+    {
+     "type": "block",
+     "name": "render data",
+     "definition": "structure_bsp_cluster_data_block_3"
+    },
+    {
+     "type": "block",
+     "name": "instance definition subclusters",
+     "definition": "structure_subcluster_block_4"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "igri"
+  },
   "structure_instanced_geometry_render_info_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 108,
@@ -4470,7 +6912,7 @@
     {
      "type": "block",
      "name": "index reorder table",
-     "definition": "global_geometry_section_strip_index_block_5"
+     "definition": "global_geometry_section_strip_index_block_6"
     },
     {
      "type": "terminator",
@@ -4478,6 +6920,108 @@
     }
    ],
    "tag": "igri"
+  },
+  "global_collision_bsp_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 96,
+   "fields": [
+    {
+     "type": "block",
+     "name": "bsp3d nodes",
+     "definition": "large_bsp3d_nodes_block_3"
+    },
+    {
+     "type": "block",
+     "name": "planes",
+     "definition": "planes_block_5"
+    },
+    {
+     "type": "block",
+     "name": "leaves",
+     "definition": "large_leaves_block_3"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d references",
+     "definition": "large_bsp2d_references_block_3"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d nodes",
+     "definition": "large_bsp2d_nodes_block_3"
+    },
+    {
+     "type": "block",
+     "name": "surfaces",
+     "definition": "large_surfaces_block_3"
+    },
+    {
+     "type": "block",
+     "name": "edges",
+     "definition": "large_edges_block_3"
+    },
+    {
+     "type": "block",
+     "name": "vertices",
+     "definition": "large_vertices_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "cbsp"
+  },
+  "global_collision_bsp_struct__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 96,
+   "fields": [
+    {
+     "type": "block",
+     "name": "bsp3d nodes",
+     "definition": "small_bsp3d_nodes_block_3"
+    },
+    {
+     "type": "block",
+     "name": "planes",
+     "definition": "planes_block_6"
+    },
+    {
+     "type": "block",
+     "name": "leaves",
+     "definition": "leaves_block_4"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d references",
+     "definition": "bsp2d_references_block_4"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d nodes",
+     "definition": "bsp2d_nodes_block_4"
+    },
+    {
+     "type": "block",
+     "name": "surfaces",
+     "definition": "surfaces_block_4"
+    },
+    {
+     "type": "block",
+     "name": "edges",
+     "definition": "edges_block_4"
+    },
+    {
+     "type": "block",
+     "name": "vertices",
+     "definition": "vertices_block_4"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "cbsp"
   },
   "global_collision_bsp_struct": {
    "guid": "00000000000000000000000000000000",
@@ -4491,37 +7035,37 @@
     {
      "type": "block",
      "name": "planes",
-     "definition": "planes_block_3"
+     "definition": "planes_block_7"
     },
     {
      "type": "block",
      "name": "leaves",
-     "definition": "leaves_block_3"
+     "definition": "leaves_block_5"
     },
     {
      "type": "block",
      "name": "bsp2d references",
-     "definition": "bsp2d_references_block_3"
+     "definition": "bsp2d_references_block_5"
     },
     {
      "type": "block",
      "name": "bsp2d nodes",
-     "definition": "bsp2d_nodes_block_3"
+     "definition": "bsp2d_nodes_block_5"
     },
     {
      "type": "block",
      "name": "surfaces",
-     "definition": "surfaces_block_3"
+     "definition": "surfaces_block_5"
     },
     {
      "type": "block",
      "name": "edges",
-     "definition": "edges_block_3"
+     "definition": "edges_block_5"
     },
     {
      "type": "block",
      "name": "vertices",
-     "definition": "vertices_block_3"
+     "definition": "vertices_block_5"
     },
     {
      "type": "terminator",
@@ -4549,7 +7093,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -4559,7 +7103,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -4590,7 +7134,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -4600,7 +7144,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -4621,7 +7165,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -4631,7 +7175,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -4650,6 +7194,134 @@
      "type": "pad",
      "name": null,
      "definition": 8
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_instanced_geometry_instances_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 88,
+   "fields": [
+    {
+     "type": "real",
+     "name": "scale"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "forward"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "left"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "up"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "short_integer",
+     "name": "instance definition"
+    },
+    {
+     "type": "short_integer",
+     "name": "render first bitvector index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "tag_reference",
+     "name": "lightmap bitmap"
+    },
+    {
+     "type": "long_integer",
+     "name": "checksum"
+    },
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "short_integer",
+     "name": "pathfinding object index"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "structure_bsp_instanced_geometry_instances_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 88,
+   "fields": [
+    {
+     "type": "real",
+     "name": "scale"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "forward"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "left"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "up"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "short_integer",
+     "name": "instance definition"
+    },
+    {
+     "type": "short_integer",
+     "name": "render first bitvector index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "tag_reference",
+     "name": "lightmap bitmap"
+    },
+    {
+     "type": "long_integer",
+     "name": "checksum"
+    },
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "short_integer",
+     "name": "pathfinding object index"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 2
     },
     {
      "type": "terminator",
@@ -4688,7 +7360,7 @@
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_11"
+     "definition": "flags_flags_13"
     },
     {
      "type": "pad",
@@ -4896,7 +7568,7 @@
     {
      "type": "short_enum",
      "name": "type",
-     "definition": "type_enum_6"
+     "definition": "type_enum_7"
     },
     {
      "type": "short_integer",
@@ -5282,7 +7954,7 @@
     {
      "type": "char_enum",
      "name": "type",
-     "definition": "type_enum_7"
+     "definition": "type_enum_8"
     },
     {
      "type": "char_enum",
@@ -5563,6 +8235,63 @@
     }
    ]
   },
+  "decorator_cache_block_data_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 76,
+   "fields": [
+    {
+     "type": "block",
+     "name": "placements",
+     "definition": "decorator_placement_block_2"
+    },
+    {
+     "type": "vertex_buffer",
+     "name": "decal vertex buffer"
+    },
+    {
+     "type": "vertex_buffer",
+     "name": "sprite vertex buffer"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "decorator_placement_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "internal data 1"
+    },
+    {
+     "type": "long_integer",
+     "name": "compressed position"
+    },
+    {
+     "type": "rgb_color",
+     "name": "tint color"
+    },
+    {
+     "type": "rgb_color",
+     "name": "lightmap color"
+    },
+    {
+     "type": "long_integer",
+     "name": "compressed light direction"
+    },
+    {
+     "type": "long_integer",
+     "name": "compressed light 2 direction"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "decorator_cache_block_data_block": {
    "guid": "00000000000000000000000000000000",
    "size": 156,
@@ -5570,7 +8299,7 @@
     {
      "type": "block",
      "name": "placements",
-     "definition": "decorator_placement_block_2"
+     "definition": "decorator_placement_block_3"
     },
     {
      "type": "block",
@@ -5609,40 +8338,6 @@
      "type": "pad",
      "name": null,
      "definition": 16
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "decorator_placement_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 24,
-   "fields": [
-    {
-     "type": "long_integer",
-     "name": "internal data 1"
-    },
-    {
-     "type": "long_integer",
-     "name": "compressed position"
-    },
-    {
-     "type": "rgb_color",
-     "name": "tint color"
-    },
-    {
-     "type": "rgb_color",
-     "name": "lightmap color"
-    },
-    {
-     "type": "long_integer",
-     "name": "compressed light direction"
-    },
-    {
-     "type": "long_integer",
-     "name": "compressed light 2 direction"
     },
     {
      "type": "terminator",
@@ -5872,33 +8567,49 @@
   }
  },
  "arrays": {
-  "node_indices_array": {
-   "count": 4,
-   "struct": "node_indices_struct"
-  },
-  "node_weights_array": {
-   "count": 3,
-   "struct": "node_weights_struct"
-  },
   "node_indices_old_array": {
    "count": 4,
    "struct": "node_indices_old_struct"
   },
-  "node_weights_array_2": {
+  "node_weights_array": {
    "count": 4,
-   "struct": "node_weights_struct_2"
+   "struct": "node_weights_struct"
   },
   "node_indices_new_array": {
    "count": 4,
    "struct": "node_indices_new_struct"
+  },
+  "old_vertex_buffers_array": {
+   "count": 3,
+   "struct": "old_vertex_buffers_struct"
+  },
+  "node_indices_array": {
+   "count": 4,
+   "struct": "node_indices_struct"
+  },
+  "node_weights_array_2": {
+   "count": 3,
+   "struct": "node_weights_struct_2"
   },
   "node_indices_array_2": {
    "count": 4,
    "struct": "node_indices_struct_2"
   },
   "node_weights_array_3": {
-   "count": 4,
+   "count": 3,
    "struct": "node_weights_struct_3"
+  },
+  "vertex_indices_array": {
+   "count": 2,
+   "struct": "vertex_indices_struct"
+  },
+  "triangle_indices_array": {
+   "count": 2,
+   "struct": "triangle_indices_struct"
+  },
+  "vertex_indices_array_2": {
+   "count": 2,
+   "struct": "vertex_indices_struct_2"
   },
   "node_indices_array_3": {
    "count": 4,
@@ -5916,10 +8627,6 @@
    "count": 4,
    "struct": "node_weights_struct_5"
   },
-  "points_array": {
-   "count": 2,
-   "struct": "points_struct"
-  },
   "node_indices_array_5": {
    "count": 4,
    "struct": "node_indices_struct_5"
@@ -5928,9 +8635,9 @@
    "count": 4,
    "struct": "node_weights_struct_6"
   },
-  "points_array_2": {
-   "count": 3,
-   "struct": "points_struct_2"
+  "points_array": {
+   "count": 2,
+   "struct": "points_struct"
   },
   "node_indices_array_6": {
    "count": 4,
@@ -5940,9 +8647,9 @@
    "count": 4,
    "struct": "node_weights_struct_7"
   },
-  "points_array_3": {
-   "count": 4,
-   "struct": "points_struct_3"
+  "points_array_2": {
+   "count": 3,
+   "struct": "points_struct_2"
   },
   "node_indices_array_7": {
    "count": 4,
@@ -5951,6 +8658,18 @@
   "node_weights_array_8": {
    "count": 4,
    "struct": "node_weights_struct_8"
+  },
+  "points_array_3": {
+   "count": 4,
+   "struct": "points_struct_3"
+  },
+  "node_indices_array_8": {
+   "count": 4,
+   "struct": "node_indices_struct_8"
+  },
+  "node_weights_array_9": {
+   "count": 4,
+   "struct": "node_weights_struct_9"
   },
   "child_indices_array": {
    "count": 8,
@@ -5990,6 +8709,44 @@
     "aggressive floodfill"
    ]
   },
+  "type_enum": {
+   "options": [
+    "not drawn",
+    "opaque shadow-only",
+    "opaque shadow-casting",
+    "opaque non-shadowing",
+    "transparent",
+    "lightmap only"
+   ]
+  },
+  "flags_flags_5": {
+   "options": [
+    "decalable",
+    "new part types",
+    "dislikes photons",
+    "override triangle list",
+    "ignored by lightmapper"
+   ]
+  },
+  "geometry_subclassification_enum": {
+   "options": [
+    "default (opaque)",
+    "faceted (opaque)",
+    "simple (transparent)",
+    "normal (transparent)",
+    "tangent-space (transparent)"
+   ]
+  },
+  "vertex_usage_flags_flags": {
+   "options": [
+    "position software transformed",
+    "texcoord",
+    "normal",
+    "binormal/tangent",
+    "anisotropic binormal",
+    "secondary texcoord"
+   ]
+  },
   "geometry_classification_enum": {
    "options": [
     "worldspace",
@@ -6014,41 +8771,7 @@
     "has lm prt"
    ]
   },
-  "type_enum": {
-   "options": [
-    "tag block",
-    "tag data",
-    "vertex buffer"
-   ]
-  },
   "type_enum_2": {
-   "options": [
-    "not drawn",
-    "opaque shadow-only",
-    "opaque shadow-casting",
-    "opaque non-shadowing",
-    "transparent",
-    "lightmap only"
-   ]
-  },
-  "flags_flags_5": {
-   "options": [
-    "decalable",
-    "new part types",
-    "dislikes photons",
-    "override triangle list",
-    "ignored by lightmapper"
-   ]
-  },
-  "flags_flags_6": {
-   "options": [
-    "one way portal",
-    "door portal",
-    "postprocessed geometry",
-    "is the sky"
-   ]
-  },
-  "type_enum_3": {
    "options": [
     "bitmap",
     "sound",
@@ -6061,7 +8784,38 @@
     "lightmap instance bitmaps"
    ]
   },
+  "flags_flags_6": {
+   "options": [
+    "compressed planes",
+    "swizzled planes"
+   ]
+  },
+  "type_enum_3": {
+   "options": [
+    "single texture"
+   ]
+  },
+  "flags_flags_7": {
+   "options": [
+    "use cluster vertex buffer"
+   ]
+  },
   "type_enum_4": {
+   "options": [
+    "tag block",
+    "tag data",
+    "vertex buffer"
+   ]
+  },
+  "flags_flags_8": {
+   "options": [
+    "one way portal",
+    "door portal",
+    "postprocessed geometry",
+    "is the sky"
+   ]
+  },
+  "type_enum_5": {
    "options": [
     "lightmap resolution",
     "lightmap power",
@@ -6105,7 +8859,7 @@
     "sector link end corner"
    ]
   },
-  "flags_flags_7": {
+  "flags_flags_9": {
    "options": [
     "mobile"
    ]
@@ -6127,7 +8881,7 @@
     "breakable floor"
    ]
   },
-  "flags_flags_8": {
+  "flags_flags_10": {
    "options": [
     "bidirectional",
     "closed"
@@ -6150,12 +8904,12 @@
     "magic lift"
    ]
   },
-  "flags_flags_9": {
+  "flags_flags_11": {
    "options": [
     "bidirectional"
    ]
   },
-  "type_enum_5": {
+  "type_enum_6": {
    "options": [
     "jump",
     "climb",
@@ -6178,7 +8932,7 @@
     "error"
    ]
   },
-  "flags_flags_10": {
+  "flags_flags_12": {
    "options": [
     "rendered",
     "tangent-space",
@@ -6194,7 +8948,7 @@
     "attached to structure object"
    ]
   },
-  "flags_flags_11": {
+  "flags_flags_13": {
    "options": [
     "not in lightprobes"
    ]
@@ -6226,7 +8980,7 @@
     "fog plane missed render-bsp"
    ]
   },
-  "type_enum_6": {
+  "type_enum_7": {
    "options": [
     "fog plane boundary edge",
     "fog plane internal edge",
@@ -6237,7 +8991,7 @@
     "fog zone portal geometry"
    ]
   },
-  "type_enum_7": {
+  "type_enum_8": {
    "options": [
     "biped",
     "vehicle",
@@ -6287,6 +9041,24 @@
    "max_size_string": "0"
   },
   "visibility_mopp_code_data": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "runtime_plane_data_data": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "visibility_mopp_code_data_2": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "visibility_subcluster_bitvector_data": {
    "alignment": 4,
    "flags": 0,
    "max_size": 0,
@@ -6360,5 +9132,96 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "edges_block": {
+   "0": "edges_block__v0",
+   "1": "edges_block"
+  },
+  "global_collision_bsp_block": {
+   "0": "global_collision_bsp_block__v0",
+   "1": "global_collision_bsp_block__v1",
+   "2": "global_collision_bsp_block"
+  },
+  "structure_bsp_leaf_block": {
+   "0": "structure_bsp_leaf_block__v0",
+   "1": "structure_bsp_leaf_block"
+  },
+  "structure_bsp_surface_reference_block": {
+   "0": "structure_bsp_surface_reference_block__v0",
+   "1": "structure_bsp_surface_reference_block"
+  },
+  "global_geometry_section_struct": {
+   "0": "global_geometry_section_struct__v0",
+   "1": "global_geometry_section_struct"
+  },
+  "structure_bsp_cluster_block": {
+   "0": "structure_bsp_cluster_block__v0",
+   "1": "structure_bsp_cluster_block__v1",
+   "2": "structure_bsp_cluster_block"
+  },
+  "sector_block": {
+   "0": "sector_block__v0",
+   "1": "sector_block__v1",
+   "2": "sector_block"
+  },
+  "sector_link_block": {
+   "0": "sector_link_block__v0",
+   "1": "sector_link_block__v1",
+   "2": "sector_link_block__v2",
+   "3": "sector_link_block"
+  },
+  "environment_object_bsp_refs": {
+   "0": "environment_object_bsp_refs__v0",
+   "1": "environment_object_bsp_refs"
+  },
+  "environment_object_nodes": {
+   "0": "environment_object_nodes__v0",
+   "1": "environment_object_nodes"
+  },
+  "environment_object_refs": {
+   "0": "environment_object_refs__v0",
+   "1": "environment_object_refs"
+  },
+  "pathfinding_hints_block": {
+   "0": "pathfinding_hints_block__v0",
+   "1": "pathfinding_hints_block__v1",
+   "2": "pathfinding_hints_block__v2",
+   "3": "pathfinding_hints_block"
+  },
+  "user_hint_point_block": {
+   "0": "user_hint_point_block__v0",
+   "1": "user_hint_point_block"
+  },
+  "user_hint_ray_block": {
+   "0": "user_hint_ray_block__v0",
+   "1": "user_hint_ray_block"
+  },
+  "user_hint_line_segment_block": {
+   "0": "user_hint_line_segment_block__v0",
+   "1": "user_hint_line_segment_block"
+  },
+  "user_hint_parallelogram_block": {
+   "0": "user_hint_parallelogram_block__v0",
+   "1": "user_hint_parallelogram_block"
+  },
+  "structure_instanced_geometry_render_info_struct": {
+   "0": "structure_instanced_geometry_render_info_struct__v0",
+   "1": "structure_instanced_geometry_render_info_struct"
+  },
+  "global_collision_bsp_struct": {
+   "0": "global_collision_bsp_struct__v0",
+   "1": "global_collision_bsp_struct__v1",
+   "2": "global_collision_bsp_struct"
+  },
+  "structure_bsp_instanced_geometry_instances_block": {
+   "0": "structure_bsp_instanced_geometry_instances_block__v0",
+   "1": "structure_bsp_instanced_geometry_instances_block__v1",
+   "2": "structure_bsp_instanced_geometry_instances_block"
+  },
+  "decorator_cache_block_data_block": {
+   "0": "decorator_cache_block_data_block__v0",
+   "1": "decorator_cache_block_data_block"
+  }
+ }
 }

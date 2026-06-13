@@ -50,7 +50,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real_rgb_color",
@@ -63,17 +63,17 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 28
     },
     {
      "type": "real_bounds",
@@ -86,7 +86,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "pad",
@@ -139,7 +139,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "terminator",
@@ -186,5 +186,6 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

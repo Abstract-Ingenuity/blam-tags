@@ -41,9 +41,6 @@ TYPE_MAP = {
     "ByteFlags": "byte_flags",
     "WordFlags": "word_flags",
     "LongFlags": "long_flags",
-    "WordBlockFlags": "word_block_flags",
-    "LongBlockFlags": "long_block_flags",
-    "ByteBlockFlags": "byte_block_flags",
     "Point2D": "point_2d",
     "Rectangle2D": "rectangle_2d",
     "Rectangle": "rectangle_2d",
@@ -77,6 +74,17 @@ TYPE_MAP = {
     # container types handled specially: Block, Struct, Array
     # zero-size doc/pad types handled specially: Explanation, Pad, UselessPad, Skip
     # block-index types handled specially (need a block reference)
+}
+
+# block-flags XML tag -> width-equivalent integer fallback. The H2 classic
+# layouts carry no `blockReference` on these fields (the `tag="mbsp"` attr
+# is editor metadata, and they're readOnly), so there is no block to
+# resolve a `*_block_flags` definition against. Emit a plain integer of the
+# same width — byte-identical on disk, no sub-chunk. (word=2B=short.)
+BLOCK_FLAGS_MAP = {
+    "ByteBlockFlags": "char_integer",
+    "WordBlockFlags": "short_integer",
+    "LongBlockFlags": "long_integer",
 }
 
 # block-index XML tag -> (canonical type, fallback integer type, byte size)
@@ -152,6 +160,11 @@ class Converter:
         self.layout_by_id = dict(shared[0])   # "block:foo" -> <Layout> element
         self.options_by_id = dict(shared[1])  # "enum:foo"  -> <Options> element
         self.struct_by_id = {}                # layout regolithID -> struct name (dedup shared layouts)
+        # Multi-version layouts: base (latest) struct name -> {version str ->
+        # variant struct name}. Empty for single-version structs. Lets the
+        # classic decoder pick the FieldSet matching a block/struct header's
+        # on-disk version field (older versions desync otherwise).
+        self.struct_versions = {}
 
     def unique(self, base):
         name = base
@@ -220,34 +233,63 @@ class Converter:
                 return fs
         return sets[0] if sets else None
 
+    def _emit_field_set(self, fs, sname, tag):
+        """Build a single struct entry from one <FieldSet>. Reserves the
+        entry (empty fields) before recursing so self-references resolve."""
+        # reserve the entry so recursive refs resolve
+        entry = {"size": int(fs.get("sizeofValue")), "fields": []}
+        # H2 inline structs with a `tag` carry a 16-byte block-style
+        # header on disk (e.g. mapping_function = MAPP). Record it so the
+        # decoder knows to consume + preserve it.
+        if tag:
+            entry["tag"] = tag
+        self.structs[sname] = entry
+        entry["fields"] = self.process_fields(fs, sname)
+        entry["fields"].append({"type": "terminator", "name": None})
+
     def process_layout(self, layout_el, struct_name_hint=None):
-        """Register (once) the struct for a <Layout>, deduped by its
-        regolithID so shared (XRef'd) layouts map to a single struct.
-        Returns the struct name."""
+        """Register (once) the struct(s) for a <Layout>, deduped by its
+        regolithID so shared (XRef'd) layouts map to a single base struct.
+        Returns the BASE (latest) struct name — the name other fields
+        reference.
+
+        H2 layouts can carry multiple <FieldSet version=N> variants whose
+        on-disk size + nested layout differ. We emit one struct per
+        version: the latest keeps the base name, older versions get
+        `{base}__v{N}`, and `struct_versions[base] = {N: variant}` records
+        the mapping. The classic decoder resolves the variant from the
+        block/struct header's version field. Single-version layouts emit
+        just the base struct and add no `struct_versions` entry."""
         rid = layout_el.get("regolithID")
         if rid and rid in self.struct_by_id:
             return self.struct_by_id[rid]
         base = struct_name_hint or sanitize(
             layout_el.get("internalName") or layout_el.get("name") or "struct"
         )
-        struct_name = self.unique(base)
-        if rid:
-            self.struct_by_id[rid] = struct_name
-        fs = self.latest_field_set(layout_el)
-        if fs is None:
-            raise ValueError("Layout %r has no FieldSet" % struct_name)
-        # reserve the entry so recursive refs resolve
-        entry = {"size": int(fs.get("sizeofValue")), "fields": []}
-        # H2 inline structs with a `tag` carry a 16-byte block-style
-        # header on disk (e.g. mapping_function = MAPP). Record it so the
-        # decoder knows to consume + preserve it.
+        sets = layout_el.findall("FieldSet")
+        if not sets:
+            raise ValueError("Layout %r has no FieldSet" % base)
+        latest = self.latest_field_set(layout_el)
         tag = layout_el.get("tag")
-        if tag:
-            entry["tag"] = tag
-        self.structs[struct_name] = entry
-        entry["fields"] = self.process_fields(fs, struct_name)
-        entry["fields"].append({"type": "terminator", "name": None})
-        return struct_name
+
+        # The latest variant claims the base name; register it eagerly so
+        # any recursive (incl. cross-version) self-reference resolves to it.
+        base_name = self.unique(base)
+        if rid:
+            self.struct_by_id[rid] = base_name
+
+        version_to_name = {}
+        for fs in sets:
+            ver = int(fs.get("version", "0"))
+            sname = base_name if fs is latest else self.unique("%s__v%d" % (base_name, ver))
+            self._emit_field_set(fs, sname, tag)
+            version_to_name[ver] = sname
+
+        if len(version_to_name) > 1:
+            self.struct_versions[base_name] = {
+                str(v): n for v, n in sorted(version_to_name.items())
+            }
+        return base_name
 
     def process_fields(self, fieldset_el, owner):
         fields = []
@@ -261,9 +303,22 @@ class Converter:
                 fields.append({"type": "custom", "name": name})  # editor-only, 0 bytes
                 continue
             if tag in ZERO_PAD:
-                # UselessPad is 0 bytes on disk in the non-legacy (MCC)
-                # form — kept only for the editor. Pad/Skip occupy bytes.
-                length = 0 if tag == "UselessPad" else int(el.get("length", "0"))
+                # Pad/Skip normally occupy `length` bytes. UselessPad is 0
+                # bytes on disk in the non-legacy (MCC / H2V4) form but
+                # occupies its real `length` in the legacy H2 forms
+                # (engine tag ambl/LAMB/MLAB). We always store the real
+                # length here; the classic decoder counts it only when the
+                # engine is legacy-padding. Non-legacy struct sizes stay
+                # correct because the layout builder treats useless_pad as
+                # a 0-byte type (the length lives in `definition`).
+                #
+                # A Pad/Skip tagged `pd64` is 64-bit-only alignment padding
+                # that is ABSENT from the 32-bit on-disk tag form (all
+                # classic engines, incl. legacy) — HABT zeroes its size for
+                # both Pad and Skip (tag_interface.py:877/1373). Emit it as
+                # a 0-byte pad so struct sizes + the decoder's offset walk
+                # match the real layout (fixes the havok/collision structs).
+                length = 0 if el.get("tag") == "pd64" else int(el.get("length", "0"))
                 fields.append({"type": ZERO_PAD[tag], "name": name, "definition": length})
                 continue
             if tag == "Struct":
@@ -310,6 +365,11 @@ class Converter:
                 _, fallback = BLOCK_INDEX_MAP[tag]
                 fields.append({"type": fallback, "name": name})
                 continue
+            if tag in BLOCK_FLAGS_MAP:
+                # No resolvable block reference; emit the width-equivalent
+                # integer (byte-identical, no sub-chunk).
+                fields.append({"type": BLOCK_FLAGS_MAP[tag], "name": name})
+                continue
             if tag == "TagReference":
                 fields.append({"type": "tag_reference", "name": name})
                 continue
@@ -326,8 +386,12 @@ class Converter:
             t = f["type"]
             if t == "terminator":
                 break
-            if t in ("pad", "useless_pad", "skip"):
+            if t in ("pad", "skip"):
                 total += int(f["definition"])
+            elif t == "useless_pad":
+                # 0 bytes in the non-legacy (declared) form; the real
+                # length is carried in `definition` for the legacy decoder.
+                pass
             elif t == "struct":
                 total += self.structs[f["definition"]]["size"]
             elif t == "array":
@@ -373,14 +437,23 @@ class Converter:
                 if rid:
                     self.options_by_id.setdefault(rid, opt)
             parent_struct = self.build_group_root(proot)
-            self.structs[struct_name]["fields"].insert(
-                0, {"type": "struct", "name": proot.get("name"), "definition": parent_struct}
-            )
-            # Leaf tags' sizeofValue already includes the inherited chain;
-            # intermediate base groups (themselves a parent of others)
-            # store OWN-only sizes, so bump them by the parent's full size.
-            if group_root_el.get("group") in self.parent_groups:
-                self.structs[struct_name]["size"] += self.structs[parent_struct]["size"]
+            # A versioned root has the parent prepended to EVERY version
+            # variant, not just the latest (base) name — each on-disk
+            # version still begins with the inherited parent struct.
+            is_intermediate = group_root_el.get("group") in self.parent_groups
+            targets = [struct_name] + [
+                v for v in self.struct_versions.get(struct_name, {}).values() if v != struct_name
+            ]
+            for tname in targets:
+                self.structs[tname]["fields"].insert(
+                    0, {"type": "struct", "name": proot.get("name"), "definition": parent_struct}
+                )
+                # Leaf tags' sizeofValue already includes the inherited
+                # chain; intermediate base groups (themselves a parent of
+                # others) store OWN-only sizes, so bump by the parent's full
+                # size.
+                if is_intermediate:
+                    self.structs[tname]["size"] += self.structs[parent_struct]["size"]
         return struct_name
 
     def convert(self, xml_path):
@@ -439,6 +512,7 @@ class Converter:
             "datas": datas_out,
             "resources": {},
             "interops": {},
+            "struct_versions": self.struct_versions,
         }
 
 

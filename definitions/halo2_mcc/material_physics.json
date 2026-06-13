@@ -47,5 +47,6 @@
  "enums_flags": {},
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

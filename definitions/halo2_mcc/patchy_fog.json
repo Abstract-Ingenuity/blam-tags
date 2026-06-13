@@ -29,7 +29,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 60
     },
     {
      "type": "real_fraction",
@@ -46,7 +46,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "real",
@@ -71,7 +71,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "real",
@@ -80,7 +80,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real_bounds",
@@ -113,7 +113,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "terminator",
@@ -133,5 +133,6 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

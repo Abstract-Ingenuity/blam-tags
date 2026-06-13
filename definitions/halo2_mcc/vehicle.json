@@ -60,6 +60,21 @@
    "max_count_string": "2",
    "struct": "unit_hud_reference_block"
   },
+  "unit_hud_reference_block_4": {
+   "max_count": 2,
+   "max_count_string": "2",
+   "struct": "unit_hud_reference_block"
+  },
+  "unit_hud_reference_block_5": {
+   "max_count": 2,
+   "max_count_string": "2",
+   "struct": "unit_hud_reference_block"
+  },
+  "unit_hud_reference_block_6": {
+   "max_count": 2,
+   "max_count_string": "2",
+   "struct": "unit_hud_reference_block"
+  },
   "unit_seat_block_2": {
    "max_count": 32,
    "max_count_string": "32",
@@ -69,6 +84,11 @@
    "max_count": 1,
    "max_count_string": "1",
    "struct": "object_ai_properties_block"
+  },
+  "real_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "real_block"
   },
   "byte_block_2": {
    "max_count": 1024,
@@ -245,7 +265,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "real",
@@ -300,7 +320,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real",
@@ -378,7 +398,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "terminator",
@@ -417,7 +437,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "terminator",
@@ -692,7 +712,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -702,7 +722,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -772,7 +792,7 @@
   },
   "child_shapes_storage_struct": {
    "guid": "00000000000000000000000000000000",
-   "size": 12,
+   "size": 8,
    "fields": [
     {
      "type": "pointer",
@@ -786,7 +806,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "terminator",
@@ -796,7 +816,7 @@
   },
   "multispheres_struct": {
    "guid": "00000000000000000000000000000000",
-   "size": 156,
+   "size": 144,
    "fields": [
     {
      "type": "pointer",
@@ -813,7 +833,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -823,7 +843,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "long_integer",
@@ -832,7 +852,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "array",
@@ -891,7 +911,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "tag_reference",
@@ -900,7 +920,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "angle",
@@ -923,7 +943,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -964,7 +984,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -1026,7 +1046,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "tag_reference",
@@ -1078,7 +1098,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "block",
@@ -1154,7 +1174,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "terminator",
@@ -1185,6 +1205,17 @@
    ],
    "tag": "usas"
   },
+  "unit_additional_node_names_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "uHnd"
+  },
   "unit_additional_node_names_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 4,
@@ -1199,6 +1230,17 @@
     }
    ],
    "tag": "uHnd"
+  },
+  "unit_boarding_melee_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "ubms"
   },
   "unit_boarding_melee_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1263,7 +1305,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real_vector_3d",
@@ -1282,7 +1324,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "tag_reference",
@@ -1291,7 +1333,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -1315,7 +1357,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "tag_reference",
@@ -1334,7 +1376,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -1347,7 +1389,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 56
     },
     {
      "type": "terminator",
@@ -1366,7 +1408,359 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "unit_seat_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 172,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "old_string_id",
+     "name": "label"
+    },
+    {
+     "type": "old_string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "acceleration scale"
+    },
+    {
+     "type": "real",
+     "name": "AI scariness"
+    },
+    {
+     "type": "short_enum",
+     "name": "ai seat type",
+     "definition": "ai_seat_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "boarding seat"
+    },
+    {
+     "type": "real_fraction",
+     "name": "listener interpolation factor"
+    },
+    {
+     "type": "real",
+     "name": "yaw rate"
+    },
+    {
+     "type": "real",
+     "name": "pitch rate"
+    },
+    {
+     "type": "struct",
+     "name": "unit camera",
+     "definition": "unit_camera_struct"
+    },
+    {
+     "type": "block",
+     "name": "unit hud interface",
+     "definition": "unit_hud_reference_block_3"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "short_integer",
+     "name": "hud text message index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "angle",
+     "name": "yaw minimum"
+    },
+    {
+     "type": "angle",
+     "name": "yaw maximum"
+    },
+    {
+     "type": "tag_reference",
+     "name": "built-in gunner"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "unit_seat_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 188,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "old_string_id",
+     "name": "label"
+    },
+    {
+     "type": "old_string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "acceleration scale"
+    },
+    {
+     "type": "real",
+     "name": "AI scariness"
+    },
+    {
+     "type": "short_enum",
+     "name": "ai seat type",
+     "definition": "ai_seat_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "boarding seat"
+    },
+    {
+     "type": "real_fraction",
+     "name": "listener interpolation factor"
+    },
+    {
+     "type": "real_bounds",
+     "name": "yaw rate bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "pitch rate bounds"
+    },
+    {
+     "type": "real",
+     "name": "max speed reference"
+    },
+    {
+     "type": "real",
+     "name": "speed exponent"
+    },
+    {
+     "type": "struct",
+     "name": "unit camera",
+     "definition": "unit_camera_struct"
+    },
+    {
+     "type": "block",
+     "name": "unit hud interface",
+     "definition": "unit_hud_reference_block_4"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "short_integer",
+     "name": "hud text message index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "angle",
+     "name": "yaw minimum"
+    },
+    {
+     "type": "angle",
+     "name": "yaw maximum"
+    },
+    {
+     "type": "tag_reference",
+     "name": "built-in gunner"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "unit_seat_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 240,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "old_string_id",
+     "name": "label"
+    },
+    {
+     "type": "old_string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "string_id",
+     "name": "entry marker(s) name"
+    },
+    {
+     "type": "string_id",
+     "name": "boarding grenade marker"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "real",
+     "name": "turnover time"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "acceleration scale"
+    },
+    {
+     "type": "real",
+     "name": "AI scariness"
+    },
+    {
+     "type": "short_enum",
+     "name": "ai seat type",
+     "definition": "ai_seat_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "boarding seat"
+    },
+    {
+     "type": "real_fraction",
+     "name": "listener interpolation factor"
+    },
+    {
+     "type": "real_bounds",
+     "name": "yaw rate bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "pitch rate bounds"
+    },
+    {
+     "type": "real",
+     "name": "min speed reference"
+    },
+    {
+     "type": "real",
+     "name": "max speed reference"
+    },
+    {
+     "type": "real",
+     "name": "speed exponent"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "struct",
+     "name": "unit camera",
+     "definition": "unit_camera_struct"
+    },
+    {
+     "type": "block",
+     "name": "unit hud interface",
+     "definition": "unit_hud_reference_block_5"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "short_integer",
+     "name": "hud text message index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "angle",
+     "name": "yaw minimum"
+    },
+    {
+     "type": "angle",
+     "name": "yaw maximum"
+    },
+    {
+     "type": "tag_reference",
+     "name": "built-in gunner"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "real",
+     "name": "entry radius"
+    },
+    {
+     "type": "angle",
+     "name": "entry marker cone angle"
+    },
+    {
+     "type": "angle",
+     "name": "entry marker facing angle"
+    },
+    {
+     "type": "real",
+     "name": "maximum relative velocity"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
     },
     {
      "type": "terminator",
@@ -1414,7 +1808,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "real",
@@ -1465,7 +1859,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "struct",
@@ -1475,7 +1869,7 @@
     {
      "type": "block",
      "name": "unit hud interface",
-     "definition": "unit_hud_reference_block_3"
+     "definition": "unit_hud_reference_block_6"
     },
     {
      "type": "string_id",
@@ -1484,7 +1878,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "angle",
@@ -1501,7 +1895,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "real",
@@ -1522,7 +1916,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "string_id",
@@ -1569,6 +1963,17 @@
    ],
    "tag": "!@#$"
   },
+  "unit_lipsync_scales_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "ulYc"
+  },
   "unit_lipsync_scales_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 8,
@@ -1613,7 +2018,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real",
@@ -1642,7 +2047,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "real",
@@ -1667,7 +2072,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "tag_reference",
@@ -1684,7 +2089,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "block",
@@ -1694,7 +2099,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "block",
@@ -1704,7 +2109,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real",
@@ -1860,6 +2265,77 @@
     }
    ]
   },
+  "mapping_function__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function Type"
+    },
+    {
+     "type": "byte_flags",
+     "name": "Flags",
+     "definition": "flags_flags_8"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 1"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 0"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 1"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 3"
+    },
+    {
+     "type": "block",
+     "name": "Values",
+     "definition": "real_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "real_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "Value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
    "size": 12,
@@ -1913,7 +2389,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "short_enum",
@@ -1936,7 +2412,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "terminator",
@@ -1955,7 +2431,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -1989,7 +2465,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "block",
@@ -2460,6 +2936,18 @@
     "random time offset"
    ]
   },
+  "flags_flags_8": {
+   "options": [
+    "Range",
+    "Unused 0",
+    "Unused 1",
+    "Unused 2",
+    "Color Bit 0",
+    "Color Bit 1",
+    "Color Bit 2",
+    "Color Bit 3"
+   ]
+  },
   "change_color_enum": {
    "options": [
     "none",
@@ -2491,5 +2979,29 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "unit_additional_node_names_struct": {
+   "0": "unit_additional_node_names_struct__v0",
+   "1": "unit_additional_node_names_struct"
+  },
+  "unit_boarding_melee_struct": {
+   "0": "unit_boarding_melee_struct__v0",
+   "1": "unit_boarding_melee_struct"
+  },
+  "unit_seat_block": {
+   "0": "unit_seat_block__v0",
+   "1": "unit_seat_block__v1",
+   "2": "unit_seat_block__v2",
+   "3": "unit_seat_block"
+  },
+  "unit_lipsync_scales_struct": {
+   "0": "unit_lipsync_scales_struct__v0",
+   "1": "unit_lipsync_scales_struct"
+  },
+  "mapping_function": {
+   "0": "mapping_function__v0",
+   "1": "mapping_function"
+  }
+ }
 }

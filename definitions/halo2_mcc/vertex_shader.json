@@ -20,6 +20,11 @@
    "max_count_string": "12",
    "struct": "vertex_shader_classification_block"
   },
+  "vertex_shader_classification_block_5": {
+   "max_count": 12,
+   "max_count_string": "12",
+   "struct": "vertex_shader_classification_block"
+  },
   "vertex_shader_block": {
    "max_count": 1,
    "max_count_string": "1",
@@ -87,6 +92,29 @@
      "name": null
     }
    ]
+  },
+  "vertex_shader_block_struct__v-1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "unknown field"
+    },
+    {
+     "type": "block",
+     "name": "geometry classifications",
+     "definition": "vertex_shader_classification_block_5"
+    },
+    {
+     "type": "long_integer",
+     "name": "output swizzles"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
   }
  },
  "arrays": {},
@@ -106,5 +134,11 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "vertex_shader_block_struct": {
+   "-1": "vertex_shader_block_struct__v-1",
+   "0": "vertex_shader_block_struct"
+  }
+ }
 }

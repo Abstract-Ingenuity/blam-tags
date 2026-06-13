@@ -38,7 +38,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 76
     },
     {
      "type": "terminator",
@@ -53,7 +53,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "real",
@@ -70,7 +70,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 28
     },
     {
      "type": "terminator",
@@ -83,5 +83,6 @@
  "enums_flags": {},
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

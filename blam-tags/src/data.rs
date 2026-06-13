@@ -336,6 +336,7 @@ impl TagStructData {
                         endian,
                         elements: Vec::new(),
                         classic_block_header: None,
+                        classic_trailing: None,
                     }))
                 }
                 TagFieldType::Array => {
@@ -859,6 +860,13 @@ pub(crate) struct TagBlockData {
     /// Preserved verbatim for byte-exact write; the count is re-synced
     /// from `elements.len()` on encode. The root block carries one too.
     pub(crate) classic_block_header: Option<Vec<u8>>,
+    /// Classic **Halo 2** only, **root block only**: raw bytes that follow
+    /// the entire structured body on disk (appended sample/cache data,
+    /// e.g. multi-MB ambience-sound audio) which no layout field
+    /// references. Both we and HABT read only the fixed structure; this
+    /// blob is preserved verbatim so read→write stays byte-exact. `None`
+    /// everywhere else.
+    pub(crate) classic_trailing: Option<Vec<u8>>,
 }
 
 impl TagBlockData {
@@ -914,6 +922,7 @@ impl TagBlockData {
             endian,
             elements,
             classic_block_header: None,
+            classic_trailing: None,
         })
     }
 
@@ -1075,6 +1084,7 @@ impl TagBlockData {
                 endian,
             )],
             classic_block_header: None,
+            classic_trailing: None,
         }
     }
 }

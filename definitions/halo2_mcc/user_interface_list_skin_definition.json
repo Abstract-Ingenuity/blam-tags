@@ -54,7 +54,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "tag_reference",
@@ -71,7 +71,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "block",
@@ -273,12 +273,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real_vector_2d",
@@ -287,12 +287,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "terminator",
@@ -523,5 +523,6 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

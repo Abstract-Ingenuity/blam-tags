@@ -5,12 +5,22 @@
  "flags": 0,
  "block": "biped_block",
  "blocks": {
+  "contact_point_block_v1_2": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "contact_point_block_v1"
+  },
+  "pills_block_2": {
+   "max_count": 1024,
+   "max_count_string": "1024",
+   "struct": "pills_block"
+  },
   "spheres_block_2": {
    "max_count": 1024,
    "max_count_string": "1024",
    "struct": "spheres_block"
   },
-  "pills_block_2": {
+  "pills_block_3": {
    "max_count": 1024,
    "max_count_string": "1024",
    "struct": "pills_block"
@@ -60,6 +70,21 @@
    "max_count_string": "2",
    "struct": "unit_hud_reference_block"
   },
+  "unit_hud_reference_block_4": {
+   "max_count": 2,
+   "max_count_string": "2",
+   "struct": "unit_hud_reference_block"
+  },
+  "unit_hud_reference_block_5": {
+   "max_count": 2,
+   "max_count_string": "2",
+   "struct": "unit_hud_reference_block"
+  },
+  "unit_hud_reference_block_6": {
+   "max_count": 2,
+   "max_count_string": "2",
+   "struct": "unit_hud_reference_block"
+  },
   "unit_seat_block_2": {
    "max_count": 32,
    "max_count_string": "32",
@@ -69,6 +94,11 @@
    "max_count": 1,
    "max_count_string": "1",
    "struct": "object_ai_properties_block"
+  },
+  "real_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "real_block"
   },
   "byte_block_2": {
    "max_count": 1024,
@@ -122,6 +152,411 @@
   }
  },
  "structs": {
+  "biped_block_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 1180,
+   "fields": [
+    {
+     "type": "struct",
+     "name": "unit",
+     "definition": "unit_block_struct"
+    },
+    {
+     "type": "angle",
+     "name": "moving turning speed"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "angle",
+     "name": "stationary turning threshold"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "short_enum",
+     "name": "old obsolete A in",
+     "definition": "old_obsolete_a_in_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "old obsolete B in",
+     "definition": "old_obsolete_a_in_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "old obsolete C in",
+     "definition": "old_obsolete_a_in_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "old obsolete D in",
+     "definition": "old_obsolete_a_in_enum"
+    },
+    {
+     "type": "tag_reference",
+     "name": "DON'T USE"
+    },
+    {
+     "type": "angle",
+     "name": "bank angle"
+    },
+    {
+     "type": "real",
+     "name": "bank apply time"
+    },
+    {
+     "type": "real",
+     "name": "bank decay time"
+    },
+    {
+     "type": "real",
+     "name": "pitch ratio"
+    },
+    {
+     "type": "real",
+     "name": "max velocity"
+    },
+    {
+     "type": "real",
+     "name": "max sidestep velocity"
+    },
+    {
+     "type": "real",
+     "name": "acceleration"
+    },
+    {
+     "type": "real",
+     "name": "deceleration"
+    },
+    {
+     "type": "angle",
+     "name": "angular velocity maximum"
+    },
+    {
+     "type": "angle",
+     "name": "angular acceleration maximum"
+    },
+    {
+     "type": "real",
+     "name": "crouch velocity modifier"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "angle",
+     "name": "maximum slope angle"
+    },
+    {
+     "type": "angle",
+     "name": "downhill falloff angle"
+    },
+    {
+     "type": "angle",
+     "name": "downhill cutoff angle"
+    },
+    {
+     "type": "real",
+     "name": "downhill velocity scale"
+    },
+    {
+     "type": "angle",
+     "name": "uphill falloff angle"
+    },
+    {
+     "type": "angle",
+     "name": "uphill cutoff angle"
+    },
+    {
+     "type": "real",
+     "name": "uphill velocity scale"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "tag_reference",
+     "name": "UNUSED"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "real",
+     "name": "jump velocity"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 28
+    },
+    {
+     "type": "real",
+     "name": "maximum soft landing time"
+    },
+    {
+     "type": "real",
+     "name": "maximum hard landing time"
+    },
+    {
+     "type": "real",
+     "name": "minimum soft landing velocity"
+    },
+    {
+     "type": "real",
+     "name": "minimum hard landing velocity"
+    },
+    {
+     "type": "real",
+     "name": "maximum hard landing velocity"
+    },
+    {
+     "type": "real",
+     "name": "death hard landing velocity"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "real",
+     "name": "standing camera height"
+    },
+    {
+     "type": "real",
+     "name": "crouching camera height"
+    },
+    {
+     "type": "real",
+     "name": "crouch transition time"
+    },
+    {
+     "type": "angle",
+     "name": "camera interpolation start"
+    },
+    {
+     "type": "angle",
+     "name": "camera interpolation end"
+    },
+    {
+     "type": "real",
+     "name": "camera forward movement scale"
+    },
+    {
+     "type": "real",
+     "name": "camera side movement scale"
+    },
+    {
+     "type": "real",
+     "name": "camera vertical movement scale"
+    },
+    {
+     "type": "real",
+     "name": "camera exclusion distance"
+    },
+    {
+     "type": "real",
+     "name": "standing collision height"
+    },
+    {
+     "type": "real",
+     "name": "crouching collision height"
+    },
+    {
+     "type": "real",
+     "name": "collision radius"
+    },
+    {
+     "type": "real",
+     "name": "collision mass"
+    },
+    {
+     "type": "string_id",
+     "name": "collision global material name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "string_id",
+     "name": "dead collision global material name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "real",
+     "name": "autoaim width"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 140
+    },
+    {
+     "type": "block",
+     "name": "contact points",
+     "definition": "contact_point_block_v1_2"
+    },
+    {
+     "type": "block",
+     "name": "pill shapes",
+     "definition": "pills_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "contact_point_block_v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 36,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "old_string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "pills_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 80,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "short_integer",
+     "name": "material"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "relative mass scale"
+    },
+    {
+     "type": "real_fraction",
+     "name": "friction"
+    },
+    {
+     "type": "real_fraction",
+     "name": "restitution"
+    },
+    {
+     "type": "real",
+     "name": "volume "
+    },
+    {
+     "type": "real",
+     "name": "mass"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "phantom"
+    },
+    {
+     "type": "pointer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": "size"
+    },
+    {
+     "type": "short_integer",
+     "name": "count"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 0
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 0
+    },
+    {
+     "type": "real",
+     "name": "radius"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 0
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "bottom"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "top"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "biped_block_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 988,
@@ -147,12 +582,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "real",
@@ -161,7 +596,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 28
     },
     {
      "type": "real",
@@ -190,7 +625,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real",
@@ -249,7 +684,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real",
@@ -292,6 +727,17 @@
     }
    ]
   },
+  "biped_lock_on_data_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "blod"
+  },
   "biped_lock_on_data_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 8,
@@ -299,7 +745,7 @@
     {
      "type": "long_flags",
      "name": "flags",
-     "definition": "flags_flags"
+     "definition": "flags_flags_2"
     },
     {
      "type": "real",
@@ -319,7 +765,7 @@
     {
      "type": "long_flags",
      "name": "flags",
-     "definition": "flags_flags_2"
+     "definition": "flags_flags_3"
     },
     {
      "type": "real",
@@ -348,7 +794,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "pad",
@@ -358,7 +804,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "block",
@@ -368,7 +814,7 @@
     {
      "type": "block",
      "name": "pill shapes",
-     "definition": "pills_block_2"
+     "definition": "pills_block_3"
     },
     {
      "type": "block",
@@ -417,7 +863,7 @@
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_3"
+     "definition": "flags_flags"
     },
     {
      "type": "real",
@@ -463,7 +909,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -473,7 +919,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "real",
@@ -482,7 +928,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -499,7 +945,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -509,7 +955,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -557,112 +1003,6 @@
     }
    ]
   },
-  "pills_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 80,
-   "fields": [
-    {
-     "type": "string_id",
-     "name": "name"
-    },
-    {
-     "type": "short_integer",
-     "name": "material"
-    },
-    {
-     "type": "word_flags",
-     "name": "flags",
-     "definition": "flags_flags_3"
-    },
-    {
-     "type": "real",
-     "name": "relative mass scale"
-    },
-    {
-     "type": "real_fraction",
-     "name": "friction"
-    },
-    {
-     "type": "real_fraction",
-     "name": "restitution"
-    },
-    {
-     "type": "real",
-     "name": "volume "
-    },
-    {
-     "type": "real",
-     "name": "mass"
-    },
-    {
-     "type": "skip",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "short_integer",
-     "name": "phantom"
-    },
-    {
-     "type": "pointer",
-     "name": null
-    },
-    {
-     "type": "short_integer",
-     "name": "size"
-    },
-    {
-     "type": "short_integer",
-     "name": "count"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "skip",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "real",
-     "name": "radius"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "real_vector_3d",
-     "name": "bottom"
-    },
-    {
-     "type": "skip",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "real_vector_3d",
-     "name": "top"
-    },
-    {
-     "type": "skip",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
   "character_physics_ground_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 48,
@@ -690,7 +1030,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real",
@@ -703,7 +1043,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "pad",
@@ -713,7 +1053,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -773,7 +1113,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -789,7 +1129,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -805,7 +1145,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -821,7 +1161,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "old_string_id",
@@ -860,7 +1200,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "tag_reference",
@@ -869,7 +1209,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "angle",
@@ -892,7 +1232,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -933,7 +1273,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -995,7 +1335,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "tag_reference",
@@ -1047,7 +1387,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "block",
@@ -1123,7 +1463,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "terminator",
@@ -1154,6 +1494,17 @@
    ],
    "tag": "usas"
   },
+  "unit_additional_node_names_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "uHnd"
+  },
   "unit_additional_node_names_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 4,
@@ -1168,6 +1519,17 @@
     }
    ],
    "tag": "uHnd"
+  },
+  "unit_boarding_melee_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "ubms"
   },
   "unit_boarding_melee_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1232,7 +1594,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real_vector_3d",
@@ -1251,7 +1613,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "tag_reference",
@@ -1260,7 +1622,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -1284,7 +1646,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "tag_reference",
@@ -1303,7 +1665,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -1316,7 +1678,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 56
     },
     {
      "type": "terminator",
@@ -1335,7 +1697,359 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "unit_seat_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 172,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "old_string_id",
+     "name": "label"
+    },
+    {
+     "type": "old_string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "acceleration scale"
+    },
+    {
+     "type": "real",
+     "name": "AI scariness"
+    },
+    {
+     "type": "short_enum",
+     "name": "ai seat type",
+     "definition": "ai_seat_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "boarding seat"
+    },
+    {
+     "type": "real_fraction",
+     "name": "listener interpolation factor"
+    },
+    {
+     "type": "real",
+     "name": "yaw rate"
+    },
+    {
+     "type": "real",
+     "name": "pitch rate"
+    },
+    {
+     "type": "struct",
+     "name": "unit camera",
+     "definition": "unit_camera_struct"
+    },
+    {
+     "type": "block",
+     "name": "unit hud interface",
+     "definition": "unit_hud_reference_block_3"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "short_integer",
+     "name": "hud text message index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "angle",
+     "name": "yaw minimum"
+    },
+    {
+     "type": "angle",
+     "name": "yaw maximum"
+    },
+    {
+     "type": "tag_reference",
+     "name": "built-in gunner"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "unit_seat_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 188,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "old_string_id",
+     "name": "label"
+    },
+    {
+     "type": "old_string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "acceleration scale"
+    },
+    {
+     "type": "real",
+     "name": "AI scariness"
+    },
+    {
+     "type": "short_enum",
+     "name": "ai seat type",
+     "definition": "ai_seat_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "boarding seat"
+    },
+    {
+     "type": "real_fraction",
+     "name": "listener interpolation factor"
+    },
+    {
+     "type": "real_bounds",
+     "name": "yaw rate bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "pitch rate bounds"
+    },
+    {
+     "type": "real",
+     "name": "max speed reference"
+    },
+    {
+     "type": "real",
+     "name": "speed exponent"
+    },
+    {
+     "type": "struct",
+     "name": "unit camera",
+     "definition": "unit_camera_struct"
+    },
+    {
+     "type": "block",
+     "name": "unit hud interface",
+     "definition": "unit_hud_reference_block_4"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "short_integer",
+     "name": "hud text message index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "angle",
+     "name": "yaw minimum"
+    },
+    {
+     "type": "angle",
+     "name": "yaw maximum"
+    },
+    {
+     "type": "tag_reference",
+     "name": "built-in gunner"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "unit_seat_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 240,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "old_string_id",
+     "name": "label"
+    },
+    {
+     "type": "old_string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "string_id",
+     "name": "entry marker(s) name"
+    },
+    {
+     "type": "string_id",
+     "name": "boarding grenade marker"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "real",
+     "name": "turnover time"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "acceleration scale"
+    },
+    {
+     "type": "real",
+     "name": "AI scariness"
+    },
+    {
+     "type": "short_enum",
+     "name": "ai seat type",
+     "definition": "ai_seat_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "boarding seat"
+    },
+    {
+     "type": "real_fraction",
+     "name": "listener interpolation factor"
+    },
+    {
+     "type": "real_bounds",
+     "name": "yaw rate bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "pitch rate bounds"
+    },
+    {
+     "type": "real",
+     "name": "min speed reference"
+    },
+    {
+     "type": "real",
+     "name": "max speed reference"
+    },
+    {
+     "type": "real",
+     "name": "speed exponent"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "struct",
+     "name": "unit camera",
+     "definition": "unit_camera_struct"
+    },
+    {
+     "type": "block",
+     "name": "unit hud interface",
+     "definition": "unit_hud_reference_block_5"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "short_integer",
+     "name": "hud text message index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "angle",
+     "name": "yaw minimum"
+    },
+    {
+     "type": "angle",
+     "name": "yaw maximum"
+    },
+    {
+     "type": "tag_reference",
+     "name": "built-in gunner"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
+    },
+    {
+     "type": "real",
+     "name": "entry radius"
+    },
+    {
+     "type": "angle",
+     "name": "entry marker cone angle"
+    },
+    {
+     "type": "angle",
+     "name": "entry marker facing angle"
+    },
+    {
+     "type": "real",
+     "name": "maximum relative velocity"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
     },
     {
      "type": "terminator",
@@ -1383,7 +2097,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "real",
@@ -1434,7 +2148,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "struct",
@@ -1444,7 +2158,7 @@
     {
      "type": "block",
      "name": "unit hud interface",
-     "definition": "unit_hud_reference_block_3"
+     "definition": "unit_hud_reference_block_6"
     },
     {
      "type": "string_id",
@@ -1453,7 +2167,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "angle",
@@ -1470,7 +2184,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "real",
@@ -1491,7 +2205,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 20
     },
     {
      "type": "string_id",
@@ -1538,6 +2252,17 @@
    ],
    "tag": "!@#$"
   },
+  "unit_lipsync_scales_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 0,
+   "fields": [
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "ulYc"
+  },
   "unit_lipsync_scales_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 8,
@@ -1582,7 +2307,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real",
@@ -1611,7 +2336,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "real",
@@ -1636,7 +2361,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "tag_reference",
@@ -1653,7 +2378,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "block",
@@ -1663,7 +2388,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "block",
@@ -1673,7 +2398,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real",
@@ -1829,6 +2554,77 @@
     }
    ]
   },
+  "mapping_function__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function Type"
+    },
+    {
+     "type": "byte_flags",
+     "name": "Flags",
+     "definition": "flags_flags_7"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 1"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 0"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 1"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 3"
+    },
+    {
+     "type": "block",
+     "name": "Values",
+     "definition": "real_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "real_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "Value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
    "size": 12,
@@ -1882,7 +2678,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "short_enum",
@@ -1905,7 +2701,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "terminator",
@@ -1924,7 +2720,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -1958,7 +2754,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "block",
@@ -2064,6 +2860,17 @@
  },
  "arrays": {},
  "enums_flags": {
+  "old_obsolete_a_in_enum": {
+   "options": [
+    "none",
+    "flying velocity"
+   ]
+  },
+  "flags_flags": {
+   "options": [
+    "unused"
+   ]
+  },
   "biped_flags_flags": {
    "options": [
     "turns without animating",
@@ -2080,14 +2887,14 @@
     "always ragdoll when dead"
    ]
   },
-  "flags_flags": {
+  "flags_flags_2": {
    "options": [
     "locked by human targeting",
     "locked by plasma targeting",
     "always locked by plasma targeting"
    ]
   },
-  "flags_flags_2": {
+  "flags_flags_3": {
    "options": [
     "centered_at_origin",
     "shape spherical",
@@ -2096,11 +2903,6 @@
     "flying",
     "not physical",
     "dead character collision group"
-   ]
-  },
-  "flags_flags_3": {
-   "options": [
-    "unused"
    ]
   },
   "unit_flags_flags": {
@@ -2344,6 +3146,18 @@
     "random time offset"
    ]
   },
+  "flags_flags_7": {
+   "options": [
+    "Range",
+    "Unused 0",
+    "Unused 1",
+    "Unused 2",
+    "Color Bit 0",
+    "Color Bit 1",
+    "Color Bit 2",
+    "Color Bit 3"
+   ]
+  },
   "change_color_enum": {
    "options": [
     "none",
@@ -2375,5 +3189,37 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "biped_lock_on_data_struct": {
+   "0": "biped_lock_on_data_struct__v0",
+   "1": "biped_lock_on_data_struct"
+  },
+  "biped_block_struct": {
+   "0": "biped_block_struct__v0",
+   "1": "biped_block_struct"
+  },
+  "unit_additional_node_names_struct": {
+   "0": "unit_additional_node_names_struct__v0",
+   "1": "unit_additional_node_names_struct"
+  },
+  "unit_boarding_melee_struct": {
+   "0": "unit_boarding_melee_struct__v0",
+   "1": "unit_boarding_melee_struct"
+  },
+  "unit_seat_block": {
+   "0": "unit_seat_block__v0",
+   "1": "unit_seat_block__v1",
+   "2": "unit_seat_block__v2",
+   "3": "unit_seat_block"
+  },
+  "unit_lipsync_scales_struct": {
+   "0": "unit_lipsync_scales_struct__v0",
+   "1": "unit_lipsync_scales_struct"
+  },
+  "mapping_function": {
+   "0": "mapping_function__v0",
+   "1": "mapping_function"
+  }
+ }
 }

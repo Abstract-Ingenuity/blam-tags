@@ -5,6 +5,11 @@
  "flags": 0,
  "block": "sound_classes_block",
  "blocks": {
+  "real_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "real_block"
+  },
   "byte_block_2": {
    "max_count": 1024,
    "max_count_string": "1024",
@@ -20,6 +25,11 @@
    "max_count_string": "54",
    "struct": "sound_class_block"
   },
+  "sound_class_block_3": {
+   "max_count": 54,
+   "max_count_string": "54",
+   "struct": "sound_class_block"
+  },
   "sound_classes_block": {
    "max_count": 1,
    "max_count_string": "1",
@@ -27,7 +37,7 @@
   }
  },
  "structs": {
-  "sound_classes_block_struct": {
+  "sound_classes_block_struct__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 12,
    "fields": [
@@ -35,6 +45,418 @@
      "type": "block",
      "name": "sound classes",
      "definition": "sound_class_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_class_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 92,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 92
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_class_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 96,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "max sounds per tag [1,16]"
+    },
+    {
+     "type": "short_integer",
+     "name": "max sounds per object [1,16]"
+    },
+    {
+     "type": "long_integer",
+     "name": "preemption time"
+    },
+    {
+     "type": "word_flags",
+     "name": "internal flags",
+     "definition": "internal_flags_flags"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "priority"
+    },
+    {
+     "type": "short_enum",
+     "name": "cache miss mode",
+     "definition": "cache_miss_mode_enum"
+    },
+    {
+     "type": "real",
+     "name": "reverb gain"
+    },
+    {
+     "type": "real",
+     "name": "override speaker gain"
+    },
+    {
+     "type": "real_bounds",
+     "name": "distance bounds"
+    },
+    {
+     "type": "custom",
+     "name": "Update gain bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "gain bounds"
+    },
+    {
+     "type": "real",
+     "name": "cutscene ducking"
+    },
+    {
+     "type": "real",
+     "name": "cutscene ducking fade in time"
+    },
+    {
+     "type": "real",
+     "name": "cutscene ducking sustain time"
+    },
+    {
+     "type": "real",
+     "name": "cutscene ducking fade out time"
+    },
+    {
+     "type": "real",
+     "name": "scripted dialog ducking"
+    },
+    {
+     "type": "real",
+     "name": "scripted dialog ducking fade in time"
+    },
+    {
+     "type": "real",
+     "name": "scripted dialog ducking sustain time"
+    },
+    {
+     "type": "real",
+     "name": "scripted dialog ducking fade out time"
+    },
+    {
+     "type": "real",
+     "name": "doppler factor"
+    },
+    {
+     "type": "char_enum",
+     "name": "stereo playback type",
+     "definition": "stereo_playback_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "short_integer",
+     "name": "lowpass cut off frequency"
+    },
+    {
+     "type": "real",
+     "name": "transmission multiplier"
+    },
+    {
+     "type": "real",
+     "name": "obstruction max bend"
+    },
+    {
+     "type": "real",
+     "name": "occlusion max bend"
+    },
+    {
+     "type": "real",
+     "name": "inner_silence_distance"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_class_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 116,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "max sounds per tag [1,16]"
+    },
+    {
+     "type": "short_integer",
+     "name": "max sounds per object [1,16]"
+    },
+    {
+     "type": "long_integer",
+     "name": "preemption time"
+    },
+    {
+     "type": "word_flags",
+     "name": "internal flags",
+     "definition": "internal_flags_flags"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "priority"
+    },
+    {
+     "type": "short_enum",
+     "name": "cache miss mode",
+     "definition": "cache_miss_mode_enum"
+    },
+    {
+     "type": "real",
+     "name": "reverb gain"
+    },
+    {
+     "type": "real",
+     "name": "override speaker gain"
+    },
+    {
+     "type": "real_bounds",
+     "name": "distance bounds"
+    },
+    {
+     "type": "custom",
+     "name": "Update gain bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "gain bounds"
+    },
+    {
+     "type": "real",
+     "name": "cutscene ducking"
+    },
+    {
+     "type": "real",
+     "name": "cutscene ducking fade in time"
+    },
+    {
+     "type": "real",
+     "name": "cutscene ducking sustain time"
+    },
+    {
+     "type": "real",
+     "name": "cutscene ducking fade out time"
+    },
+    {
+     "type": "real",
+     "name": "scripted dialog ducking"
+    },
+    {
+     "type": "real",
+     "name": "scripted dialog ducking fade in time"
+    },
+    {
+     "type": "real",
+     "name": "scripted dialog ducking sustain time"
+    },
+    {
+     "type": "real",
+     "name": "scripted dialog ducking fade out time"
+    },
+    {
+     "type": "real",
+     "name": "doppler factor"
+    },
+    {
+     "type": "char_enum",
+     "name": "stereo playback type",
+     "definition": "stereo_playback_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "real",
+     "name": "transmission multiplier"
+    },
+    {
+     "type": "real",
+     "name": "obstruction max bend"
+    },
+    {
+     "type": "real",
+     "name": "occlusion max bend"
+    },
+    {
+     "type": "real",
+     "name": "inner_silence_distance"
+    },
+    {
+     "type": "struct",
+     "name": "lowpass cut off parameters",
+     "definition": "sound_lowpass_struct"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_lowpass_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "real",
+     "name": "low pass minimum distance"
+    },
+    {
+     "type": "real",
+     "name": "low pass maximum distance"
+    },
+    {
+     "type": "custom",
+     "name": "Mapping"
+    },
+    {
+     "type": "struct",
+     "name": "Mapping",
+     "definition": "mapping_function"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "slpp"
+  },
+  "mapping_function__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function Type"
+    },
+    {
+     "type": "byte_flags",
+     "name": "Flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 1"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 0"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 1"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 3"
+    },
+    {
+     "type": "block",
+     "name": "Values",
+     "definition": "real_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "real_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "Value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "mapping_function": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "block",
+     "name": "data",
+     "definition": "byte_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "byte_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 1,
+   "fields": [
+    {
+     "type": "char_integer",
+     "name": "Value"
     },
     {
      "type": "terminator",
@@ -180,72 +602,6 @@
     }
    ]
   },
-  "sound_lowpass_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 20,
-   "fields": [
-    {
-     "type": "real",
-     "name": "low pass minimum distance"
-    },
-    {
-     "type": "real",
-     "name": "low pass maximum distance"
-    },
-    {
-     "type": "custom",
-     "name": "Mapping"
-    },
-    {
-     "type": "struct",
-     "name": "Mapping",
-     "definition": "mapping_function"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ],
-   "tag": "slpp"
-  },
-  "mapping_function": {
-   "guid": "00000000000000000000000000000000",
-   "size": 12,
-   "fields": [
-    {
-     "type": "custom",
-     "name": "HIDE_GROUP_ID"
-    },
-    {
-     "type": "block",
-     "name": "data",
-     "definition": "byte_block_2"
-    },
-    {
-     "type": "custom",
-     "name": "END_HIDE_GROUP_ID"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ],
-   "tag": "MAPP"
-  },
-  "byte_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 1,
-   "fields": [
-    {
-     "type": "char_integer",
-     "name": "Value"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
   "sound_class_ducker_block_definition": {
    "guid": "00000000000000000000000000000000",
    "size": 20,
@@ -270,6 +626,21 @@
     {
      "type": "real",
      "name": "ducking fade out time"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_classes_block_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "block",
+     "name": "sound classes",
+     "definition": "sound_class_block_3"
     },
     {
      "type": "terminator",
@@ -320,6 +691,18 @@
    "options": [
     "first person",
     "ambient"
+   ]
+  },
+  "flags_flags_2": {
+   "options": [
+    "Range",
+    "Unused 0",
+    "Unused 1",
+    "Unused 2",
+    "Color Bit 0",
+    "Color Bit 1",
+    "Color Bit 2",
+    "Color Bit 3"
    ]
   },
   "sound_class_enum": {
@@ -383,5 +766,21 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "mapping_function": {
+   "0": "mapping_function__v0",
+   "1": "mapping_function"
+  },
+  "sound_class_block": {
+   "0": "sound_class_block__v0",
+   "1": "sound_class_block__v1",
+   "2": "sound_class_block__v2",
+   "3": "sound_class_block"
+  },
+  "sound_classes_block_struct": {
+   "0": "sound_classes_block_struct__v0",
+   "1": "sound_classes_block_struct"
+  }
+ }
 }

@@ -42,6 +42,53 @@
     }
    ]
   },
+  "scenario_trigger_volume_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 100,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "array",
+     "name": null,
+     "definition": "unnamed_array"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "inline_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "parameters"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "scenario_trigger_volume_block": {
    "guid": "00000000000000000000000000000000",
    "size": 68,
@@ -122,9 +169,20 @@
    ]
   }
  },
- "arrays": {},
+ "arrays": {
+  "unnamed_array": {
+   "count": 15,
+   "struct": "inline_struct"
+  }
+ },
  "enums_flags": {},
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "scenario_trigger_volume_block": {
+   "0": "scenario_trigger_volume_block__v0",
+   "1": "scenario_trigger_volume_block"
+  }
+ }
 }

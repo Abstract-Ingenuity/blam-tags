@@ -215,6 +215,25 @@
     }
    ]
   },
+  "scenario_structure_bsp_reference_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "tag_reference",
+     "name": "structure bsp"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "scenario_structure_bsp_reference_block": {
    "guid": "00000000000000000000000000000000",
    "size": 84,
@@ -304,7 +323,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "terminator",
@@ -312,9 +331,92 @@
     }
    ]
   },
-  "scenario_machine_block": {
+  "scenario_machine_block__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 76,
+   "size": 64,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "word_flags",
+     "name": "not placed",
+     "definition": "not_placed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "desired permutation"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "long_integer",
+     "name": "environment object reference"
+    },
+    {
+     "type": "struct",
+     "name": "device data",
+     "definition": "old_scenario_device_struct"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "old_scenario_device_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "power group"
+    },
+    {
+     "type": "short_integer",
+     "name": "position group"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "sdst"
+  },
+  "scenario_machine_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 80,
    "fields": [
     {
      "type": "custom",
@@ -345,7 +447,7 @@
     {
      "type": "struct",
      "name": "machine data",
-     "definition": "scenario_machine_struct_v3"
+     "definition": "scenario_machine_struct_v2"
     },
     {
      "type": "terminator",
@@ -353,7 +455,7 @@
     }
    ]
   },
-  "scenario_object_datum_struct": {
+  "scenario_object_datum_struct__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 48,
    "fields": [
@@ -364,7 +466,7 @@
     {
      "type": "long_flags",
      "name": "placement flags",
-     "definition": "placement_flags_flags"
+     "definition": "not_placed_flags"
     },
     {
      "type": "real_point_3d",
@@ -384,7 +486,7 @@
      "definition": "unnamed_flags"
     },
     {
-     "type": "word_block_flags",
+     "type": "short_integer",
      "name": "manual bsp flags"
     },
     {
@@ -442,6 +544,66 @@
    ],
    "tag": "obj#"
   },
+  "scenario_object_datum_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 48,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "SCENARIO_OBJECT_EDIT_ID"
+    },
+    {
+     "type": "long_flags",
+     "name": "placement flags",
+     "definition": "not_placed_flags"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "real",
+     "name": "scale"
+    },
+    {
+     "type": "word_flags",
+     "name": null,
+     "definition": "unnamed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "manual bsp flags"
+    },
+    {
+     "type": "struct",
+     "name": "object id",
+     "definition": "scenario_object_id_struct"
+    },
+    {
+     "type": "char_enum",
+     "name": "bsp policy",
+     "definition": "bsp_policy_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "sobj"
+  },
   "scenario_device_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 8,
@@ -465,6 +627,118 @@
     }
    ],
    "tag": "sdvt"
+  },
+  "scenario_machine_struct_v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "short_integer",
+     "name": "pathfinding object reference"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "smht"
+  },
+  "scenario_machine_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 80,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-2"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "struct",
+     "name": "object data",
+     "definition": "scenario_object_datum_struct"
+    },
+    {
+     "type": "struct",
+     "name": "device data",
+     "definition": "scenario_device_struct"
+    },
+    {
+     "type": "struct",
+     "name": "machine data",
+     "definition": "scenario_machine_struct_v2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenario_machine_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 76,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-2"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "struct",
+     "name": "object data",
+     "definition": "scenario_object_datum_struct"
+    },
+    {
+     "type": "struct",
+     "name": "device data",
+     "definition": "scenario_device_struct"
+    },
+    {
+     "type": "struct",
+     "name": "machine data",
+     "definition": "scenario_machine_struct_v3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
   },
   "scenario_machine_struct_v3": {
    "guid": "00000000000000000000000000000000",
@@ -524,7 +798,79 @@
     }
    ]
   },
-  "scenario_control_block": {
+  "scenario_control_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 64,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "word_flags",
+     "name": "not placed",
+     "definition": "not_placed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "desired permutation"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "long_integer",
+     "name": "environment object reference"
+    },
+    {
+     "type": "struct",
+     "name": "device data",
+     "definition": "old_scenario_device_struct"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "short_integer",
+     "name": "DON'T TOUCH THIS"
+    },
+    {
+     "type": "custom",
+     "name": "CUSTOM_CONTROL_NAME_ID"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenario_control_block__v1": {
    "guid": "00000000000000000000000000000000",
    "size": 68,
    "fields": [
@@ -590,6 +936,47 @@
    ],
    "tag": "sctt"
   },
+  "scenario_control_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 68,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-2"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "struct",
+     "name": "object data",
+     "definition": "scenario_object_datum_struct"
+    },
+    {
+     "type": "struct",
+     "name": "device data",
+     "definition": "scenario_device_struct"
+    },
+    {
+     "type": "struct",
+     "name": "control data",
+     "definition": "scenario_control_struct"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "scenario_control_palette_block": {
    "guid": "00000000000000000000000000000000",
    "size": 48,
@@ -609,7 +996,77 @@
     }
    ]
   },
-  "scenario_light_fixture_block": {
+  "scenario_light_fixture_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 88,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "word_flags",
+     "name": "not placed",
+     "definition": "not_placed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "desired permutation"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "long_integer",
+     "name": "environment object reference"
+    },
+    {
+     "type": "struct",
+     "name": "device data",
+     "definition": "old_scenario_device_struct"
+    },
+    {
+     "type": "real_rgb_color",
+     "name": "color"
+    },
+    {
+     "type": "real",
+     "name": "intensity"
+    },
+    {
+     "type": "angle",
+     "name": "falloff angle"
+    },
+    {
+     "type": "angle",
+     "name": "cutoff angle"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenario_light_fixture_block__v1": {
    "guid": "00000000000000000000000000000000",
    "size": 84,
    "fields": [
@@ -677,6 +1134,47 @@
    ],
    "tag": "slft"
   },
+  "scenario_light_fixture_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 84,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-2"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "struct",
+     "name": "object data",
+     "definition": "scenario_object_datum_struct"
+    },
+    {
+     "type": "struct",
+     "name": "device data",
+     "definition": "scenario_device_struct"
+    },
+    {
+     "type": "struct",
+     "name": "light_fixture data",
+     "definition": "scenario_light_fixture_struct"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "scenario_light_fixture_palette_block": {
    "guid": "00000000000000000000000000000000",
    "size": 48,
@@ -727,7 +1225,7 @@
     "can change only once"
    ]
   },
-  "placement_flags_flags": {
+  "not_placed_flags": {
    "options": [
     "not automatically",
     "unused",
@@ -738,6 +1236,25 @@
     "never placed",
     "lock name to env. object",
     "create at rest"
+   ]
+  },
+  "flags_flags_3": {
+   "options": [
+    "initially open (1.0)",
+    "initially off (0.0)",
+    "can change only once",
+    "position reversed",
+    "not usable from any side"
+   ]
+  },
+  "flags_flags_4": {
+   "options": [
+    "does not operate automatically",
+    "one-sided",
+    "never appears locked",
+    "opened by melee attack",
+    "one-sided for player",
+    "does not close automatically"
    ]
   },
   "unnamed_flags": {
@@ -777,25 +1294,6 @@
     "manual bsp placement"
    ]
   },
-  "flags_flags_3": {
-   "options": [
-    "initially open (1.0)",
-    "initially off (0.0)",
-    "can change only once",
-    "position reversed",
-    "not usable from any side"
-   ]
-  },
-  "flags_flags_4": {
-   "options": [
-    "does not operate automatically",
-    "one-sided",
-    "never appears locked",
-    "opened by melee attack",
-    "one-sided for player",
-    "does not close automatically"
-   ]
-  },
   "flags_flags_5": {
    "options": [
     "usable from both sides"
@@ -804,5 +1302,31 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "scenario_structure_bsp_reference_block": {
+   "0": "scenario_structure_bsp_reference_block__v0",
+   "1": "scenario_structure_bsp_reference_block"
+  },
+  "scenario_object_datum_struct": {
+   "0": "scenario_object_datum_struct__v0",
+   "1": "scenario_object_datum_struct"
+  },
+  "scenario_machine_block": {
+   "0": "scenario_machine_block__v0",
+   "1": "scenario_machine_block__v1",
+   "2": "scenario_machine_block__v2",
+   "3": "scenario_machine_block"
+  },
+  "scenario_control_block": {
+   "0": "scenario_control_block__v0",
+   "1": "scenario_control_block__v1",
+   "2": "scenario_control_block"
+  },
+  "scenario_light_fixture_block": {
+   "0": "scenario_light_fixture_block__v0",
+   "1": "scenario_light_fixture_block__v1",
+   "2": "scenario_light_fixture_block"
+  }
+ }
 }

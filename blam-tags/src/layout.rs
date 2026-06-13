@@ -235,6 +235,14 @@ pub struct TagLayout {
     /// carry a 16-byte block-style header on disk (e.g. `MAPP`). Empty
     /// for MCC layouts (read from `blay`), which have no such headers.
     pub struct_tags: Vec<u32>,
+    /// Classic Halo 2 only: per-base-struct version variant table,
+    /// parallel to `struct_layouts`. `Some(v)` for a multi-version layout,
+    /// where `v[n]` is the `struct_layouts` index of the variant for
+    /// on-disk version `n` (gaps padded with the base index). `None` for
+    /// single-version structs and for the variant entries themselves.
+    /// Empty for MCC layouts. The classic decoder reads a block/struct
+    /// header's version field and resolves the matching FieldSet variant.
+    pub struct_version_table: Vec<Option<Vec<u32>>>,
 }
 
 impl TagLayout {
@@ -768,6 +776,8 @@ impl TagLayout {
             interop_layouts,
             // MCC tags carry no classic inline-struct headers.
             struct_tags: Vec::new(),
+            // MCC tags are single-version (no on-disk FieldSet selection).
+            struct_version_table: Vec::new(),
         };
 
         //================================================================================

@@ -181,6 +181,25 @@
     }
    ]
   },
+  "scenario_structure_bsp_reference_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "tag_reference",
+     "name": "structure bsp"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "scenario_structure_bsp_reference_block": {
    "guid": "00000000000000000000000000000000",
    "size": 84,
@@ -269,9 +288,86 @@
     }
    ]
   },
-  "scenario_scenery_block": {
+  "scenario_scenery_block__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 96,
+   "size": 84,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "word_flags",
+     "name": "not placed",
+     "definition": "not_placed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "desired permutation"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "long_integer",
+     "name": "environment object reference"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "word_flags",
+     "name": "Pathfinding flags",
+     "definition": "pathfinding_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "Pathfinding object index"
+    },
+    {
+     "type": "long_integer",
+     "name": "Runtime scenery object"
+    },
+    {
+     "type": "short_enum",
+     "name": "Pathfinding policy",
+     "definition": "pathfinding_policy_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "Lightmapping policy",
+     "definition": "lightmapping_policy_enum"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenario_scenery_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 88,
    "fields": [
     {
      "type": "custom",
@@ -302,7 +398,7 @@
     {
      "type": "struct",
      "name": "scenery data",
-     "definition": "scenario_scenery_datum_struct_v4"
+     "definition": "scenario_scenery_datum_struct_v2"
     },
     {
      "type": "terminator",
@@ -310,7 +406,7 @@
     }
    ]
   },
-  "scenario_object_datum_struct": {
+  "scenario_object_datum_struct__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 48,
    "fields": [
@@ -321,7 +417,7 @@
     {
      "type": "long_flags",
      "name": "placement flags",
-     "definition": "placement_flags_flags"
+     "definition": "not_placed_flags"
     },
     {
      "type": "real_point_3d",
@@ -341,7 +437,7 @@
      "definition": "unnamed_flags"
     },
     {
-     "type": "word_block_flags",
+     "type": "short_integer",
      "name": "manual bsp flags"
     },
     {
@@ -399,6 +495,66 @@
    ],
    "tag": "obj#"
   },
+  "scenario_object_datum_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 48,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "SCENARIO_OBJECT_EDIT_ID"
+    },
+    {
+     "type": "long_flags",
+     "name": "placement flags",
+     "definition": "not_placed_flags"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "real",
+     "name": "scale"
+    },
+    {
+     "type": "word_flags",
+     "name": null,
+     "definition": "unnamed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "manual bsp flags"
+    },
+    {
+     "type": "struct",
+     "name": "object id",
+     "definition": "scenario_object_id_struct"
+    },
+    {
+     "type": "char_enum",
+     "name": "bsp policy",
+     "definition": "bsp_policy_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "sobj"
+  },
   "scenario_object_permutation_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 24,
@@ -431,7 +587,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -439,6 +595,202 @@
     }
    ],
    "tag": "sper"
+  },
+  "scenario_scenery_datum_struct_v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "Pathfinding flags",
+     "definition": "pathfinding_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "Pathfinding object index"
+    },
+    {
+     "type": "long_integer",
+     "name": "Runtime scenery object"
+    },
+    {
+     "type": "short_enum",
+     "name": "Pathfinding policy",
+     "definition": "pathfinding_policy_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "Lightmapping policy",
+     "definition": "lightmapping_policy_enum"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "ssct"
+  },
+  "scenario_scenery_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 88,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-2"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "struct",
+     "name": "object data",
+     "definition": "scenario_object_datum_struct"
+    },
+    {
+     "type": "struct",
+     "name": "permutation data",
+     "definition": "scenario_object_permutation_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scenery data",
+     "definition": "scenario_scenery_datum_struct_v3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenario_scenery_datum_struct_v3": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "Pathfinding flags",
+     "definition": "pathfinding_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "Pathfinding object index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "custom",
+     "name": "'path'"
+    },
+    {
+     "type": "short_enum",
+     "name": "Pathfinding policy",
+     "definition": "pathfinding_policy_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "Lightmapping policy",
+     "definition": "lightmapping_policy_enum_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "sct2"
+  },
+  "scenario_scenery_block__v3": {
+   "guid": "00000000000000000000000000000000",
+   "size": 88,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-2"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "struct",
+     "name": "object data",
+     "definition": "scenario_object_datum_struct"
+    },
+    {
+     "type": "struct",
+     "name": "permutation data",
+     "definition": "scenario_object_permutation_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scenery data",
+     "definition": "scenario_scenery_datum_struct_v3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenario_scenery_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 96,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-2"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "struct",
+     "name": "object data",
+     "definition": "scenario_object_datum_struct"
+    },
+    {
+     "type": "struct",
+     "name": "permutation data",
+     "definition": "scenario_object_permutation_struct"
+    },
+    {
+     "type": "struct",
+     "name": "scenery data",
+     "definition": "scenario_scenery_datum_struct_v4"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
   },
   "scenario_scenery_datum_struct_v4": {
    "guid": "00000000000000000000000000000000",
@@ -456,7 +808,7 @@
     {
      "type": "short_enum",
      "name": "Lightmapping policy",
-     "definition": "lightmapping_policy_enum"
+     "definition": "lightmapping_policy_enum_2"
     },
     {
      "type": "block",
@@ -579,7 +931,7 @@
     "default sky enabled"
    ]
   },
-  "placement_flags_flags": {
+  "not_placed_flags": {
    "options": [
     "not automatically",
     "unused",
@@ -590,6 +942,29 @@
     "never placed",
     "lock name to env. object",
     "create at rest"
+   ]
+  },
+  "pathfinding_flags_flags": {
+   "options": [
+    "DEPRECATED",
+    "DEPRECATED"
+   ]
+  },
+  "pathfinding_policy_enum": {
+   "options": [
+    "Tag Default",
+    "Pathfinding DYNAMIC",
+    "Pathfinding CUT-OUT",
+    "Pathfinding STATIC",
+    "Pathfinding NONE"
+   ]
+  },
+  "lightmapping_policy_enum": {
+   "options": [
+    "dynamic",
+    "per-object (not implemented)",
+    "per-vertex",
+    "per-pixel"
    ]
   },
   "unnamed_flags": {
@@ -637,16 +1012,7 @@
     "quaternary"
    ]
   },
-  "pathfinding_policy_enum": {
-   "options": [
-    "Tag Default",
-    "Pathfinding DYNAMIC",
-    "Pathfinding CUT-OUT",
-    "Pathfinding STATIC",
-    "Pathfinding NONE"
-   ]
-  },
-  "lightmapping_policy_enum": {
+  "lightmapping_policy_enum_2": {
    "options": [
     "Tag Default",
     "Dynamic",
@@ -671,5 +1037,22 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "scenario_structure_bsp_reference_block": {
+   "0": "scenario_structure_bsp_reference_block__v0",
+   "1": "scenario_structure_bsp_reference_block"
+  },
+  "scenario_object_datum_struct": {
+   "0": "scenario_object_datum_struct__v0",
+   "1": "scenario_object_datum_struct"
+  },
+  "scenario_scenery_block": {
+   "0": "scenario_scenery_block__v0",
+   "1": "scenario_scenery_block__v1",
+   "2": "scenario_scenery_block__v2",
+   "3": "scenario_scenery_block__v3",
+   "4": "scenario_scenery_block"
+  }
+ }
 }

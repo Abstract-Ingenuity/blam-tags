@@ -15,6 +15,36 @@
    "max_count_string": "12",
    "struct": "looping_sound_detail_block"
   },
+  "looping_sound_track_block_3": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "looping_sound_track_block"
+  },
+  "looping_sound_detail_block_3": {
+   "max_count": 12,
+   "max_count_string": "12",
+   "struct": "looping_sound_detail_block"
+  },
+  "looping_sound_track_block_4": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "looping_sound_track_block"
+  },
+  "looping_sound_detail_block_4": {
+   "max_count": 12,
+   "max_count_string": "12",
+   "struct": "looping_sound_detail_block"
+  },
+  "looping_sound_track_block_5": {
+   "max_count": 3,
+   "max_count_string": "3",
+   "struct": "looping_sound_track_block"
+  },
+  "looping_sound_detail_block_5": {
+   "max_count": 12,
+   "max_count_string": "12",
+   "struct": "looping_sound_detail_block"
+  },
   "sound_looping_block": {
    "max_count": 1,
    "max_count_string": "1",
@@ -22,14 +52,10 @@
   }
  },
  "structs": {
-  "sound_looping_block_struct": {
+  "sound_looping_block_struct__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 76,
+   "size": 84,
    "fields": [
-    {
-     "type": "tag_reference",
-     "name": "remastered looping sound"
-    },
     {
      "type": "long_flags",
      "name": "flags",
@@ -37,11 +63,7 @@
     },
     {
      "type": "real",
-     "name": "marty's music time"
-    },
-    {
-     "type": "real",
-     "name": null
+     "name": "detail sound period"
     },
     {
      "type": "pad",
@@ -49,8 +71,22 @@
      "definition": 8
     },
     {
+     "type": "real",
+     "name": "detail sound period"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
      "type": "tag_reference",
-     "name": null
+     "name": "continuous damage effect"
     },
     {
      "type": "block",
@@ -61,6 +97,63 @@
      "type": "block",
      "name": "detail sounds",
      "definition": "looping_sound_detail_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "looping_sound_track_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 160,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "real",
+     "name": "gain"
+    },
+    {
+     "type": "real",
+     "name": "fade in duration"
+    },
+    {
+     "type": "real",
+     "name": "fade out duration"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "tag_reference",
+     "name": "start"
+    },
+    {
+     "type": "tag_reference",
+     "name": "loop"
+    },
+    {
+     "type": "tag_reference",
+     "name": "end"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "tag_reference",
+     "name": "alternate loop"
+    },
+    {
+     "type": "tag_reference",
+     "name": "alternate end"
     },
     {
      "type": "terminator",
@@ -116,7 +209,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "short_enum",
@@ -143,6 +236,50 @@
     {
      "type": "real",
      "name": "alt fade out duration"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "looping_sound_detail_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 104,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "sound"
+    },
+    {
+     "type": "real_bounds",
+     "name": "random period bounds"
+    },
+    {
+     "type": "real",
+     "name": "gain"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_3"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 48
+    },
+    {
+     "type": "angle_bounds",
+     "name": "yaw bounds"
+    },
+    {
+     "type": "angle_bounds",
+     "name": "pitch bounds"
+    },
+    {
+     "type": "real_bounds",
+     "name": "distance bounds"
     },
     {
      "type": "terminator",
@@ -186,6 +323,136 @@
     {
      "type": "real_bounds",
      "name": "distance bounds"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_looping_block_struct__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 60,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "marty's music time"
+    },
+    {
+     "type": "real",
+     "name": null
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "tag_reference",
+     "name": null
+    },
+    {
+     "type": "block",
+     "name": "tracks",
+     "definition": "looping_sound_track_block_3"
+    },
+    {
+     "type": "block",
+     "name": "detail sounds",
+     "definition": "looping_sound_detail_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_looping_block_struct__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 60,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "marty's music time"
+    },
+    {
+     "type": "real",
+     "name": null
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "tag_reference",
+     "name": null
+    },
+    {
+     "type": "block",
+     "name": "tracks",
+     "definition": "looping_sound_track_block_4"
+    },
+    {
+     "type": "block",
+     "name": "detail sounds",
+     "definition": "looping_sound_detail_block_4"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_looping_block_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 76,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "remastered looping sound"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "real",
+     "name": "marty's music time"
+    },
+    {
+     "type": "real",
+     "name": null
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "tag_reference",
+     "name": null
+    },
+    {
+     "type": "block",
+     "name": "tracks",
+     "definition": "looping_sound_track_block_5"
+    },
+    {
+     "type": "block",
+     "name": "detail sounds",
+     "definition": "looping_sound_detail_block_5"
     },
     {
      "type": "terminator",
@@ -237,5 +504,21 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "looping_sound_track_block": {
+   "0": "looping_sound_track_block__v0",
+   "1": "looping_sound_track_block"
+  },
+  "looping_sound_detail_block": {
+   "0": "looping_sound_detail_block__v0",
+   "1": "looping_sound_detail_block"
+  },
+  "sound_looping_block_struct": {
+   "0": "sound_looping_block_struct__v0",
+   "1": "sound_looping_block_struct__v1",
+   "2": "sound_looping_block_struct__v2",
+   "3": "sound_looping_block_struct"
+  }
+ }
 }

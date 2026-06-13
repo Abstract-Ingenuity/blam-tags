@@ -10,6 +10,11 @@
    "max_count_string": "1",
    "struct": "object_ai_properties_block"
   },
+  "real_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "real_block"
+  },
   "byte_block_2": {
    "max_count": 1024,
    "max_count_string": "1024",
@@ -62,7 +67,7 @@
   }
  },
  "structs": {
-  "scenery_block_struct": {
+  "scenery_block_struct__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 264,
    "fields": [
@@ -94,7 +99,87 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 120
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenery_block_struct__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 264,
+   "fields": [
+    {
+     "type": "struct",
+     "name": "object",
+     "definition": "object_block_struct"
+    },
+    {
+     "type": "short_enum",
+     "name": "pathfinding policy",
+     "definition": "pathfinding_policy_enum"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "scenery_flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "lightmapping policy",
+     "definition": "lightmapping_policy_enum_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 120
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenery_block_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 264,
+   "fields": [
+    {
+     "type": "struct",
+     "name": "object",
+     "definition": "object_block_struct"
+    },
+    {
+     "type": "short_enum",
+     "name": "pathfinding policy",
+     "definition": "pathfinding_policy_enum_2"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "scenery_flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "lightmapping policy",
+     "definition": "lightmapping_policy_enum_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 120
     },
     {
      "type": "terminator",
@@ -127,7 +212,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real",
@@ -156,7 +241,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "real",
@@ -181,7 +266,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "tag_reference",
@@ -198,7 +283,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "block",
@@ -208,7 +293,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "block",
@@ -218,7 +303,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real",
@@ -374,6 +459,77 @@
     }
    ]
   },
+  "mapping_function__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function Type"
+    },
+    {
+     "type": "byte_flags",
+     "name": "Flags",
+     "definition": "flags_flags_3"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 1"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 0"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 1"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 3"
+    },
+    {
+     "type": "block",
+     "name": "Values",
+     "definition": "real_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "real_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "Value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
    "size": 12,
@@ -427,7 +583,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "short_enum",
@@ -450,7 +606,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 8
     },
     {
      "type": "terminator",
@@ -469,7 +625,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -503,7 +659,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "block",
@@ -611,9 +767,9 @@
  "enums_flags": {
   "pathfinding_policy_enum": {
    "options": [
+    "Pathfinding DYNAMIC",
     "Pathfinding CUT-OUT",
     "Pathfinding STATIC",
-    "Pathfinding DYNAMIC",
     "Pathfinding NONE"
    ]
   },
@@ -624,9 +780,23 @@
   },
   "lightmapping_policy_enum": {
    "options": [
+    "Dynamic",
+    "Per-Vertex"
+   ]
+  },
+  "lightmapping_policy_enum_2": {
+   "options": [
     "Per-Vertex",
     "Per-Pixel (not implemented)",
     "Dynamic"
+   ]
+  },
+  "pathfinding_policy_enum_2": {
+   "options": [
+    "Pathfinding CUT-OUT",
+    "Pathfinding STATIC",
+    "Pathfinding DYNAMIC",
+    "Pathfinding NONE"
    ]
   },
   "flags_flags": {
@@ -700,6 +870,18 @@
     "random time offset"
    ]
   },
+  "flags_flags_3": {
+   "options": [
+    "Range",
+    "Unused 0",
+    "Unused 1",
+    "Unused 2",
+    "Color Bit 0",
+    "Color Bit 1",
+    "Color Bit 2",
+    "Color Bit 3"
+   ]
+  },
   "change_color_enum": {
    "options": [
     "none",
@@ -731,5 +913,16 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "scenery_block_struct": {
+   "0": "scenery_block_struct__v0",
+   "1": "scenery_block_struct__v1",
+   "2": "scenery_block_struct"
+  },
+  "mapping_function": {
+   "0": "mapping_function__v0",
+   "1": "mapping_function"
+  }
+ }
 }

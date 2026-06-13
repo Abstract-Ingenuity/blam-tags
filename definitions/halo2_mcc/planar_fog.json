@@ -47,12 +47,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 72
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real_fraction",
@@ -61,7 +61,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -70,7 +70,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "real",
@@ -87,7 +87,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "real_rgb_color",
@@ -96,7 +96,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 100
     },
     {
      "type": "block",
@@ -130,7 +130,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 80
     },
     {
      "type": "terminator",
@@ -162,7 +162,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "real_fraction",
@@ -171,7 +171,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "tag_reference",
@@ -199,5 +199,6 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

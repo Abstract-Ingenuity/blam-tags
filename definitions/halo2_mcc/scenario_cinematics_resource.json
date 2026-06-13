@@ -76,7 +76,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 36
     },
     {
      "type": "terminator",
@@ -122,12 +122,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 36
     },
     {
      "type": "terminator",
@@ -211,5 +211,6 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {}
 }

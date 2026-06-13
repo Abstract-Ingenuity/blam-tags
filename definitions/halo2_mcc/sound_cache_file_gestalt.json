@@ -70,6 +70,11 @@
    "max_count_string": "16",
    "struct": "sound_effect_component_block"
   },
+  "real_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "real_block"
+  },
   "byte_block_2": {
    "max_count": 1024,
    "max_count_string": "1024",
@@ -860,6 +865,28 @@
     }
    ]
   },
+  "sound_effect_override_parameters_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "long_integer",
+     "name": "integer value"
+    },
+    {
+     "type": "real",
+     "name": "real value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "sound_effect_override_parameters_block": {
    "guid": "00000000000000000000000000000000",
    "size": 36,
@@ -896,6 +923,77 @@
      "type": "struct",
      "name": "function value",
      "definition": "mapping_function"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "mapping_function__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function Type"
+    },
+    {
+     "type": "byte_flags",
+     "name": "Flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 1"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 0"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 1"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 3"
+    },
+    {
+     "type": "block",
+     "name": "Values",
+     "definition": "real_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "real_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "Value"
     },
     {
      "type": "terminator",
@@ -1159,6 +1257,58 @@
     }
    ]
   },
+  "sound_permutation_chunk_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "file offset"
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "sound_permutation_chunk_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "file offset"
+    },
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "sound_permutation_chunk_block": {
    "guid": "00000000000000000000000000000000",
    "size": 16,
@@ -1199,6 +1349,35 @@
      "name": null
     }
    ]
+  },
+  "sound_promotion_parameters_struct__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 28,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "promotion sound"
+    },
+    {
+     "type": "short_integer",
+     "name": "promotion count"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "snpr"
   },
   "sound_promotion_parameters_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1522,6 +1701,18 @@
     "sync with origin looping sound"
    ]
   },
+  "flags_flags_4": {
+   "options": [
+    "Range",
+    "Unused 0",
+    "Unused 1",
+    "Unused 2",
+    "Color Bit 0",
+    "Color Bit 1",
+    "Color Bit 2",
+    "Color Bit 3"
+   ]
+  },
   "input_enum": {
    "options": [
     "zero",
@@ -1553,5 +1744,24 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "mapping_function": {
+   "0": "mapping_function__v0",
+   "1": "mapping_function"
+  },
+  "sound_effect_override_parameters_block": {
+   "0": "sound_effect_override_parameters_block__v0",
+   "1": "sound_effect_override_parameters_block"
+  },
+  "sound_permutation_chunk_block": {
+   "0": "sound_permutation_chunk_block__v0",
+   "1": "sound_permutation_chunk_block__v1",
+   "2": "sound_permutation_chunk_block"
+  },
+  "sound_promotion_parameters_struct": {
+   "0": "sound_promotion_parameters_struct__v0",
+   "1": "sound_promotion_parameters_struct"
+  }
+ }
 }

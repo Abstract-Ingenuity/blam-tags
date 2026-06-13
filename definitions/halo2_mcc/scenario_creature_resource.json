@@ -152,6 +152,25 @@
     }
    ]
   },
+  "scenario_structure_bsp_reference_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "tag_reference",
+     "name": "structure bsp"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "scenario_structure_bsp_reference_block": {
    "guid": "00000000000000000000000000000000",
    "size": 84,
@@ -271,7 +290,7 @@
     }
    ]
   },
-  "scenario_object_datum_struct": {
+  "scenario_object_datum_struct__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 48,
    "fields": [
@@ -302,7 +321,7 @@
      "definition": "unnamed_flags"
     },
     {
-     "type": "word_block_flags",
+     "type": "short_integer",
      "name": "manual bsp flags"
     },
     {
@@ -359,6 +378,66 @@
     }
    ],
    "tag": "obj#"
+  },
+  "scenario_object_datum_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 48,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "SCENARIO_OBJECT_EDIT_ID"
+    },
+    {
+     "type": "long_flags",
+     "name": "placement flags",
+     "definition": "placement_flags_flags"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "real",
+     "name": "scale"
+    },
+    {
+     "type": "word_flags",
+     "name": null,
+     "definition": "unnamed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "manual bsp flags"
+    },
+    {
+     "type": "struct",
+     "name": "object id",
+     "definition": "scenario_object_id_struct"
+    },
+    {
+     "type": "char_enum",
+     "name": "bsp policy",
+     "definition": "bsp_policy_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "sobj"
   },
   "g_scenario_editor_folder_block": {
    "guid": "00000000000000000000000000000000",
@@ -439,5 +518,15 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "scenario_structure_bsp_reference_block": {
+   "0": "scenario_structure_bsp_reference_block__v0",
+   "1": "scenario_structure_bsp_reference_block"
+  },
+  "scenario_object_datum_struct": {
+   "0": "scenario_object_datum_struct__v0",
+   "1": "scenario_object_datum_struct"
+  }
+ }
 }

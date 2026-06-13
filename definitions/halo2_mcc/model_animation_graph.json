@@ -15,11 +15,6 @@
    "max_count_string": "512",
    "struct": "animation_graph_sound_reference_block"
   },
-  "animation_graph_effect_reference_block_2": {
-   "max_count": 512,
-   "max_count_string": "512",
-   "struct": "animation_graph_effect_reference_block"
-  },
   "animation_blend_screen_block_2": {
    "max_count": 64,
    "max_count_string": "64",
@@ -35,7 +30,47 @@
    "max_count_string": "512",
    "struct": "animation_sound_event_block"
   },
+  "animation_frame_event_block_3": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_frame_event_block"
+  },
+  "animation_sound_event_block_3": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_sound_event_block"
+  },
+  "animation_frame_event_block_4": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_frame_event_block"
+  },
+  "animation_sound_event_block_4": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_sound_event_block"
+  },
   "animation_effect_event_block_2": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_effect_event_block"
+  },
+  "object_space_node_data_block_v0_2": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "object_space_node_data_block_v0"
+  },
+  "animation_frame_event_block_5": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_frame_event_block"
+  },
+  "animation_sound_event_block_5": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_sound_event_block"
+  },
+  "animation_effect_event_block_3": {
    "max_count": 512,
    "max_count_string": "512",
    "struct": "animation_effect_event_block"
@@ -45,7 +80,92 @@
    "max_count_string": "255",
    "struct": "object_space_node_data_block"
   },
+  "animation_frame_event_block_6": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_frame_event_block"
+  },
+  "animation_sound_event_block_6": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_sound_event_block"
+  },
+  "animation_effect_event_block_4": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_effect_event_block"
+  },
+  "object_space_node_data_block_3": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "object_space_node_data_block"
+  },
+  "animation_frame_event_block_7": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_frame_event_block"
+  },
+  "animation_sound_event_block_7": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_sound_event_block"
+  },
+  "animation_effect_event_block_5": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_effect_event_block"
+  },
+  "object_space_node_data_block_4": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "object_space_node_data_block"
+  },
   "animation_pool_block_2": {
+   "max_count": 2048,
+   "max_count_string": "2048",
+   "struct": "animation_pool_block"
+  },
+  "animation_graph_node_block_3": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "animation_graph_node_block"
+  },
+  "animation_graph_sound_reference_block_3": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_graph_sound_reference_block"
+  },
+  "animation_blend_screen_block_3": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "animation_blend_screen_block"
+  },
+  "animation_pool_block_3": {
+   "max_count": 2048,
+   "max_count_string": "2048",
+   "struct": "animation_pool_block"
+  },
+  "animation_graph_node_block_4": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "animation_graph_node_block"
+  },
+  "animation_graph_sound_reference_block_4": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_graph_sound_reference_block"
+  },
+  "animation_graph_effect_reference_block_2": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "animation_graph_effect_reference_block"
+  },
+  "animation_blend_screen_block_4": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "animation_blend_screen_block"
+  },
+  "animation_pool_block_4": {
    "max_count": 2048,
    "max_count_string": "2048",
    "struct": "animation_pool_block"
@@ -197,27 +317,13 @@
     }
    ]
   },
-  "animation_graph_resources_struct": {
+  "animation_graph_resources_struct__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 80,
+   "size": 104,
    "fields": [
     {
      "type": "tag_reference",
      "name": "parent animation graph"
-    },
-    {
-     "type": "byte_flags",
-     "name": "inheritance flags",
-     "definition": "inheritance_flags_flags"
-    },
-    {
-     "type": "byte_flags",
-     "name": "private flags",
-     "definition": "private_flags_flags"
-    },
-    {
-     "type": "short_integer",
-     "name": "animation codec pack"
     },
     {
      "type": "block",
@@ -225,14 +331,14 @@
      "definition": "animation_graph_node_block_2"
     },
     {
-     "type": "block",
-     "name": "sound references|ABCDCC",
-     "definition": "animation_graph_sound_reference_block_2"
+     "type": "pad",
+     "name": null,
+     "definition": 4
     },
     {
      "type": "block",
-     "name": "effect references|ABCDCC",
-     "definition": "animation_graph_effect_reference_block_2"
+     "name": "sound references|ABCDCC",
+     "definition": "animation_graph_sound_reference_block_2"
     },
     {
      "type": "block",
@@ -245,11 +351,73 @@
      "definition": "animation_pool_block_2"
     },
     {
+     "type": "word_flags",
+     "name": "animation graph flags",
+     "definition": "animation_graph_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "animation codec pack"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
      "type": "terminator",
      "name": null
     }
    ],
    "tag": "MAgr"
+  },
+  "animation_graph_node_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 36,
+   "fields": [
+    {
+     "type": "old_string_id",
+     "name": "name"
+    },
+    {
+     "type": "short_integer",
+     "name": "next sibling node index"
+    },
+    {
+     "type": "short_integer",
+     "name": "first child node index"
+    },
+    {
+     "type": "short_integer",
+     "name": "parent node index"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "long_flags",
+     "name": "Node joint flags",
+     "definition": "node_joint_flags_flags"
+    },
+    {
+     "type": "real_vector_3d",
+     "name": "base vector"
+    },
+    {
+     "type": "real",
+     "name": "vector range"
+    },
+    {
+     "type": "real",
+     "name": "z_pos"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
   },
   "animation_graph_node_block": {
    "guid": "00000000000000000000000000000000",
@@ -306,30 +474,6 @@
     {
      "type": "tag_reference",
      "name": "sound"
-    },
-    {
-     "type": "word_flags",
-     "name": "flags",
-     "definition": "flags_flags"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "animation_graph_effect_reference_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 20,
-   "fields": [
-    {
-     "type": "tag_reference",
-     "name": "effect"
     },
     {
      "type": "word_flags",
@@ -408,6 +552,912 @@
     }
    ],
    "tag": "aaim"
+  },
+  "animation_pool_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 132,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "char_enum",
+     "name": "type",
+     "definition": "type_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "frame info type",
+     "definition": "frame_info_type_enum"
+    },
+    {
+     "type": "char_integer",
+     "name": "blend screen"
+    },
+    {
+     "type": "char_integer",
+     "name": "node count"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame count"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame size"
+    },
+    {
+     "type": "long_integer",
+     "name": "node list checksum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "word_flags",
+     "name": "playback flags",
+     "definition": "playback_flags_flags"
+    },
+    {
+     "type": "byte_flags",
+     "name": "internal flags",
+     "definition": "internal_flags_flags"
+    },
+    {
+     "type": "byte_flags",
+     "name": "production flags",
+     "definition": "production_flags_flags"
+    },
+    {
+     "type": "char_integer",
+     "name": "static node flag data size"
+    },
+    {
+     "type": "char_integer",
+     "name": "animated node flag data size"
+    },
+    {
+     "type": "real",
+     "name": "weight"
+    },
+    {
+     "type": "short_integer",
+     "name": "loop frame index"
+    },
+    {
+     "type": "short_integer",
+     "name": "max random start frame index"
+    },
+    {
+     "type": "short_integer",
+     "name": "next animation"
+    },
+    {
+     "type": "char_enum",
+     "name": "desired compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "current compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "array",
+     "name": "node trans. flag data",
+     "definition": "node_trans_flag_data_array"
+    },
+    {
+     "type": "array",
+     "name": "node rotation flag data",
+     "definition": "node_rotation_flag_data_array"
+    },
+    {
+     "type": "array",
+     "name": "node scale flag data",
+     "definition": "node_scale_flag_data_array"
+    },
+    {
+     "type": "short_integer",
+     "name": "movement_data size"
+    },
+    {
+     "type": "short_integer",
+     "name": "default_data size"
+    },
+    {
+     "type": "long_integer",
+     "name": "uncompressed_data size"
+    },
+    {
+     "type": "long_integer",
+     "name": "compressed_data size"
+    },
+    {
+     "type": "data",
+     "name": "animation data",
+     "definition": "animation_data_data"
+    },
+    {
+     "type": "block",
+     "name": "frame events|ABCDCC",
+     "definition": "animation_frame_event_block_2"
+    },
+    {
+     "type": "block",
+     "name": "sound events|ABCDCC",
+     "definition": "animation_sound_event_block_2"
+    },
+    {
+     "type": "long_integer",
+     "name": "production checksum"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_trans_flag_data_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_rotation_flag_data_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "node_scale_flag_data_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "animation_frame_event_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "type",
+     "definition": "type_enum_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "animation_sound_event_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "sound"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame"
+    },
+    {
+     "type": "string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "animation_pool_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 100,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "long_integer",
+     "name": "node list checksum"
+    },
+    {
+     "type": "long_integer",
+     "name": "production checksum"
+    },
+    {
+     "type": "char_enum",
+     "name": "type",
+     "definition": "type_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "frame info type",
+     "definition": "frame_info_type_enum"
+    },
+    {
+     "type": "char_integer",
+     "name": "blend screen"
+    },
+    {
+     "type": "char_integer",
+     "name": "node count"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame count"
+    },
+    {
+     "type": "byte_flags",
+     "name": "internal flags",
+     "definition": "internal_flags_flags"
+    },
+    {
+     "type": "byte_flags",
+     "name": "production flags",
+     "definition": "production_flags_flags"
+    },
+    {
+     "type": "word_flags",
+     "name": "playback flags",
+     "definition": "playback_flags_flags"
+    },
+    {
+     "type": "char_enum",
+     "name": "desired compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "current compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "real",
+     "name": "weight"
+    },
+    {
+     "type": "short_integer",
+     "name": "loop frame index"
+    },
+    {
+     "type": "short_integer",
+     "name": "max random start frame index"
+    },
+    {
+     "type": "short_integer",
+     "name": "parent animation"
+    },
+    {
+     "type": "short_integer",
+     "name": "next animation"
+    },
+    {
+     "type": "data",
+     "name": "animation data",
+     "definition": "animation_data_data_2"
+    },
+    {
+     "type": "block",
+     "name": "frame events|ABCDCC",
+     "definition": "animation_frame_event_block_3"
+    },
+    {
+     "type": "block",
+     "name": "sound events|ABCDCC",
+     "definition": "animation_sound_event_block_3"
+    },
+    {
+     "type": "struct",
+     "name": "data sizes",
+     "definition": "packed_data_sizes_struct"
+    },
+    {
+     "type": "long_integer",
+     "name": "import_checksum"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "packed_data_sizes_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "char_integer",
+     "name": null
+    },
+    {
+     "type": "char_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "apds"
+  },
+  "animation_pool_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 124,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "long_integer",
+     "name": "node list checksum"
+    },
+    {
+     "type": "long_integer",
+     "name": "production checksum"
+    },
+    {
+     "type": "long_integer",
+     "name": "import_checksum"
+    },
+    {
+     "type": "char_enum",
+     "name": "type",
+     "definition": "type_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "frame info type",
+     "definition": "frame_info_type_enum"
+    },
+    {
+     "type": "char_integer",
+     "name": "blend screen"
+    },
+    {
+     "type": "char_integer",
+     "name": "node count"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame count"
+    },
+    {
+     "type": "byte_flags",
+     "name": "internal flags",
+     "definition": "internal_flags_flags"
+    },
+    {
+     "type": "byte_flags",
+     "name": "production flags",
+     "definition": "production_flags_flags"
+    },
+    {
+     "type": "word_flags",
+     "name": "playback flags",
+     "definition": "playback_flags_flags"
+    },
+    {
+     "type": "char_enum",
+     "name": "desired compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "current compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "real",
+     "name": "weight"
+    },
+    {
+     "type": "short_integer",
+     "name": "loop frame index"
+    },
+    {
+     "type": "short_integer",
+     "name": "max random start frame index"
+    },
+    {
+     "type": "short_integer",
+     "name": "parent animation"
+    },
+    {
+     "type": "short_integer",
+     "name": "next animation"
+    },
+    {
+     "type": "data",
+     "name": "animation data",
+     "definition": "animation_data_data_3"
+    },
+    {
+     "type": "struct",
+     "name": "data sizes",
+     "definition": "packed_data_sizes_struct"
+    },
+    {
+     "type": "block",
+     "name": "frame events|ABCDCC",
+     "definition": "animation_frame_event_block_4"
+    },
+    {
+     "type": "block",
+     "name": "sound events|ABCDCC",
+     "definition": "animation_sound_event_block_4"
+    },
+    {
+     "type": "block",
+     "name": "effect events|ABCDCC",
+     "definition": "animation_effect_event_block_2"
+    },
+    {
+     "type": "block",
+     "name": "object-space parent nodes|ABCDCC",
+     "definition": "object_space_node_data_block_v0_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "animation_effect_event_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "effect"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame"
+    },
+    {
+     "type": "string_id",
+     "name": "marker name"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "animation_effect_event_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "effect"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "object_space_node_data_block_v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 36,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "node_index"
+    },
+    {
+     "type": "word_flags",
+     "name": "component flags",
+     "definition": "component_flags_flags"
+    },
+    {
+     "type": "real_quaternion",
+     "name": "default rotation"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "default translation"
+    },
+    {
+     "type": "real",
+     "name": "default scale"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "animation_pool_block__v3": {
+   "guid": "00000000000000000000000000000000",
+   "size": 132,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "long_integer",
+     "name": "node list checksum"
+    },
+    {
+     "type": "long_integer",
+     "name": "production checksum"
+    },
+    {
+     "type": "long_integer",
+     "name": "import_checksum"
+    },
+    {
+     "type": "char_enum",
+     "name": "type",
+     "definition": "type_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "frame info type",
+     "definition": "frame_info_type_enum"
+    },
+    {
+     "type": "char_integer",
+     "name": "blend screen"
+    },
+    {
+     "type": "char_integer",
+     "name": "node count"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame count"
+    },
+    {
+     "type": "byte_flags",
+     "name": "internal flags",
+     "definition": "internal_flags_flags"
+    },
+    {
+     "type": "byte_flags",
+     "name": "production flags",
+     "definition": "production_flags_flags"
+    },
+    {
+     "type": "word_flags",
+     "name": "playback flags",
+     "definition": "playback_flags_flags"
+    },
+    {
+     "type": "char_enum",
+     "name": "desired compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "current compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "real",
+     "name": "weight"
+    },
+    {
+     "type": "long_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "short_integer",
+     "name": "loop frame index"
+    },
+    {
+     "type": "short_integer",
+     "name": "parent animation"
+    },
+    {
+     "type": "short_integer",
+     "name": "next animation"
+    },
+    {
+     "type": "data",
+     "name": "animation data",
+     "definition": "animation_data_data_4"
+    },
+    {
+     "type": "struct",
+     "name": "data sizes",
+     "definition": "packed_data_sizes_struct"
+    },
+    {
+     "type": "block",
+     "name": "frame events|ABCDCC",
+     "definition": "animation_frame_event_block_5"
+    },
+    {
+     "type": "block",
+     "name": "sound events|ABCDCC",
+     "definition": "animation_sound_event_block_5"
+    },
+    {
+     "type": "block",
+     "name": "effect events|ABCDCC",
+     "definition": "animation_effect_event_block_3"
+    },
+    {
+     "type": "block",
+     "name": "object-space parent nodes|ABCDCC",
+     "definition": "object_space_node_data_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "object_space_node_data_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 28,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "node_index"
+    },
+    {
+     "type": "word_flags",
+     "name": "component flags",
+     "definition": "component_flags_flags"
+    },
+    {
+     "type": "struct",
+     "name": "orientation",
+     "definition": "quantized_orientation_struct"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "quantized_orientation_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "rotation x"
+    },
+    {
+     "type": "short_integer",
+     "name": "rotation y"
+    },
+    {
+     "type": "short_integer",
+     "name": "rotation z"
+    },
+    {
+     "type": "short_integer",
+     "name": "rotation w"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "default translation"
+    },
+    {
+     "type": "real",
+     "name": "default scale"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "qoSS"
+  },
+  "animation_pool_block__v4": {
+   "guid": "00000000000000000000000000000000",
+   "size": 136,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "long_integer",
+     "name": "node list checksum"
+    },
+    {
+     "type": "long_integer",
+     "name": "production checksum"
+    },
+    {
+     "type": "long_integer",
+     "name": "import_checksum"
+    },
+    {
+     "type": "char_enum",
+     "name": "type",
+     "definition": "type_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "frame info type",
+     "definition": "frame_info_type_enum"
+    },
+    {
+     "type": "char_integer",
+     "name": "blend screen"
+    },
+    {
+     "type": "char_integer",
+     "name": "node count"
+    },
+    {
+     "type": "short_integer",
+     "name": "frame count"
+    },
+    {
+     "type": "byte_flags",
+     "name": "internal flags",
+     "definition": "internal_flags_flags"
+    },
+    {
+     "type": "byte_flags",
+     "name": "production flags",
+     "definition": "production_flags_flags"
+    },
+    {
+     "type": "word_flags",
+     "name": "playback flags",
+     "definition": "playback_flags_flags"
+    },
+    {
+     "type": "char_enum",
+     "name": "desired compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "char_enum",
+     "name": "current compression",
+     "definition": "desired_compression_enum"
+    },
+    {
+     "type": "real",
+     "name": "weight"
+    },
+    {
+     "type": "long_integer",
+     "name": "parent graph index"
+    },
+    {
+     "type": "long_integer",
+     "name": "parent graph block index"
+    },
+    {
+     "type": "long_integer",
+     "name": "parent graph block offset"
+    },
+    {
+     "type": "short_integer",
+     "name": "parent graph starting point index"
+    },
+    {
+     "type": "short_integer",
+     "name": "loop frame index"
+    },
+    {
+     "type": "short_integer",
+     "name": "parent animation"
+    },
+    {
+     "type": "short_integer",
+     "name": "next animation"
+    },
+    {
+     "type": "data",
+     "name": "animation data",
+     "definition": "animation_data_data_5"
+    },
+    {
+     "type": "struct",
+     "name": "data sizes",
+     "definition": "packed_data_sizes_struct"
+    },
+    {
+     "type": "block",
+     "name": "frame events|ABCDCC",
+     "definition": "animation_frame_event_block_6"
+    },
+    {
+     "type": "block",
+     "name": "sound events|ABCDCC",
+     "definition": "animation_sound_event_block_6"
+    },
+    {
+     "type": "block",
+     "name": "effect events|ABCDCC",
+     "definition": "animation_effect_event_block_4"
+    },
+    {
+     "type": "block",
+     "name": "object-space parent nodes|ABCDCC",
+     "definition": "object_space_node_data_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
   },
   "animation_pool_block": {
    "guid": "00000000000000000000000000000000",
@@ -514,22 +1564,22 @@
     {
      "type": "block",
      "name": "frame events|ABCDCC",
-     "definition": "animation_frame_event_block_2"
+     "definition": "animation_frame_event_block_7"
     },
     {
      "type": "block",
      "name": "sound events|ABCDCC",
-     "definition": "animation_sound_event_block_2"
+     "definition": "animation_sound_event_block_7"
     },
     {
      "type": "block",
      "name": "effect events|ABCDCC",
-     "definition": "animation_effect_event_block_2"
+     "definition": "animation_effect_event_block_5"
     },
     {
      "type": "block",
      "name": "object-space parent nodes|ABCDCC",
-     "definition": "object_space_node_data_block_2"
+     "definition": "object_space_node_data_block_4"
     },
     {
      "type": "terminator",
@@ -537,162 +1587,132 @@
     }
    ]
   },
-  "packed_data_sizes_struct": {
+  "animation_graph_resources_struct__v1": {
    "guid": "00000000000000000000000000000000",
-   "size": 16,
+   "size": 68,
    "fields": [
     {
-     "type": "char_integer",
-     "name": null
+     "type": "tag_reference",
+     "name": "parent animation graph"
     },
     {
-     "type": "char_integer",
-     "name": null
+     "type": "byte_flags",
+     "name": "inheritance flags",
+     "definition": "inheritance_flags_flags"
+    },
+    {
+     "type": "byte_flags",
+     "name": "private flags",
+     "definition": "animation_graph_flags_flags"
     },
     {
      "type": "short_integer",
-     "name": null
+     "name": "animation codec pack"
     },
     {
-     "type": "short_integer",
-     "name": null
+     "type": "block",
+     "name": "skeleton nodes|ABCDCC",
+     "definition": "animation_graph_node_block_3"
     },
     {
-     "type": "short_integer",
-     "name": null
+     "type": "block",
+     "name": "sound references|ABCDCC",
+     "definition": "animation_graph_sound_reference_block_3"
     },
     {
-     "type": "long_integer",
-     "name": null
+     "type": "block",
+     "name": "blend screens|ABCDCC",
+     "definition": "animation_blend_screen_block_3"
     },
     {
-     "type": "long_integer",
-     "name": null
+     "type": "block",
+     "name": "animations|ABCDCC",
+     "definition": "animation_pool_block_3"
     },
     {
      "type": "terminator",
      "name": null
     }
    ],
-   "tag": "apds"
+   "tag": "MAgr"
   },
-  "animation_frame_event_block": {
+  "animation_graph_resources_struct": {
    "guid": "00000000000000000000000000000000",
-   "size": 4,
+   "size": 80,
    "fields": [
     {
-     "type": "short_enum",
-     "name": "type",
-     "definition": "type_enum_2"
+     "type": "tag_reference",
+     "name": "parent animation graph"
+    },
+    {
+     "type": "byte_flags",
+     "name": "inheritance flags",
+     "definition": "inheritance_flags_flags"
+    },
+    {
+     "type": "byte_flags",
+     "name": "private flags",
+     "definition": "animation_graph_flags_flags"
     },
     {
      "type": "short_integer",
-     "name": "frame"
+     "name": "animation codec pack"
+    },
+    {
+     "type": "block",
+     "name": "skeleton nodes|ABCDCC",
+     "definition": "animation_graph_node_block_4"
+    },
+    {
+     "type": "block",
+     "name": "sound references|ABCDCC",
+     "definition": "animation_graph_sound_reference_block_4"
+    },
+    {
+     "type": "block",
+     "name": "effect references|ABCDCC",
+     "definition": "animation_graph_effect_reference_block_2"
+    },
+    {
+     "type": "block",
+     "name": "blend screens|ABCDCC",
+     "definition": "animation_blend_screen_block_4"
+    },
+    {
+     "type": "block",
+     "name": "animations|ABCDCC",
+     "definition": "animation_pool_block_4"
     },
     {
      "type": "terminator",
      "name": null
     }
-   ]
+   ],
+   "tag": "MAgr"
   },
-  "animation_sound_event_block": {
+  "animation_graph_effect_reference_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 8,
+   "size": 20,
    "fields": [
     {
-     "type": "short_integer",
-     "name": "sound"
-    },
-    {
-     "type": "short_integer",
-     "name": "frame"
-    },
-    {
-     "type": "string_id",
-     "name": "marker name"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "animation_effect_event_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 4,
-   "fields": [
-    {
-     "type": "short_integer",
+     "type": "tag_reference",
      "name": "effect"
     },
     {
-     "type": "short_integer",
-     "name": "frame"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "object_space_node_data_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 28,
-   "fields": [
-    {
-     "type": "short_integer",
-     "name": "node_index"
-    },
-    {
      "type": "word_flags",
-     "name": "component flags",
-     "definition": "component_flags_flags"
+     "name": "flags",
+     "definition": "flags_flags"
     },
     {
-     "type": "struct",
-     "name": "orientation",
-     "definition": "quantized_orientation_struct"
+     "type": "pad",
+     "name": null,
+     "definition": 2
     },
     {
      "type": "terminator",
      "name": null
     }
    ]
-  },
-  "quantized_orientation_struct": {
-   "guid": "00000000000000000000000000000000",
-   "size": 24,
-   "fields": [
-    {
-     "type": "short_integer",
-     "name": "rotation x"
-    },
-    {
-     "type": "short_integer",
-     "name": "rotation y"
-    },
-    {
-     "type": "short_integer",
-     "name": "rotation z"
-    },
-    {
-     "type": "short_integer",
-     "name": "rotation w"
-    },
-    {
-     "type": "real_point_3d",
-     "name": "default translation"
-    },
-    {
-     "type": "real",
-     "name": "default scale"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ],
-   "tag": "qoSS"
   },
   "animation_graph_contents_struct": {
    "guid": "00000000000000000000000000000000",
@@ -1277,22 +2297,26 @@
    ]
   }
  },
- "arrays": {},
- "enums_flags": {
-  "inheritance_flags_flags": {
-   "options": [
-    "inherit root trans scale only",
-    "inherit for use on player"
-   ]
+ "arrays": {
+  "node_trans_flag_data_array": {
+   "count": 3,
+   "struct": "node_trans_flag_data_struct"
   },
-  "private_flags_flags": {
+  "node_rotation_flag_data_array": {
+   "count": 3,
+   "struct": "node_rotation_flag_data_struct"
+  },
+  "node_scale_flag_data_array": {
+   "count": 3,
+   "struct": "node_scale_flag_data_struct"
+  }
+ },
+ "enums_flags": {
+  "node_joint_flags_flags": {
    "options": [
-    "prepared for cache",
-    "unused",
-    "imported with codec compressors",
-    "unused smelly flag",
-    "written to cache",
-    "animation data reordered"
+    "ball-socket",
+    "hinge",
+    "no movement"
    ]
   },
   "model_flags_flags": {
@@ -1303,13 +2327,6 @@
     "left hand",
     "right hand",
     "left arm member"
-   ]
-  },
-  "node_joint_flags_flags": {
-   "options": [
-    "ball-socket",
-    "hinge",
-    "no movement"
    ]
   },
   "flags_flags": {
@@ -1337,6 +2354,17 @@
     "dx,dy,dz,dyaw"
    ]
   },
+  "playback_flags_flags": {
+   "options": [
+    "disable interpolation_in",
+    "disable interpolation_out",
+    "disable mode ik",
+    "disable weapon ik",
+    "disable weapon aim/1st person",
+    "disable look screen",
+    "disable transition adjustment"
+   ]
+  },
   "internal_flags_flags": {
    "options": [
     "<unused0>",
@@ -1354,17 +2382,6 @@
     "do not monitor changes",
     "verify sound events",
     "do not inherit for player graphs"
-   ]
-  },
-  "playback_flags_flags": {
-   "options": [
-    "disable interpolation_in",
-    "disable interpolation_out",
-    "disable mode ik",
-    "disable weapon ik",
-    "disable weapon aim/1st person",
-    "disable look screen",
-    "disable transition adjustment"
    ]
   },
   "desired_compression_enum": {
@@ -1399,6 +2416,22 @@
     "scale"
    ]
   },
+  "animation_graph_flags_flags": {
+   "options": [
+    "prepared for cache",
+    "unused",
+    "imported with codec compressors",
+    "unused smelly flag",
+    "written to cache",
+    "animation data reordered"
+   ]
+  },
+  "inheritance_flags_flags": {
+   "options": [
+    "inherit root trans scale only",
+    "inherit for use on player"
+   ]
+  },
   "frame_event_link_enum": {
    "options": [
     "NO KEYFRAME",
@@ -1416,6 +2449,36 @@
   }
  },
  "datas": {
+  "animation_data_data": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "animation_data_data_2": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "animation_data_data_3": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "animation_data_data_4": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
+  "animation_data_data_5": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
+  },
   "unnamed_data": {
    "alignment": 4,
    "flags": 0,
@@ -1430,5 +2493,28 @@
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "animation_graph_node_block": {
+   "0": "animation_graph_node_block__v0",
+   "1": "animation_graph_node_block"
+  },
+  "animation_effect_event_block": {
+   "0": "animation_effect_event_block__v0",
+   "1": "animation_effect_event_block"
+  },
+  "animation_pool_block": {
+   "0": "animation_pool_block__v0",
+   "1": "animation_pool_block__v1",
+   "2": "animation_pool_block__v2",
+   "3": "animation_pool_block__v3",
+   "4": "animation_pool_block__v4",
+   "5": "animation_pool_block"
+  },
+  "animation_graph_resources_struct": {
+   "0": "animation_graph_resources_struct__v0",
+   "1": "animation_graph_resources_struct__v1",
+   "2": "animation_graph_resources_struct"
+  }
+ }
 }

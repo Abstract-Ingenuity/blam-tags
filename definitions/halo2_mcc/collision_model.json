@@ -5,16 +5,6 @@
  "flags": 0,
  "block": "collision_model_block",
  "blocks": {
-  "tag_import_file_block_2": {
-   "max_count": 1024,
-   "max_count_string": "1024",
-   "struct": "tag_import_file_block"
-  },
-  "global_tag_import_info_block_2": {
-   "max_count": 1,
-   "max_count_string": "1",
-   "struct": "global_tag_import_info_block"
-  },
   "error_report_vertices_block_2": {
    "max_count": 1048576,
    "max_count_string": "1048576",
@@ -60,12 +50,52 @@
    "max_count_string": "32",
    "struct": "collision_model_material_block"
   },
-  "bsp3d_nodes_block_2": {
+  "large_bsp3d_nodes_block_2": {
    "max_count": 131072,
    "max_count_string": "131072",
-   "struct": "bsp3d_nodes_block"
+   "struct": "large_bsp3d_nodes_block"
   },
   "planes_block_2": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "planes_block"
+  },
+  "large_leaves_block_2": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "large_leaves_block"
+  },
+  "large_bsp2d_references_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_bsp2d_references_block"
+  },
+  "large_bsp2d_nodes_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_bsp2d_nodes_block"
+  },
+  "large_surfaces_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_surfaces_block"
+  },
+  "large_edges_block_2": {
+   "max_count": 262144,
+   "max_count_string": "262144",
+   "struct": "large_edges_block"
+  },
+  "large_vertices_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "large_vertices_block"
+  },
+  "small_bsp3d_nodes_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "small_bsp3d_nodes_block"
+  },
+  "planes_block_3": {
    "max_count": 65536,
    "max_count_string": "65536",
    "struct": "planes_block"
@@ -100,12 +130,62 @@
    "max_count_string": "131072",
    "struct": "vertices_block"
   },
+  "bsp3d_nodes_block_2": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "bsp3d_nodes_block"
+  },
+  "planes_block_4": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "planes_block"
+  },
+  "leaves_block_3": {
+   "max_count": 65536,
+   "max_count_string": "65536",
+   "struct": "leaves_block"
+  },
+  "bsp2d_references_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "bsp2d_references_block"
+  },
+  "bsp2d_nodes_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "bsp2d_nodes_block"
+  },
+  "surfaces_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "surfaces_block"
+  },
+  "edges_block_3": {
+   "max_count": 262144,
+   "max_count_string": "262144",
+   "struct": "edges_block"
+  },
+  "vertices_block_3": {
+   "max_count": 131072,
+   "max_count_string": "131072",
+   "struct": "vertices_block"
+  },
   "collision_model_bsp_block_2": {
    "max_count": 64,
    "max_count_string": "64",
    "struct": "collision_model_bsp_block"
   },
   "collision_bsp_physics_block_2": {
+   "max_count": 1024,
+   "max_count_string": "1024",
+   "struct": "collision_bsp_physics_block"
+  },
+  "collision_model_bsp_block_3": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "collision_model_bsp_block"
+  },
+  "collision_bsp_physics_block_3": {
    "max_count": 1024,
    "max_count_string": "1024",
    "struct": "collision_bsp_physics_block"
@@ -130,6 +210,41 @@
    "max_count_string": "255",
    "struct": "collision_model_node_block"
   },
+  "tag_import_file_block_2": {
+   "max_count": 1024,
+   "max_count_string": "1024",
+   "struct": "tag_import_file_block"
+  },
+  "global_tag_import_info_block_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "global_tag_import_info_block"
+  },
+  "global_error_report_categories_block_3": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "global_error_report_categories_block"
+  },
+  "collision_model_material_block_3": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "collision_model_material_block"
+  },
+  "collision_model_region_block_3": {
+   "max_count": 16,
+   "max_count_string": "16",
+   "struct": "collision_model_region_block"
+  },
+  "collision_model_pathfinding_sphere_block_3": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "collision_model_pathfinding_sphere_block"
+  },
+  "collision_model_node_block_3": {
+   "max_count": 255,
+   "max_count_string": "255",
+   "struct": "collision_model_node_block"
+  },
   "collision_model_block": {
    "max_count": 1,
    "max_count_string": "1",
@@ -137,29 +252,24 @@
   }
  },
  "structs": {
-  "collision_model_block_struct": {
+  "collision_model_block_struct__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 76,
+   "size": 664,
    "fields": [
     {
-     "type": "block",
-     "name": "import info",
-     "definition": "global_tag_import_info_block_2"
+     "type": "struct",
+     "name": "OLD damage resistance",
+     "definition": "old_global_damage_resistance_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
     },
     {
      "type": "block",
      "name": "errors",
      "definition": "global_error_report_categories_block_2"
-    },
-    {
-     "type": "long_flags",
-     "name": "flags",
-     "definition": "flags_flags_2"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
     },
     {
      "type": "block",
@@ -187,101 +297,21 @@
     }
    ]
   },
-  "global_tag_import_info_block": {
+  "old_global_damage_resistance_struct": {
    "guid": "00000000000000000000000000000000",
-   "size": 596,
+   "size": 600,
    "fields": [
     {
-     "type": "long_integer",
-     "name": "build"
-    },
-    {
-     "type": "long_string",
-     "name": "version"
-    },
-    {
-     "type": "string",
-     "name": "import date"
-    },
-    {
-     "type": "string",
-     "name": "culprit"
-    },
-    {
      "type": "pad",
      "name": null,
-     "definition": 96
-    },
-    {
-     "type": "string",
-     "name": "import time"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "block",
-     "name": "files",
-     "definition": "tag_import_file_block_2"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 128
+     "definition": 600
     },
     {
      "type": "terminator",
      "name": null
     }
-   ]
-  },
-  "tag_import_file_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 540,
-   "fields": [
-    {
-     "type": "long_string",
-     "name": "path"
-    },
-    {
-     "type": "string",
-     "name": "modification date"
-    },
-    {
-     "type": "skip",
-     "name": null,
-     "definition": 8
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 88
-    },
-    {
-     "type": "long_integer",
-     "name": "checksum"
-    },
-    {
-     "type": "long_integer",
-     "name": "size"
-    },
-    {
-     "type": "data",
-     "name": "zipped data",
-     "definition": "zipped_data_data"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 128
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
+   ],
+   "tag": "DREZ"
   },
   "global_error_report_categories_block": {
    "guid": "00000000000000000000000000000000",
@@ -855,13 +885,18 @@
     }
    ]
   },
-  "collision_model_permutation_block": {
+  "collision_model_permutation_block__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 28,
+   "size": 96,
    "fields": [
     {
      "type": "string_id",
      "name": "name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 24
     },
     {
      "type": "block",
@@ -872,6 +907,11 @@
      "type": "block",
      "name": "bsp_physics",
      "definition": "collision_bsp_physics_block_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 44
     },
     {
      "type": "terminator",
@@ -895,7 +935,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "struct",
@@ -908,19 +948,252 @@
     }
    ]
   },
-  "global_collision_bsp_struct": {
+  "global_collision_bsp_struct__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 96,
    "fields": [
     {
      "type": "block",
      "name": "bsp3d nodes",
-     "definition": "bsp3d_nodes_block_2"
+     "definition": "large_bsp3d_nodes_block_2"
     },
     {
      "type": "block",
      "name": "planes",
      "definition": "planes_block_2"
+    },
+    {
+     "type": "block",
+     "name": "leaves",
+     "definition": "large_leaves_block_2"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d references",
+     "definition": "large_bsp2d_references_block_2"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d nodes",
+     "definition": "large_bsp2d_nodes_block_2"
+    },
+    {
+     "type": "block",
+     "name": "surfaces",
+     "definition": "large_surfaces_block_2"
+    },
+    {
+     "type": "block",
+     "name": "edges",
+     "definition": "large_edges_block_2"
+    },
+    {
+     "type": "block",
+     "name": "vertices",
+     "definition": "large_vertices_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "cbsp"
+  },
+  "large_bsp3d_nodes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "plane"
+    },
+    {
+     "type": "long_integer",
+     "name": "back child"
+    },
+    {
+     "type": "long_integer",
+     "name": "front child"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "planes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "real_plane_3d",
+     "name": "plane"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_leaves_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "bsp2d reference count"
+    },
+    {
+     "type": "long_integer",
+     "name": "first bsp2d reference"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_bsp2d_references_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "plane"
+    },
+    {
+     "type": "long_integer",
+     "name": "bsp2d node"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_bsp2d_nodes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 20,
+   "fields": [
+    {
+     "type": "real_plane_2d",
+     "name": "plane"
+    },
+    {
+     "type": "long_integer",
+     "name": "left child"
+    },
+    {
+     "type": "long_integer",
+     "name": "right child"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_surfaces_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 12,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "plane"
+    },
+    {
+     "type": "long_integer",
+     "name": "first edge"
+    },
+    {
+     "type": "byte_flags",
+     "name": "flags",
+     "definition": "flags_flags_3"
+    },
+    {
+     "type": "char_integer",
+     "name": "breakable surface"
+    },
+    {
+     "type": "short_integer",
+     "name": "material"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_edges_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "start vertex"
+    },
+    {
+     "type": "long_integer",
+     "name": "end vertex"
+    },
+    {
+     "type": "long_integer",
+     "name": "forward edge"
+    },
+    {
+     "type": "long_integer",
+     "name": "reverse edge"
+    },
+    {
+     "type": "long_integer",
+     "name": "left surface"
+    },
+    {
+     "type": "long_integer",
+     "name": "right surface"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "large_vertices_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "real_point_3d",
+     "name": "point"
+    },
+    {
+     "type": "long_integer",
+     "name": "first edge"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_collision_bsp_struct__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 96,
+   "fields": [
+    {
+     "type": "block",
+     "name": "bsp3d nodes",
+     "definition": "small_bsp3d_nodes_block_2"
+    },
+    {
+     "type": "block",
+     "name": "planes",
+     "definition": "planes_block_3"
     },
     {
      "type": "block",
@@ -959,28 +1232,26 @@
    ],
    "tag": "cbsp"
   },
-  "bsp3d_nodes_block": {
+  "small_bsp3d_nodes_block": {
    "guid": "00000000000000000000000000000000",
    "size": 8,
    "fields": [
     {
-     "type": "skip",
-     "name": null,
-     "definition": 8
+     "type": "short_integer",
+     "name": "plane"
     },
     {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "planes_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 16,
-   "fields": [
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
     {
-     "type": "real_plane_3d",
-     "name": "plane"
+     "type": "short_integer",
+     "name": "back child"
+    },
+    {
+     "type": "short_integer",
+     "name": "front child"
     },
     {
      "type": "terminator",
@@ -995,7 +1266,7 @@
     {
      "type": "byte_flags",
      "name": "flags",
-     "definition": "flags_flags_3"
+     "definition": "flags_flags_2"
     },
     {
      "type": "char_integer",
@@ -1066,7 +1337,7 @@
     {
      "type": "byte_flags",
      "name": "flags",
-     "definition": "flags_flags_4"
+     "definition": "flags_flags_3"
     },
     {
      "type": "char_integer",
@@ -1075,6 +1346,45 @@
     {
      "type": "short_integer",
      "name": "material"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "edges_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "start vertex"
+    },
+    {
+     "type": "short_integer",
+     "name": "end vertex"
+    },
+    {
+     "type": "short_integer",
+     "name": "forward edge"
+    },
+    {
+     "type": "short_integer",
+     "name": "reverse edge"
+    },
+    {
+     "type": "short_integer",
+     "name": "left surface"
+    },
+    {
+     "type": "short_integer",
+     "name": "right surface"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
     },
     {
      "type": "terminator",
@@ -1139,6 +1449,72 @@
     }
    ]
   },
+  "global_collision_bsp_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 96,
+   "fields": [
+    {
+     "type": "block",
+     "name": "bsp3d nodes",
+     "definition": "bsp3d_nodes_block_2"
+    },
+    {
+     "type": "block",
+     "name": "planes",
+     "definition": "planes_block_4"
+    },
+    {
+     "type": "block",
+     "name": "leaves",
+     "definition": "leaves_block_3"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d references",
+     "definition": "bsp2d_references_block_3"
+    },
+    {
+     "type": "block",
+     "name": "bsp2d nodes",
+     "definition": "bsp2d_nodes_block_3"
+    },
+    {
+     "type": "block",
+     "name": "surfaces",
+     "definition": "surfaces_block_3"
+    },
+    {
+     "type": "block",
+     "name": "edges",
+     "definition": "edges_block_3"
+    },
+    {
+     "type": "block",
+     "name": "vertices",
+     "definition": "vertices_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "cbsp"
+  },
+  "bsp3d_nodes_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "collision_bsp_physics_block": {
    "guid": "00000000000000000000000000000000",
    "size": 128,
@@ -1158,7 +1534,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -1168,7 +1544,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -1199,7 +1575,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -1209,7 +1585,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -1230,7 +1606,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "skip",
@@ -1240,7 +1616,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 4
+     "definition": 0
     },
     {
      "type": "pointer",
@@ -1266,6 +1642,30 @@
     }
    ]
   },
+  "collision_model_permutation_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 28,
+   "fields": [
+    {
+     "type": "string_id",
+     "name": "name"
+    },
+    {
+     "type": "block",
+     "name": "bsps",
+     "definition": "collision_model_bsp_block_3"
+    },
+    {
+     "type": "block",
+     "name": "bsp_physics",
+     "definition": "collision_bsp_physics_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "collision_model_pathfinding_sphere_block": {
    "guid": "00000000000000000000000000000000",
    "size": 20,
@@ -1277,12 +1677,12 @@
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_5"
+     "definition": "flags_flags_4"
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "real_point_3d",
@@ -1291,6 +1691,42 @@
     {
      "type": "real",
      "name": "radius"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "collision_model_node_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 36,
+   "fields": [
+    {
+     "type": "old_string_id",
+     "name": "name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "parent node"
+    },
+    {
+     "type": "short_integer",
+     "name": "next sibling node"
+    },
+    {
+     "type": "short_integer",
+     "name": "first child node"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 24
     },
     {
      "type": "terminator",
@@ -1322,6 +1758,152 @@
     {
      "type": "short_integer",
      "name": "first child node"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "collision_model_block_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 76,
+   "fields": [
+    {
+     "type": "block",
+     "name": "import info",
+     "definition": "global_tag_import_info_block_2"
+    },
+    {
+     "type": "block",
+     "name": "errors",
+     "definition": "global_error_report_categories_block_3"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 124
+    },
+    {
+     "type": "block",
+     "name": "materials",
+     "definition": "collision_model_material_block_3"
+    },
+    {
+     "type": "block",
+     "name": "regions",
+     "definition": "collision_model_region_block_3"
+    },
+    {
+     "type": "block",
+     "name": "pathfinding spheres",
+     "definition": "collision_model_pathfinding_sphere_block_3"
+    },
+    {
+     "type": "block",
+     "name": "nodes",
+     "definition": "collision_model_node_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "global_tag_import_info_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 596,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "build"
+    },
+    {
+     "type": "long_string",
+     "name": "version"
+    },
+    {
+     "type": "string",
+     "name": "import date"
+    },
+    {
+     "type": "string",
+     "name": "culprit"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 96
+    },
+    {
+     "type": "string",
+     "name": "import time"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "block",
+     "name": "files",
+     "definition": "tag_import_file_block_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 128
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "tag_import_file_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 540,
+   "fields": [
+    {
+     "type": "long_string",
+     "name": "path"
+    },
+    {
+     "type": "string",
+     "name": "modification date"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 88
+    },
+    {
+     "type": "long_integer",
+     "name": "checksum"
+    },
+    {
+     "type": "long_integer",
+     "name": "size"
+    },
+    {
+     "type": "data",
+     "name": "zipped data",
+     "definition": "zipped_data_data"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 128
     },
     {
      "type": "terminator",
@@ -1412,15 +1994,10 @@
   },
   "flags_flags_2": {
    "options": [
-    "contains open edges"
-   ]
-  },
-  "flags_flags_3": {
-   "options": [
     "contains double-sided surfaces"
    ]
   },
-  "flags_flags_4": {
+  "flags_flags_3": {
    "options": [
     "two sided",
     "invisible",
@@ -1430,21 +2007,20 @@
     "conveyor"
    ]
   },
-  "flags_flags_5": {
+  "flags_flags_4": {
    "options": [
     "remains when open",
     "vehicle only",
     "with sectors"
    ]
+  },
+  "flags_flags_5": {
+   "options": [
+    "contains open edges"
+   ]
   }
  },
  "datas": {
-  "zipped_data_data": {
-   "alignment": 4,
-   "flags": 0,
-   "max_size": 0,
-   "max_size_string": "0"
-  },
   "text_data": {
    "alignment": 4,
    "flags": 0,
@@ -1462,8 +2038,37 @@
    "flags": 0,
    "max_size": 0,
    "max_size_string": "0"
+  },
+  "zipped_data_data": {
+   "alignment": 4,
+   "flags": 0,
+   "max_size": 0,
+   "max_size_string": "0"
   }
  },
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "edges_block": {
+   "0": "edges_block__v0",
+   "1": "edges_block"
+  },
+  "global_collision_bsp_struct": {
+   "0": "global_collision_bsp_struct__v0",
+   "1": "global_collision_bsp_struct__v1",
+   "2": "global_collision_bsp_struct"
+  },
+  "collision_model_permutation_block": {
+   "0": "collision_model_permutation_block__v0",
+   "1": "collision_model_permutation_block"
+  },
+  "collision_model_node_block": {
+   "0": "collision_model_node_block__v0",
+   "1": "collision_model_node_block"
+  },
+  "collision_model_block_struct": {
+   "0": "collision_model_block_struct__v0",
+   "1": "collision_model_block_struct"
+  }
+ }
 }

@@ -15,6 +15,11 @@
    "max_count_string": "32",
    "struct": "effect_part_block"
   },
+  "real_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "real_block"
+  },
   "byte_block_2": {
    "max_count": 1024,
    "max_count_string": "1024",
@@ -31,6 +36,11 @@
    "struct": "effect_accelerations_block"
   },
   "particle_system_emitter_definition_block_2": {
+   "max_count": 8,
+   "max_count_string": "8",
+   "struct": "particle_system_emitter_definition_block"
+  },
+  "particle_system_emitter_definition_block_3": {
    "max_count": 8,
    "max_count_string": "8",
    "struct": "particle_system_emitter_definition_block"
@@ -88,7 +98,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "tag_reference",
@@ -160,7 +170,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "block",
@@ -320,6 +330,77 @@
    ],
    "tag": "CLFN"
   },
+  "mapping_function__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "HIDE_GROUP_ID"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function Type"
+    },
+    {
+     "type": "byte_flags",
+     "name": "Flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 1"
+    },
+    {
+     "type": "char_integer",
+     "name": "Function 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 0"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 1"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 2"
+    },
+    {
+     "type": "rgb_color",
+     "name": "Color 3"
+    },
+    {
+     "type": "block",
+     "name": "Values",
+     "definition": "real_block_2"
+    },
+    {
+     "type": "custom",
+     "name": "END_HIDE_GROUP_ID"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "MAPP"
+  },
+  "real_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "Value"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "mapping_function": {
    "guid": "00000000000000000000000000000000",
    "size": 12,
@@ -419,9 +500,9 @@
     }
    ]
   },
-  "particle_system_definition_block_new": {
+  "particle_system_definition_block_new__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 68,
+   "size": 44,
    "fields": [
     {
      "type": "tag_reference",
@@ -458,33 +539,7 @@
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_4"
-    },
-    {
-     "type": "real",
-     "name": "LOD in distance"
-    },
-    {
-     "type": "real",
-     "name": "LOD feather in delta"
-    },
-    {
-     "type": "skip",
-     "name": null,
-     "definition": 4
-    },
-    {
-     "type": "real",
-     "name": "LOD out distance"
-    },
-    {
-     "type": "real",
-     "name": "LOD feather out delta"
-    },
-    {
-     "type": "skip",
-     "name": null,
-     "definition": 4
+     "definition": "flags_flags_5"
     },
     {
      "type": "block",
@@ -653,6 +708,84 @@
     }
    ],
    "tag": "PRPC"
+  },
+  "particle_system_definition_block_new": {
+   "guid": "00000000000000000000000000000000",
+   "size": 68,
+   "fields": [
+    {
+     "type": "tag_reference",
+     "name": "particle"
+    },
+    {
+     "type": "long_integer",
+     "name": "location"
+    },
+    {
+     "type": "short_enum",
+     "name": "coordinate system",
+     "definition": "coordinate_system_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "environment",
+     "definition": "create_in_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "disposition",
+     "definition": "create_in_enum_2"
+    },
+    {
+     "type": "short_enum",
+     "name": "camera mode",
+     "definition": "camera_mode_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "sort bias"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "real",
+     "name": "LOD in distance"
+    },
+    {
+     "type": "real",
+     "name": "LOD feather in delta"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "real",
+     "name": "LOD out distance"
+    },
+    {
+     "type": "real",
+     "name": "LOD feather out delta"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "block",
+     "name": "emitters",
+     "definition": "particle_system_emitter_definition_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
   }
  },
  "arrays": {},
@@ -701,6 +834,18 @@
     "type-specific scale"
    ]
   },
+  "flags_flags_4": {
+   "options": [
+    "Range",
+    "Unused 0",
+    "Unused 1",
+    "Unused 2",
+    "Color Bit 0",
+    "Color Bit 1",
+    "Color Bit 2",
+    "Color Bit 3"
+   ]
+  },
   "coordinate_system_enum": {
    "options": [
     "world",
@@ -716,7 +861,7 @@
     "both first and third"
    ]
   },
-  "flags_flags_4": {
+  "flags_flags_5": {
    "options": [
     "glow",
     "cinematics",
@@ -775,5 +920,15 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "mapping_function": {
+   "0": "mapping_function__v0",
+   "1": "mapping_function"
+  },
+  "particle_system_definition_block_new": {
+   "0": "particle_system_definition_block_new__v0",
+   "1": "particle_system_definition_block_new"
+  }
+ }
 }

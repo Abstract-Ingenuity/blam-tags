@@ -15,7 +15,27 @@
    "max_count_string": "100",
    "struct": "squad_groups_block"
   },
+  "move_positions_block_2": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "move_positions_block"
+  },
   "actor_starting_locations_block_2": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "actor_starting_locations_block"
+  },
+  "g_null_block_2": {
+   "max_count": 0,
+   "max_count_string": "0",
+   "struct": "g_null_block"
+  },
+  "actor_starting_locations_block_3": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "actor_starting_locations_block"
+  },
+  "actor_starting_locations_block_4": {
    "max_count": 32,
    "max_count_string": "32",
    "struct": "actor_starting_locations_block"
@@ -30,12 +50,112 @@
    "max_count_string": "512",
    "struct": "firing_positions_block"
   },
+  "scenario_players_block_2": {
+   "max_count": 256,
+   "max_count_string": "256",
+   "struct": "scenario_players_block"
+  },
   "flight_reference_block_2": {
    "max_count": 10,
    "max_count_string": "10",
    "struct": "flight_reference_block"
   },
   "areas_block_2": {
+   "max_count": 64,
+   "max_count_string": "64",
+   "struct": "areas_block"
+  },
+  "area_set_block_2": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "area_set_block"
+  },
+  "zone_set_block_2": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "zone_set_block"
+  },
+  "order_completion_condition_2": {
+   "max_count": 5,
+   "max_count_string": "5",
+   "struct": "order_completion_condition"
+  },
+  "order_completion_block_2": {
+   "max_count": 5,
+   "max_count_string": "5",
+   "struct": "order_completion_block"
+  },
+  "trigger_references_2": {
+   "max_count": 10,
+   "max_count_string": "10",
+   "struct": "trigger_references"
+  },
+  "order_ending_block_2": {
+   "max_count": 12,
+   "max_count_string": "12",
+   "struct": "order_ending_block"
+  },
+  "zone_set_block_3": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "zone_set_block"
+  },
+  "special_movement_block_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "special_movement_block"
+  },
+  "order_ending_block_3": {
+   "max_count": 12,
+   "max_count_string": "12",
+   "struct": "order_ending_block"
+  },
+  "zone_set_block_4": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "zone_set_block"
+  },
+  "secondary_zone_set_block_2": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "secondary_zone_set_block"
+  },
+  "trigger_references_3": {
+   "max_count": 10,
+   "max_count_string": "10",
+   "struct": "trigger_references"
+  },
+  "secondary_set_trigger_block_2": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "secondary_set_trigger_block"
+  },
+  "special_movement_block_3": {
+   "max_count": 1,
+   "max_count_string": "1",
+   "struct": "special_movement_block"
+  },
+  "order_ending_block_4": {
+   "max_count": 12,
+   "max_count_string": "12",
+   "struct": "order_ending_block"
+  },
+  "orders_block_2": {
+   "max_count": 300,
+   "max_count_string": "300",
+   "struct": "orders_block"
+  },
+  "actor_starting_locations_block_5": {
+   "max_count": 32,
+   "max_count_string": "32",
+   "struct": "actor_starting_locations_block"
+  },
+  "firing_positions_block_3": {
+   "max_count": 512,
+   "max_count_string": "512",
+   "struct": "firing_positions_block"
+  },
+  "areas_block_3": {
    "max_count": 64,
    "max_count_string": "64",
    "struct": "areas_block"
@@ -75,7 +195,7 @@
    "max_count_string": "32",
    "struct": "ai_conversation_line_block"
   },
-  "g_null_block_2": {
+  "g_null_block_3": {
    "max_count": 0,
    "max_count_string": "0",
    "struct": "g_null_block"
@@ -90,6 +210,11 @@
    "max_count_string": "20",
    "struct": "cs_point_block"
   },
+  "cs_point_block_3": {
+   "max_count": 20,
+   "max_count_string": "20",
+   "struct": "cs_point_block"
+  },
   "cs_point_set_block_2": {
    "max_count": 200,
    "max_count_string": "200",
@@ -100,47 +225,12 @@
    "max_count_string": "1",
    "struct": "cs_script_data_block"
   },
-  "zone_set_block_2": {
-   "max_count": 32,
-   "max_count_string": "32",
-   "struct": "zone_set_block"
-  },
-  "secondary_zone_set_block_2": {
-   "max_count": 32,
-   "max_count_string": "32",
-   "struct": "secondary_zone_set_block"
-  },
-  "trigger_references_2": {
-   "max_count": 10,
-   "max_count_string": "10",
-   "struct": "trigger_references"
-  },
-  "secondary_set_trigger_block_2": {
-   "max_count": 1,
-   "max_count_string": "1",
-   "struct": "secondary_set_trigger_block"
-  },
-  "special_movement_block_2": {
-   "max_count": 1,
-   "max_count_string": "1",
-   "struct": "special_movement_block"
-  },
-  "trigger_references_3": {
-   "max_count": 10,
-   "max_count_string": "10",
-   "struct": "trigger_references"
-  },
-  "order_ending_block_2": {
-   "max_count": 12,
-   "max_count_string": "12",
-   "struct": "order_ending_block"
-  },
-  "orders_block_2": {
+  "orders_block_3": {
    "max_count": 300,
    "max_count_string": "300",
    "struct": "orders_block"
   },
-  "order_completion_condition_2": {
+  "order_completion_condition_3": {
    "max_count": 5,
    "max_count_string": "5",
    "struct": "order_completion_condition"
@@ -279,7 +369,7 @@
     {
      "type": "block",
      "name": "Orders",
-     "definition": "orders_block_2"
+     "definition": "orders_block_3"
     },
     {
      "type": "block",
@@ -352,7 +442,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 48
     },
     {
      "type": "short_integer",
@@ -365,7 +455,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 48
     },
     {
      "type": "terminator",
@@ -373,17 +463,18 @@
     }
    ]
   },
-  "squads_block": {
+  "squads_block__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 120,
+   "size": 232,
    "fields": [
-    {
-     "type": "custom",
-     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
-    },
     {
      "type": "string",
      "name": "name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
     },
     {
      "type": "long_flags",
@@ -391,17 +482,46 @@
      "definition": "flags_flags"
     },
     {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
      "type": "short_enum",
      "name": "team",
      "definition": "team_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 20
     },
     {
      "type": "short_integer",
      "name": "parent"
     },
     {
+     "type": "short_integer",
+     "name": "maneuver to squad"
+    },
+    {
      "type": "real",
      "name": "squad delay time"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 40
     },
     {
      "type": "short_integer",
@@ -419,16 +539,7 @@
     {
      "type": "pad",
      "name": null,
-     "definition": 2
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "short_integer",
-     "name": "vehicle type"
+     "definition": 6
     },
     {
      "type": "short_integer",
@@ -439,17 +550,22 @@
      "name": "initial zone"
     },
     {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
      "type": "pad",
      "name": null,
      "definition": 2
     },
     {
-     "type": "short_integer",
-     "name": "initial weapon"
+     "type": "tag_reference",
+     "name": "initial weapon (DO NOT USE)"
     },
     {
-     "type": "short_integer",
-     "name": "initial secondary weapon"
+     "type": "pad",
+     "name": null,
+     "definition": 8
     },
     {
      "type": "short_enum",
@@ -461,13 +577,14 @@
      "name": "initial order"
     },
     {
-     "type": "string_id",
-     "name": "vehicle variant"
+     "type": "pad",
+     "name": null,
+     "definition": 24
     },
     {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
+     "type": "block",
+     "name": "move positions",
+     "definition": "move_positions_block_2"
     },
     {
      "type": "block",
@@ -475,13 +592,506 @@
      "definition": "actor_starting_locations_block_2"
     },
     {
-     "type": "string",
-     "name": "Placement script"
+     "type": "block",
+     "name": null,
+     "definition": "g_null_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "move_positions_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 80,
+   "fields": [
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "angle",
+     "name": "facing"
+    },
+    {
+     "type": "real",
+     "name": "weight"
+    },
+    {
+     "type": "real_bounds",
+     "name": "time"
+    },
+    {
+     "type": "short_integer",
+     "name": "animation"
+    },
+    {
+     "type": "char_integer",
+     "name": "sequence ID"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 44
+    },
+    {
+     "type": "long_integer",
+     "name": "surface index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "actor_starting_locations_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 72,
+   "fields": [
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "angle",
+     "name": "facing"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 6
+    },
+    {
+     "type": "short_integer",
+     "name": "character type"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "tag_reference",
+     "name": "weapon reference (DO NOT USE)"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "short_enum",
+     "name": "grenade type",
+     "definition": "grenade_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "actor_starting_locations_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 52,
+   "fields": [
+    {
+     "type": "old_string_id",
+     "name": "name"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "angle",
+     "name": "facing"
     },
     {
      "type": "skip",
      "name": null,
      "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "short_integer",
+     "name": "character type"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
+     "type": "short_integer",
+     "name": "vehicle type"
+    },
+    {
+     "type": "short_enum",
+     "name": "seat type",
+     "definition": "seat_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "short_enum",
+     "name": "grenade type",
+     "definition": "grenade_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "actor_starting_locations_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 48,
+   "fields": [
+    {
+     "type": "old_string_id",
+     "name": "name"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "angle",
+     "name": "facing"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "character type"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
+     "type": "short_integer",
+     "name": "vehicle type"
+    },
+    {
+     "type": "short_enum",
+     "name": "seat type",
+     "definition": "seat_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "short_enum",
+     "name": "grenade type",
+     "definition": "grenade_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "actor_starting_locations_block__v3": {
+   "guid": "00000000000000000000000000000000",
+   "size": 56,
+   "fields": [
+    {
+     "type": "old_string_id",
+     "name": "name"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "short_integer",
+     "name": "reference frame"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "angle",
+     "name": "facing"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "character type"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
+     "type": "short_integer",
+     "name": "vehicle type"
+    },
+    {
+     "type": "short_enum",
+     "name": "seat type",
+     "definition": "seat_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "short_enum",
+     "name": "grenade type",
+     "definition": "grenade_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "swarm count"
+    },
+    {
+     "type": "string_id",
+     "name": "actor variant name"
+    },
+    {
+     "type": "string_id",
+     "name": "vehicle variant name"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "actor_starting_locations_block__v4": {
+   "guid": "00000000000000000000000000000000",
+   "size": 68,
+   "fields": [
+    {
+     "type": "old_string_id",
+     "name": "name"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "short_integer",
+     "name": "reference frame"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "real_euler_angles_2d",
+     "name": "facing (yaw, pitch)"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "character type"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
+     "type": "short_integer",
+     "name": "vehicle type"
+    },
+    {
+     "type": "short_enum",
+     "name": "seat type",
+     "definition": "seat_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "short_enum",
+     "name": "grenade type",
+     "definition": "grenade_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "swarm count"
+    },
+    {
+     "type": "string_id",
+     "name": "actor variant name"
+    },
+    {
+     "type": "string_id",
+     "name": "vehicle variant name"
+    },
+    {
+     "type": "real",
+     "name": "initial movement distance"
+    },
+    {
+     "type": "short_integer",
+     "name": "emitter vehicle"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "actor_starting_locations_block__v5": {
+   "guid": "00000000000000000000000000000000",
+   "size": 68,
+   "fields": [
+    {
+     "type": "old_string_id",
+     "name": "name"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "short_integer",
+     "name": "reference frame"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "real_euler_angles_2d",
+     "name": "facing (yaw, pitch)"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_2"
+    },
+    {
+     "type": "short_integer",
+     "name": "character type"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
+     "type": "short_integer",
+     "name": "vehicle type"
+    },
+    {
+     "type": "short_enum",
+     "name": "seat type",
+     "definition": "seat_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "short_enum",
+     "name": "grenade type",
+     "definition": "grenade_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "swarm count"
+    },
+    {
+     "type": "string_id",
+     "name": "actor variant name"
+    },
+    {
+     "type": "string_id",
+     "name": "vehicle variant name"
+    },
+    {
+     "type": "real",
+     "name": "initial movement distance"
+    },
+    {
+     "type": "short_integer",
+     "name": "emitter vehicle"
     },
     {
      "type": "pad",
@@ -600,9 +1210,257 @@
     }
    ]
   },
-  "zone_block": {
+  "g_null_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 64,
+   "size": 0,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "-1"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "squads_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 136,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "team",
+     "definition": "team_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "parent"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "real",
+     "name": "squad delay time"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "short_integer",
+     "name": "normal diff count"
+    },
+    {
+     "type": "short_integer",
+     "name": "insane diff count"
+    },
+    {
+     "type": "short_enum",
+     "name": "major upgrade",
+     "definition": "major_upgrade_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "short_integer",
+     "name": "vehicle type"
+    },
+    {
+     "type": "short_integer",
+     "name": "character type"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial zone"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
+     "type": "short_enum",
+     "name": "grenade type",
+     "definition": "grenade_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial order"
+    },
+    {
+     "type": "string_id",
+     "name": "vehicle variant"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "block",
+     "name": "starting locations",
+     "definition": "actor_starting_locations_block_3"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "squads_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 120,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags"
+    },
+    {
+     "type": "short_enum",
+     "name": "team",
+     "definition": "team_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "parent"
+    },
+    {
+     "type": "real",
+     "name": "squad delay time"
+    },
+    {
+     "type": "short_integer",
+     "name": "normal diff count"
+    },
+    {
+     "type": "short_integer",
+     "name": "insane diff count"
+    },
+    {
+     "type": "short_enum",
+     "name": "major upgrade",
+     "definition": "major_upgrade_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "short_integer",
+     "name": "vehicle type"
+    },
+    {
+     "type": "short_integer",
+     "name": "character type"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial zone"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "initial weapon"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial secondary weapon"
+    },
+    {
+     "type": "short_enum",
+     "name": "grenade type",
+     "definition": "grenade_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "initial order"
+    },
+    {
+     "type": "string_id",
+     "name": "vehicle variant"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "block",
+     "name": "starting locations",
+     "definition": "actor_starting_locations_block_4"
+    },
+    {
+     "type": "string",
+     "name": "Placement script"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "zone_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 228,
    "fields": [
     {
      "type": "string",
@@ -615,7 +1473,7 @@
     },
     {
      "type": "short_integer",
-     "name": "manual bsp"
+     "name": "manual bsp index"
     },
     {
      "type": "pad",
@@ -623,9 +1481,9 @@
      "definition": 2
     },
     {
-     "type": "useless_pad",
+     "type": "pad",
      "name": null,
-     "definition": 0
+     "definition": 40
     },
     {
      "type": "block",
@@ -634,8 +1492,183 @@
     },
     {
      "type": "block",
+     "name": "player starting locations",
+     "definition": "scenario_players_block_2"
+    },
+    {
+     "type": "block",
      "name": "areas",
      "definition": "areas_block_2"
+    },
+    {
+     "type": "block",
+     "name": "orders",
+     "definition": "orders_block_2"
+    },
+    {
+     "type": "block",
+     "name": "starting locations",
+     "definition": "actor_starting_locations_block_5"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 88
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "firing_positions_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 44,
+   "fields": [
+    {
+     "type": "real_point_3d",
+     "name": "placement position"
+    },
+    {
+     "type": "short_integer",
+     "name": "area"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "custom",
+     "name": "CUSTOM_SAPIEN_FIRING_POINT_FIELD"
+    },
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "real_point_3d",
+     "name": "local position"
+    },
+    {
+     "type": "short_integer",
+     "name": "reference frame"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "firing_positions_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position (local)"
+    },
+    {
+     "type": "short_integer",
+     "name": "reference frame"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "area"
+    },
+    {
+     "type": "short_integer",
+     "name": "cluster index"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "custom",
+     "name": "CUSTOM_SAPIEN_FIRING_POINT_FIELD"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "firing_positions_block__v2": {
+   "guid": "00000000000000000000000000000000",
+   "size": 32,
+   "fields": [
+    {
+     "type": "word_flags",
+     "name": "flags",
+     "definition": "flags_flags_4"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position (local)"
+    },
+    {
+     "type": "short_integer",
+     "name": "reference frame"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "area"
+    },
+    {
+     "type": "short_integer",
+     "name": "cluster index"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "custom",
+     "name": "CUSTOM_SAPIEN_FIRING_POINT_FIELD"
     },
     {
      "type": "terminator",
@@ -679,6 +1712,139 @@
     {
      "type": "custom",
      "name": "CUSTOM_SAPIEN_FIRING_POINT_FIELD"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenario_players_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 52,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "CUSTOM_BLOCK_FILTER_FIELD_ID,&g_spawn_point_block_filter"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "angle",
+     "name": "facing"
+    },
+    {
+     "type": "short_enum",
+     "name": "team designator",
+     "definition": "team_designator_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "bsp index"
+    },
+    {
+     "type": "short_enum",
+     "name": "type 0",
+     "definition": "type_0_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "type 1",
+     "definition": "type_0_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "type 2",
+     "definition": "type_0_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "type 3",
+     "definition": "type_0_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "spawn type 0",
+     "definition": "spawn_type_0_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "spawn type 1",
+     "definition": "spawn_type_0_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "spawn type 2",
+     "definition": "spawn_type_0_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "spawn type 3",
+     "definition": "spawn_type_0_enum"
+    },
+    {
+     "type": "string_id",
+     "name": "unused_names0"
+    },
+    {
+     "type": "string_id",
+     "name": "unused_names1"
+    },
+    {
+     "type": "short_enum",
+     "name": "campaign player type",
+     "definition": "campaign_player_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 6
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "areas_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 196,
+   "fields": [
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "long_flags",
+     "name": "area flags",
+     "definition": "area_flags_flags"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 28
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 64
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 48
     },
     {
      "type": "terminator",
@@ -748,6 +1914,659 @@
     {
      "type": "short_integer",
      "name": "poit index"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "orders_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 224,
+   "fields": [
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "short_integer",
+     "name": "Style"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "short_enum",
+     "name": "Force combat status",
+     "definition": "force_combat_status_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "string",
+     "name": "Entry Script"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "Follow squad"
+    },
+    {
+     "type": "real",
+     "name": "follow radius"
+    },
+    {
+     "type": "block",
+     "name": "DEPRECATED",
+     "definition": "area_set_block_2"
+    },
+    {
+     "type": "block",
+     "name": "Area references",
+     "definition": "zone_set_block_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 36
+    },
+    {
+     "type": "block",
+     "name": "DEPRECATED",
+     "definition": "order_completion_block_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 48
+    },
+    {
+     "type": "block",
+     "name": "Order endings",
+     "definition": "order_ending_block_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "area_set_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 52,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "area"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "long_integer",
+     "name": "deprecated"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 44
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "zone_set_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "zone"
+    },
+    {
+     "type": "short_integer",
+     "name": "area"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "zone_set_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "area type",
+     "definition": "area_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "zone"
+    },
+    {
+     "type": "short_integer",
+     "name": "area"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "order_completion_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 64,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "combination rule",
+     "definition": "combination_rule_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "next order"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 48
+    },
+    {
+     "type": "block",
+     "name": "conditions",
+     "definition": "order_completion_condition_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "order_completion_condition": {
+   "guid": "00000000000000000000000000000000",
+   "size": 56,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "rule type",
+     "definition": "rule_type_enum"
+    },
+    {
+     "type": "short_integer",
+     "name": "squad"
+    },
+    {
+     "type": "short_integer",
+     "name": "squad group"
+    },
+    {
+     "type": "short_integer",
+     "name": "a"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "real",
+     "name": "x"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "short_integer",
+     "name": "trigger volume"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "string",
+     "name": "Exit condition script"
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 36
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_6"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "order_ending_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "next order"
+    },
+    {
+     "type": "short_enum",
+     "name": "combination rule",
+     "definition": "combination_rule_enum"
+    },
+    {
+     "type": "real",
+     "name": "delay time"
+    },
+    {
+     "type": "short_enum",
+     "name": "dialogue type",
+     "definition": "dialogue_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "block",
+     "name": "triggers",
+     "definition": "trigger_references_2"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "trigger_references": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Trigger flags",
+     "definition": "trigger_flags_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "trigger"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "orders_block__v1": {
+   "guid": "00000000000000000000000000000000",
+   "size": 140,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "short_integer",
+     "name": "Style"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "short_enum",
+     "name": "Force combat status",
+     "definition": "force_combat_status_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "string",
+     "name": "Entry Script"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "Follow squad"
+    },
+    {
+     "type": "real",
+     "name": "follow radius"
+    },
+    {
+     "type": "block",
+     "name": "Area references",
+     "definition": "zone_set_block_3"
+    },
+    {
+     "type": "block",
+     "name": "Special movement",
+     "definition": "special_movement_block_2"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "Order endings",
+     "definition": "order_ending_block_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "special_movement_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "long_flags",
+     "name": "Special movement 1",
+     "definition": "special_movement_1_flags"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "orders_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 144,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "short_integer",
+     "name": "Style"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_5"
+    },
+    {
+     "type": "short_enum",
+     "name": "Force combat status",
+     "definition": "force_combat_status_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "string",
+     "name": "Entry Script"
+    },
+    {
+     "type": "skip",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "Follow squad"
+    },
+    {
+     "type": "real",
+     "name": "follow radius"
+    },
+    {
+     "type": "block",
+     "name": "Primary area set",
+     "definition": "zone_set_block_4"
+    },
+    {
+     "type": "block",
+     "name": "Secondary area set",
+     "definition": "secondary_zone_set_block_2"
+    },
+    {
+     "type": "block",
+     "name": "Secondary set trigger",
+     "definition": "secondary_set_trigger_block_2"
+    },
+    {
+     "type": "block",
+     "name": "Special movement",
+     "definition": "special_movement_block_3"
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 12
+    },
+    {
+     "type": "block",
+     "name": "Order endings",
+     "definition": "order_ending_block_4"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "secondary_zone_set_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "zone"
+    },
+    {
+     "type": "short_integer",
+     "name": "area"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "secondary_zone_set_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 8,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "area type",
+     "definition": "area_type_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "short_integer",
+     "name": "zone"
+    },
+    {
+     "type": "short_integer",
+     "name": "area"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "secondary_set_trigger_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "short_enum",
+     "name": "combination rule",
+     "definition": "combination_rule_enum"
+    },
+    {
+     "type": "short_enum",
+     "name": "dialogue type",
+     "definition": "dialogue_type_enum"
+    },
+    {
+     "type": "block",
+     "name": "triggers",
+     "definition": "trigger_references_3"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "zone_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 64,
+   "fields": [
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_3"
+    },
+    {
+     "type": "short_integer",
+     "name": "manual bsp"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "useless_pad",
+     "name": null,
+     "definition": 24
+    },
+    {
+     "type": "block",
+     "name": "firing positions",
+     "definition": "firing_positions_block_3"
+    },
+    {
+     "type": "block",
+     "name": "areas",
+     "definition": "areas_block_3"
     },
     {
      "type": "terminator",
@@ -841,7 +2660,7 @@
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_5"
+     "definition": "flags_flags_7"
     },
     {
      "type": "pad",
@@ -874,7 +2693,7 @@
     {
      "type": "block",
      "name": null,
-     "definition": "g_null_block_2"
+     "definition": "g_null_block_3"
     },
     {
      "type": "terminator",
@@ -936,7 +2755,7 @@
     {
      "type": "word_flags",
      "name": "flags",
-     "definition": "flags_flags_6"
+     "definition": "flags_flags_8"
     },
     {
      "type": "short_integer",
@@ -995,20 +2814,6 @@
     }
    ]
   },
-  "g_null_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 0,
-   "fields": [
-    {
-     "type": "custom",
-     "name": "-1"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
   "cs_script_data_block": {
    "guid": "00000000000000000000000000000000",
    "size": 132,
@@ -1029,13 +2834,23 @@
     }
    ]
   },
-  "cs_point_set_block": {
+  "cs_point_set_block__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 52,
+   "size": 140,
    "fields": [
     {
      "type": "string",
      "name": "name"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 44
     },
     {
      "type": "block",
@@ -1043,17 +2858,35 @@
      "definition": "cs_point_block_2"
     },
     {
-     "type": "short_integer",
-     "name": "bsp index"
+     "type": "pad",
+     "name": null,
+     "definition": 48
     },
     {
-     "type": "short_integer",
-     "name": "manual reference frame"
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "cs_point_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 56,
+   "fields": [
+    {
+     "type": "string",
+     "name": "name"
     },
     {
-     "type": "long_flags",
-     "name": "flags",
-     "definition": "flags_flags_7"
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "long_integer",
+     "name": "surface index"
+    },
+    {
+     "type": "real_euler_angles_2d",
+     "name": "facing direction"
     },
     {
      "type": "terminator",
@@ -1096,251 +2929,31 @@
     }
    ]
   },
-  "orders_block": {
+  "cs_point_set_block": {
    "guid": "00000000000000000000000000000000",
-   "size": 144,
+   "size": 52,
    "fields": [
-    {
-     "type": "custom",
-     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
-    },
     {
      "type": "string",
      "name": "name"
     },
     {
-     "type": "short_integer",
-     "name": "Style"
+     "type": "block",
+     "name": "points",
+     "definition": "cs_point_block_3"
     },
     {
-     "type": "pad",
-     "name": null,
-     "definition": 2
+     "type": "short_integer",
+     "name": "bsp index"
+    },
+    {
+     "type": "short_integer",
+     "name": "manual reference frame"
     },
     {
      "type": "long_flags",
      "name": "flags",
-     "definition": "flags_flags_8"
-    },
-    {
-     "type": "short_enum",
-     "name": "Force combat status",
-     "definition": "force_combat_status_enum"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "string",
-     "name": "Entry Script"
-    },
-    {
-     "type": "skip",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "short_integer",
-     "name": "Follow squad"
-    },
-    {
-     "type": "real",
-     "name": "follow radius"
-    },
-    {
-     "type": "block",
-     "name": "Primary area set",
-     "definition": "zone_set_block_2"
-    },
-    {
-     "type": "block",
-     "name": "Secondary area set",
-     "definition": "secondary_zone_set_block_2"
-    },
-    {
-     "type": "block",
-     "name": "Secondary set trigger",
-     "definition": "secondary_set_trigger_block_2"
-    },
-    {
-     "type": "block",
-     "name": "Special movement",
-     "definition": "special_movement_block_2"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "block",
-     "name": "Order endings",
-     "definition": "order_ending_block_2"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "zone_set_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 8,
-   "fields": [
-    {
-     "type": "short_enum",
-     "name": "area type",
-     "definition": "area_type_enum"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "short_integer",
-     "name": "zone"
-    },
-    {
-     "type": "short_integer",
-     "name": "area"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "secondary_zone_set_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 8,
-   "fields": [
-    {
-     "type": "short_enum",
-     "name": "area type",
-     "definition": "area_type_enum"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "short_integer",
-     "name": "zone"
-    },
-    {
-     "type": "short_integer",
-     "name": "area"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "secondary_set_trigger_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 16,
-   "fields": [
-    {
-     "type": "short_enum",
-     "name": "combination rule",
-     "definition": "combination_rule_enum"
-    },
-    {
-     "type": "short_enum",
-     "name": "dialogue type",
-     "definition": "dialogue_type_enum"
-    },
-    {
-     "type": "block",
-     "name": "triggers",
-     "definition": "trigger_references_2"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "trigger_references": {
-   "guid": "00000000000000000000000000000000",
-   "size": 8,
-   "fields": [
-    {
-     "type": "long_flags",
-     "name": "Trigger flags",
-     "definition": "trigger_flags_flags"
-    },
-    {
-     "type": "short_integer",
-     "name": "trigger"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "special_movement_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 4,
-   "fields": [
-    {
-     "type": "long_flags",
-     "name": "Special movement 1",
-     "definition": "special_movement_1_flags"
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "order_ending_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 24,
-   "fields": [
-    {
-     "type": "short_integer",
-     "name": "next order"
-    },
-    {
-     "type": "short_enum",
-     "name": "combination rule",
-     "definition": "combination_rule_enum"
-    },
-    {
-     "type": "real",
-     "name": "delay time"
-    },
-    {
-     "type": "short_enum",
-     "name": "dialogue type",
-     "definition": "dialogue_type_enum"
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "block",
-     "name": "triggers",
-     "definition": "trigger_references_3"
+     "definition": "flags_flags_9"
     },
     {
      "type": "terminator",
@@ -1378,12 +2991,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "block",
      "name": "conditions",
-     "definition": "order_completion_condition_2"
+     "definition": "order_completion_condition_3"
     },
     {
      "type": "terminator",
@@ -1391,82 +3004,18 @@
     }
    ]
   },
-  "order_completion_condition": {
+  "scenario_structure_bsp_reference_block__v0": {
    "guid": "00000000000000000000000000000000",
-   "size": 56,
+   "size": 32,
    "fields": [
     {
-     "type": "short_enum",
-     "name": "rule type",
-     "definition": "rule_type_enum"
-    },
-    {
-     "type": "short_integer",
-     "name": "squad"
-    },
-    {
-     "type": "short_integer",
-     "name": "squad group"
-    },
-    {
-     "type": "short_integer",
-     "name": "a"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "real",
-     "name": "x"
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "short_integer",
-     "name": "trigger volume"
-    },
-    {
      "type": "pad",
      "name": null,
-     "definition": 2
+     "definition": 16
     },
     {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "string",
-     "name": "Exit condition script"
-    },
-    {
-     "type": "short_integer",
-     "name": null
-    },
-    {
-     "type": "pad",
-     "name": null,
-     "definition": 2
-    },
-    {
-     "type": "useless_pad",
-     "name": null,
-     "definition": 0
-    },
-    {
-     "type": "long_flags",
-     "name": "flags",
-     "definition": "flags_flags_9"
+     "type": "tag_reference",
+     "name": "structure bsp"
     },
     {
      "type": "terminator",
@@ -1581,7 +3130,96 @@
     }
    ]
   },
-  "scenario_vehicle_block": {
+  "scenario_vehicle_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 120,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "word_flags",
+     "name": "not placed",
+     "definition": "not_placed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "desired permutation"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "long_integer",
+     "name": "environment object reference"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 16
+    },
+    {
+     "type": "struct",
+     "name": "unit data",
+     "definition": "old_scenario_unit_struct"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 32
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "old_scenario_unit_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 16,
+   "fields": [
+    {
+     "type": "real",
+     "name": "body vitality"
+    },
+    {
+     "type": "long_flags",
+     "name": "flags",
+     "definition": "flags_flags_11"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 8
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "sust"
+  },
+  "scenario_vehicle_block__v1": {
    "guid": "00000000000000000000000000000000",
    "size": 84,
    "fields": [
@@ -1622,7 +3260,7 @@
     }
    ]
   },
-  "scenario_object_datum_struct": {
+  "scenario_object_datum_struct__v0": {
    "guid": "00000000000000000000000000000000",
    "size": 48,
    "fields": [
@@ -1633,7 +3271,7 @@
     {
      "type": "long_flags",
      "name": "placement flags",
-     "definition": "placement_flags_flags"
+     "definition": "not_placed_flags"
     },
     {
      "type": "real_point_3d",
@@ -1653,7 +3291,7 @@
      "definition": "unnamed_flags"
     },
     {
-     "type": "word_block_flags",
+     "type": "short_integer",
      "name": "manual bsp flags"
     },
     {
@@ -1711,6 +3349,66 @@
    ],
    "tag": "obj#"
   },
+  "scenario_object_datum_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 48,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "SCENARIO_OBJECT_EDIT_ID"
+    },
+    {
+     "type": "long_flags",
+     "name": "placement flags",
+     "definition": "not_placed_flags"
+    },
+    {
+     "type": "real_point_3d",
+     "name": "position"
+    },
+    {
+     "type": "real_euler_angles_3d",
+     "name": "rotation"
+    },
+    {
+     "type": "real",
+     "name": "scale"
+    },
+    {
+     "type": "word_flags",
+     "name": null,
+     "definition": "unnamed_flags"
+    },
+    {
+     "type": "short_integer",
+     "name": "manual bsp flags"
+    },
+    {
+     "type": "struct",
+     "name": "object id",
+     "definition": "scenario_object_id_struct"
+    },
+    {
+     "type": "char_enum",
+     "name": "bsp policy",
+     "definition": "bsp_policy_enum"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 1
+    },
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ],
+   "tag": "sobj"
+  },
   "scenario_object_permutation_struct": {
    "guid": "00000000000000000000000000000000",
    "size": 24,
@@ -1743,7 +3441,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "terminator",
@@ -1772,6 +3470,47 @@
    ],
    "tag": "sunt"
   },
+  "scenario_vehicle_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 84,
+   "fields": [
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-1"
+    },
+    {
+     "type": "short_integer",
+     "name": "type"
+    },
+    {
+     "type": "custom",
+     "name": "FILTER_ON_NEXT_FIELD_ID,-2"
+    },
+    {
+     "type": "short_integer",
+     "name": "name"
+    },
+    {
+     "type": "struct",
+     "name": "object data",
+     "definition": "scenario_object_datum_struct"
+    },
+    {
+     "type": "struct",
+     "name": "permutation data",
+     "definition": "scenario_object_permutation_struct"
+    },
+    {
+     "type": "struct",
+     "name": "unit data",
+     "definition": "scenario_unit_struct"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "ai_scene_block": {
    "guid": "00000000000000000000000000000000",
    "size": 32,
@@ -1793,7 +3532,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "block",
@@ -1852,7 +3591,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 36
     },
     {
      "type": "block",
@@ -1895,7 +3634,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 32
     },
     {
      "type": "short_integer",
@@ -1913,7 +3652,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 16
     },
     {
      "type": "block",
@@ -1936,7 +3675,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 12
     },
     {
      "type": "tag_reference",
@@ -1949,7 +3688,7 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "real",
@@ -2026,12 +3765,12 @@
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 24
     },
     {
      "type": "useless_pad",
      "name": null,
-     "definition": 0
+     "definition": 4
     },
     {
      "type": "string_id",
@@ -2080,6 +3819,53 @@
     {
      "type": "real",
      "name": "radius"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "scenario_trigger_volume_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 100,
+   "fields": [
+    {
+     "type": "short_integer",
+     "name": null
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 2
+    },
+    {
+     "type": "string",
+     "name": "name"
+    },
+    {
+     "type": "array",
+     "name": null,
+     "definition": "unnamed_array"
+    },
+    {
+     "type": "pad",
+     "name": null,
+     "definition": 4
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "inline_struct": {
+   "guid": "00000000000000000000000000000000",
+   "size": 4,
+   "fields": [
+    {
+     "type": "real",
+     "name": "parameters"
     },
     {
      "type": "terminator",
@@ -2145,7 +3931,12 @@
    ]
   }
  },
- "arrays": {},
+ "arrays": {
+  "unnamed_array": {
+   "count": 15,
+   "struct": "inline_struct"
+  }
+ },
  "enums_flags": {
   "flags_flags": {
    "options": [
@@ -2201,15 +3992,6 @@
     "Covenant Plasma"
    ]
   },
-  "flags_flags_2": {
-   "options": [
-    "initially asleep",
-    "infection form explode",
-    "n/a",
-    "always place",
-    "initially hidden"
-   ]
-  },
   "seat_type_enum": {
    "options": [
     "DEFAULT",
@@ -2220,6 +4002,15 @@
     "large cargo",
     "NO driver",
     "NO vehicle"
+   ]
+  },
+  "flags_flags_2": {
+   "options": [
+    "initially asleep",
+    "infection form explode",
+    "n/a",
+    "always place",
+    "initially hidden"
    ]
   },
   "initial_movement_mode_enum": {
@@ -2246,6 +4037,56 @@
     "dynamic cover point"
    ]
   },
+  "team_designator_enum": {
+   "options": [
+    "Alpha",
+    "Bravo",
+    "Charlie",
+    "Delta",
+    "Echo",
+    "Foxtrot",
+    "Golf",
+    "Hotel",
+    "NEUTRAL"
+   ]
+  },
+  "type_0_enum": {
+   "options": [
+    "none",
+    "ctf",
+    "slayer",
+    "oddball",
+    "king of the hill",
+    "race",
+    "headhunter",
+    "juggernaut",
+    "territories",
+    "assault",
+    "stub",
+    "ignored1",
+    "all games",
+    "all except ctf",
+    "all except race and ctf",
+    "medic",
+    "vip",
+    "infection"
+   ]
+  },
+  "spawn_type_0_enum": {
+   "options": [
+    "both",
+    "initial spawn only",
+    "respawn only"
+   ]
+  },
+  "campaign_player_type_enum": {
+   "options": [
+    "masterchief",
+    "dervish",
+    "chief multiplayer",
+    "elite multiplayer"
+   ]
+  },
   "area_flags_flags": {
    "options": [
     "vehicle area",
@@ -2254,41 +4095,6 @@
    ]
   },
   "flags_flags_5": {
-   "options": [
-    "stop if death",
-    "stop if damaged",
-    "stop if visible enemy",
-    "stop if alerted to enemy",
-    "player must be visible",
-    "stop other actions",
-    "keep trying to play",
-    "player must be looking"
-   ]
-  },
-  "flags_flags_6": {
-   "options": [
-    "addressee look at speaker",
-    "everyone look at speaker",
-    "everyone look at addressee",
-    "wait after until told to advance",
-    "wait until speaker nearby",
-    "wait until everyone nearby"
-   ]
-  },
-  "addressee_enum": {
-   "options": [
-    "none",
-    "player",
-    "participant"
-   ]
-  },
-  "flags_flags_7": {
-   "options": [
-    "manual reference frame",
-    "turret deployment"
-   ]
-  },
-  "flags_flags_8": {
    "options": [
     "locked",
     "always active",
@@ -2323,6 +4129,36 @@
     "AND"
    ]
   },
+  "rule_type_enum": {
+   "options": [
+    "A or greater alive",
+    "A or fewer alive",
+    "X or greater strength",
+    "X or less strength",
+    "If enemy sighted",
+    "After A ticks",
+    "If alerted by squad A",
+    "Script ref TRUE",
+    "Script ref FALSE",
+    "If player in trigger volume",
+    "If ALL players in trigger volume",
+    "Combat status A or more",
+    "Combat status A or less",
+    "Arrived",
+    "In vehicle",
+    "Sighted player",
+    "A or greater fighting",
+    "A or fewer fighting",
+    "Player within X world units",
+    "Player shot more than X seconds ago",
+    "Game safe to save"
+   ]
+  },
+  "flags_flags_6": {
+   "options": [
+    "NOT"
+   ]
+  },
   "dialogue_type_enum": {
    "options": [
     "none",
@@ -2355,39 +4191,44 @@
     "n/a"
    ]
   },
-  "trigger_flags_flags_2": {
+  "flags_flags_7": {
    "options": [
-    "Latch ON when triggered"
+    "stop if death",
+    "stop if damaged",
+    "stop if visible enemy",
+    "stop if alerted to enemy",
+    "player must be visible",
+    "stop other actions",
+    "keep trying to play",
+    "player must be looking"
    ]
   },
-  "rule_type_enum": {
+  "flags_flags_8": {
    "options": [
-    "A or greater alive",
-    "A or fewer alive",
-    "X or greater strength",
-    "X or less strength",
-    "If enemy sighted",
-    "After A ticks",
-    "If alerted by squad A",
-    "Script ref TRUE",
-    "Script ref FALSE",
-    "If player in trigger volume",
-    "If ALL players in trigger volume",
-    "Combat status A or more",
-    "Combat status A or less",
-    "Arrived",
-    "In vehicle",
-    "Sighted player",
-    "A or greater fighting",
-    "A or fewer fighting",
-    "Player within X world units",
-    "Player shot more than X seconds ago",
-    "Game safe to save"
+    "addressee look at speaker",
+    "everyone look at speaker",
+    "everyone look at addressee",
+    "wait after until told to advance",
+    "wait until speaker nearby",
+    "wait until everyone nearby"
+   ]
+  },
+  "addressee_enum": {
+   "options": [
+    "none",
+    "player",
+    "participant"
    ]
   },
   "flags_flags_9": {
    "options": [
-    "NOT"
+    "manual reference frame",
+    "turret deployment"
+   ]
+  },
+  "trigger_flags_flags_2": {
+   "options": [
+    "Latch ON when triggered"
    ]
   },
   "flags_flags_10": {
@@ -2395,7 +4236,7 @@
     "default sky enabled"
    ]
   },
-  "placement_flags_flags": {
+  "not_placed_flags": {
    "options": [
     "not automatically",
     "unused",
@@ -2406,6 +4247,13 @@
     "never placed",
     "lock name to env. object",
     "create at rest"
+   ]
+  },
+  "flags_flags_11": {
+   "options": [
+    "dead",
+    "closed",
+    "not enterable by player"
    ]
   },
   "unnamed_flags": {
@@ -2453,13 +4301,6 @@
     "quaternary"
    ]
   },
-  "flags_flags_11": {
-   "options": [
-    "dead",
-    "closed",
-    "not enterable by player"
-   ]
-  },
   "flags_flags_12": {
    "options": [
     "scene can play multiple times",
@@ -2482,5 +4323,73 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "actor_starting_locations_block": {
+   "0": "actor_starting_locations_block__v0",
+   "1": "actor_starting_locations_block__v1",
+   "2": "actor_starting_locations_block__v2",
+   "3": "actor_starting_locations_block__v3",
+   "4": "actor_starting_locations_block__v4",
+   "5": "actor_starting_locations_block__v5",
+   "6": "actor_starting_locations_block"
+  },
+  "squads_block": {
+   "0": "squads_block__v0",
+   "1": "squads_block__v1",
+   "2": "squads_block"
+  },
+  "firing_positions_block": {
+   "0": "firing_positions_block__v0",
+   "1": "firing_positions_block__v1",
+   "2": "firing_positions_block__v2",
+   "3": "firing_positions_block"
+  },
+  "areas_block": {
+   "0": "areas_block__v0",
+   "1": "areas_block"
+  },
+  "zone_set_block": {
+   "0": "zone_set_block__v0",
+   "1": "zone_set_block"
+  },
+  "secondary_zone_set_block": {
+   "0": "secondary_zone_set_block__v0",
+   "1": "secondary_zone_set_block"
+  },
+  "orders_block": {
+   "0": "orders_block__v0",
+   "1": "orders_block__v1",
+   "2": "orders_block"
+  },
+  "zone_block": {
+   "0": "zone_block__v0",
+   "1": "zone_block"
+  },
+  "cs_point_block": {
+   "0": "cs_point_block__v0",
+   "1": "cs_point_block"
+  },
+  "cs_point_set_block": {
+   "0": "cs_point_set_block__v0",
+   "1": "cs_point_set_block"
+  },
+  "scenario_structure_bsp_reference_block": {
+   "0": "scenario_structure_bsp_reference_block__v0",
+   "1": "scenario_structure_bsp_reference_block"
+  },
+  "scenario_object_datum_struct": {
+   "0": "scenario_object_datum_struct__v0",
+   "1": "scenario_object_datum_struct"
+  },
+  "scenario_vehicle_block": {
+   "0": "scenario_vehicle_block__v0",
+   "1": "scenario_vehicle_block__v1",
+   "2": "scenario_vehicle_block"
+  },
+  "scenario_trigger_volume_block": {
+   "0": "scenario_trigger_volume_block__v0",
+   "1": "scenario_trigger_volume_block"
+  }
+ }
 }

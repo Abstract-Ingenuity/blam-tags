@@ -15,6 +15,11 @@
    "max_count_string": "32768",
    "struct": "decorator_placement_block"
   },
+  "decorator_placement_block_3": {
+   "max_count": 32768,
+   "max_count_string": "32768",
+   "struct": "decorator_placement_block"
+  },
   "decal_vertices_block_2": {
    "max_count": 65536,
    "max_count_string": "65536",
@@ -222,6 +227,63 @@
     }
    ]
   },
+  "decorator_cache_block_data_block__v0": {
+   "guid": "00000000000000000000000000000000",
+   "size": 76,
+   "fields": [
+    {
+     "type": "block",
+     "name": "placements",
+     "definition": "decorator_placement_block_2"
+    },
+    {
+     "type": "vertex_buffer",
+     "name": "decal vertex buffer"
+    },
+    {
+     "type": "vertex_buffer",
+     "name": "sprite vertex buffer"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
+  "decorator_placement_block": {
+   "guid": "00000000000000000000000000000000",
+   "size": 24,
+   "fields": [
+    {
+     "type": "long_integer",
+     "name": "internal data 1"
+    },
+    {
+     "type": "long_integer",
+     "name": "compressed position"
+    },
+    {
+     "type": "rgb_color",
+     "name": "tint color"
+    },
+    {
+     "type": "rgb_color",
+     "name": "lightmap color"
+    },
+    {
+     "type": "long_integer",
+     "name": "compressed light direction"
+    },
+    {
+     "type": "long_integer",
+     "name": "compressed light 2 direction"
+    },
+    {
+     "type": "terminator",
+     "name": null
+    }
+   ]
+  },
   "decorator_cache_block_data_block": {
    "guid": "00000000000000000000000000000000",
    "size": 156,
@@ -229,7 +291,7 @@
     {
      "type": "block",
      "name": "placements",
-     "definition": "decorator_placement_block_2"
+     "definition": "decorator_placement_block_3"
     },
     {
      "type": "block",
@@ -268,40 +330,6 @@
      "type": "pad",
      "name": null,
      "definition": 16
-    },
-    {
-     "type": "terminator",
-     "name": null
-    }
-   ]
-  },
-  "decorator_placement_block": {
-   "guid": "00000000000000000000000000000000",
-   "size": 24,
-   "fields": [
-    {
-     "type": "long_integer",
-     "name": "internal data 1"
-    },
-    {
-     "type": "long_integer",
-     "name": "compressed position"
-    },
-    {
-     "type": "rgb_color",
-     "name": "tint color"
-    },
-    {
-     "type": "rgb_color",
-     "name": "lightmap color"
-    },
-    {
-     "type": "long_integer",
-     "name": "compressed light direction"
-    },
-    {
-     "type": "long_integer",
-     "name": "compressed light 2 direction"
     },
     {
      "type": "terminator",
@@ -557,5 +585,11 @@
  },
  "datas": {},
  "resources": {},
- "interops": {}
+ "interops": {},
+ "struct_versions": {
+  "decorator_cache_block_data_block": {
+   "0": "decorator_cache_block_data_block__v0",
+   "1": "decorator_cache_block_data_block"
+  }
+ }
 }
