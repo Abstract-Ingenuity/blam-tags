@@ -742,6 +742,22 @@ pub(crate) fn deserialize_field(
 ) -> Option<TagFieldData> {
     let offset = field.offset as usize;
 
+    // Truncated (clamped) element: a field whose declared bytes run past
+    // the on-disk element decodes as ABSENT (None) instead of panicking.
+    // This mirrors the Halo 2 engine, which reads each block element at
+    // its field-set's definition size and ZERO-FILLS the bytes an
+    // on-disk element doesn't carry when `stored_size < field_set.size`
+    // (read_recursive_tag_block / read_field_set_definition in
+    // tag_group_loading.cpp — verified against MCC tool.exe). Within a
+    // single field-set version the layout is fixed, so a field past the
+    // on-disk tail is genuinely absent; a consumer's `unwrap_or(default)`
+    // then yields the same value the engine's zero-fill would. CE is
+    // unaffected (headerless — element size always equals the schema).
+    let need = layout.field_types[field.type_index as usize].size as usize;
+    if offset + need > raw_struct.len() {
+        return None;
+    }
+
     match field.field_type {
         // No value.
         TagFieldType::Unknown

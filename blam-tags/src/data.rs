@@ -455,7 +455,17 @@ impl TagStructData {
         };
         let nested_size = layout.struct_layouts[nested.struct_index as usize].size;
         let offset = field.offset as usize;
-        Some((nested, &element_raw[offset..offset + nested_size]))
+        // A truncated (clamped) parent element may not carry this inline
+        // struct's full bytes (or any of them). Clamp the sub-slice to
+        // what's present — fully-absent → None, partially-present → the
+        // available prefix, where each missing inner field then decodes
+        // as absent via the guard in `deserialize_field`. Mirrors the H2
+        // engine's zero-fill of bytes past `stored_size`.
+        if offset >= element_raw.len() {
+            return None;
+        }
+        let end = (offset + nested_size).min(element_raw.len());
+        Some((nested, &element_raw[offset..end]))
     }
 
     /// Mutable counterpart to [`Self::nested_struct`].
@@ -481,7 +491,12 @@ impl TagStructData {
             _ => return None,
         };
         let nested_size = layout.struct_layouts[nested.struct_index as usize].size;
-        Some((nested, &mut element_raw[offset..offset + nested_size]))
+        // Same truncated-element clamp as the read-path `nested_struct`.
+        if offset >= element_raw.len() {
+            return None;
+        }
+        let end = (offset + nested_size).min(element_raw.len());
+        Some((nested, &mut element_raw[offset..end]))
     }
 }
 

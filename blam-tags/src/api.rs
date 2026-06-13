@@ -184,6 +184,13 @@ impl<'a> TagStruct<'a> {
         self.layout.struct_layouts[self.struct_data.struct_index as usize].size
     }
 
+    /// The actual on-disk bytes backing this struct instance. May be
+    /// SHORTER than [`Self::size`] for a truncated (clamped) element —
+    /// callers reading fields near the tail must tolerate that.
+    pub fn raw(&self) -> &'a [u8] {
+        self.struct_raw
+    }
+
     /// Walk the struct's fields in declaration order. Skips padding,
     /// explanations, terminators, and unknown types.
     pub fn fields(&self) -> impl Iterator<Item = TagField<'a>> + 'a {
@@ -747,7 +754,14 @@ impl<'a> TagField<'a> {
         let array_def = &self.layout.array_layouts[array_layout_index as usize];
         let element_size = self.layout.struct_layouts[array_def.struct_index as usize].size;
         let start = field.offset as usize;
-        let array_raw = &self.struct_raw[start..start + elements.len() * element_size];
+        // A truncated (clamped) parent element may not carry the full
+        // array — clamp to what's present (fully-absent → None). Element
+        // accessors bounds-check against this slice.
+        if start >= self.struct_raw.len() {
+            return None;
+        }
+        let end = (start + elements.len() * element_size).min(self.struct_raw.len());
+        let array_raw = &self.struct_raw[start..end];
         Some(TagArray {
             layout: self.layout,
             array_layout_index,
@@ -878,6 +892,14 @@ impl<'a> TagBlock<'a> {
         crate::TagBlockDefinition::new(self.layout, self.block_data.block_index as usize)
     }
 
+    /// The raw on-disk block header bytes (Halo 2 classic only; `None`
+    /// for CE/MCC). Carries the block's signature, version, element
+    /// count and on-disk element size — the only structural metadata
+    /// H2 self-describes; field layout comes from the external schema.
+    pub fn classic_block_header(&self) -> Option<&'a [u8]> {
+        self.block_data.classic_block_header.as_deref()
+    }
+
     /// Number of elements currently in this block.
     pub fn len(&self) -> usize { self.block_data.elements.len() }
 
@@ -947,7 +969,13 @@ impl<'a> TagArray<'a> {
         let struct_data = self.elements.get(index)?;
         let size = self.layout.struct_layouts[self.element_struct_index() as usize].size;
         let start = index * size;
-        let struct_raw = &self.array_raw[start..start + size];
+        // Clamp against a truncated parent (array_raw may be short); the
+        // inner field reads are guarded in `deserialize_field`.
+        if start >= self.array_raw.len() {
+            return None;
+        }
+        let end = (start + size).min(self.array_raw.len());
+        let struct_raw = &self.array_raw[start..end];
         Some(TagStruct { layout: self.layout, struct_data, struct_raw, endian: self.endian })
     }
 
@@ -956,11 +984,13 @@ impl<'a> TagArray<'a> {
         let TagArray { layout, array_layout_index, array_raw, elements, endian } = *self;
         let size = element_struct_size(layout, array_layout_index);
         elements.iter().enumerate().map(move |(i, struct_data)| {
-            let start = i * size;
+            // Clamp against a truncated parent (array_raw may be short).
+            let start = (i * size).min(array_raw.len());
+            let end = (start + size).min(array_raw.len());
             TagStruct {
                 layout,
                 struct_data,
-                struct_raw: &array_raw[start..start + size],
+                struct_raw: &array_raw[start..end],
                 endian,
             }
         })
