@@ -61,32 +61,24 @@ fn format_from_extension(path: &Path) -> Option<OutFormat> {
     }
 }
 
-pub fn run(ctx: &mut CliContext, output: Option<&str>, format: &str, color_plate: bool) -> Result<()> {
+pub fn run(ctx: &mut CliContext, output: Option<&str>, format: &str) -> Result<()> {
     let cli_format = parse_format(format)?;
 
     let loaded = ctx.loaded("extract-bitmap")?;
+    let stem = tag_stem(&loaded.path, "bitmap");
 
-    // `--color-plate`: write the single artist source sheet (always a
-    // TIFF — it's the lossless RGBA re-import format), not the per-image
-    // compiled textures.
-    if color_plate {
-        let stem = tag_stem(&loaded.path, "bitmap");
-        let Some(cp) = blam_tags::bitmap::color_plate(&loaded.tag)
-            .context("decode color plate")?
-        else {
-            println!("tag has no color plate (no `compressed color plate data`)");
-            return Ok(());
-        };
-        let target = resolve_color_plate_path(output, &stem)?;
-        if let Some(parent) = target.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-            }
+    // Classic Halo CE / Halo 2 bitmaps carry the artist *color plate* —
+    // the lossless, re-importable source sheet. Always prefer it over the
+    // compiled `processed pixel data` (a lossy DXT/mip/palettized
+    // derivative): the source recovers every format including P8/p8-bump.
+    // gen3+ MCC tags have no color plate and use the processed pixels;
+    // a source-stripped classic tag also falls through to them.
+    if loaded.tag.classic_engine().is_some() {
+        if let Some(cp) =
+            blam_tags::bitmap::color_plate(&loaded.tag).context("decode color plate")?
+        {
+            return write_color_plate(output, &stem, &cp, cli_format);
         }
-        let file = File::create(&target).with_context(|| format!("create {}", target.display()))?;
-        cp.write_tiff(&mut BufWriter::new(file))?;
-        println!("{}: {}×{} color plate", target.display(), cp.width, cp.height);
-        return Ok(());
     }
 
     let bitmap = Bitmap::new(&loaded.tag)
@@ -98,7 +90,6 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>, format: &str, color_plate
         return Ok(());
     }
 
-    let stem = tag_stem(&loaded.path, "bitmap");
     let output_path = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
 
     // If the user named an explicit file with a recognized
@@ -111,18 +102,38 @@ pub fn run(ctx: &mut CliContext, output: Option<&str>, format: &str, color_plate
     run_to_dir(&output_path, &stem, &bitmap, count, cli_format)
 }
 
-/// Where to write the color-plate TIFF. An `--output` ending in
-/// `.tif`/`.tiff` is the exact file; any other path is a directory
-/// (`<dir>/<stem>.tif`); omitted means `./<stem>.tif`.
-fn resolve_color_plate_path(output: Option<&str>, stem: &str) -> Result<PathBuf> {
-    let filename = format!("{stem}.tif");
-    Ok(match output {
-        Some(o) if matches!(Path::new(o).extension().and_then(|e| e.to_str()), Some("tif") | Some("tiff")) => {
-            PathBuf::from(o)
+/// Write a classic bitmap's single color plate. Mirrors the per-image
+/// path's `--output` overloading: an `--output` ending in `.tif`/`.dds`
+/// is the exact file (and its extension picks the format); any other
+/// path is a directory (`<dir>/<stem>.<ext>`); omitted means
+/// `./<stem>.<ext>` using the `--format` flag.
+fn write_color_plate(
+    output: Option<&str>,
+    stem: &str,
+    cp: &blam_tags::bitmap::ColorPlate,
+    cli_format: OutFormat,
+) -> Result<()> {
+    let (target, format) = match output {
+        Some(o) if format_from_extension(Path::new(o)).is_some() => {
+            (PathBuf::from(o), format_from_extension(Path::new(o)).unwrap())
         }
-        Some(o) => Path::new(o).join(filename),
-        None => PathBuf::from(filename),
-    })
+        Some(o) => (Path::new(o).join(format!("{stem}.{}", cli_format.ext())), cli_format),
+        None => (PathBuf::from(format!("{stem}.{}", cli_format.ext())), cli_format),
+    };
+
+    if let Some(parent) = target.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+        }
+    }
+    let file = File::create(&target).with_context(|| format!("create {}", target.display()))?;
+    let mut writer = BufWriter::new(file);
+    match format {
+        OutFormat::Tif => cp.write_tiff(&mut writer)?,
+        OutFormat::Dds => cp.write_dds(&mut writer)?,
+    }
+    println!("{}: {}×{} color plate (source)", target.display(), cp.width, cp.height);
+    Ok(())
 }
 
 fn run_to_file(target: &Path, bitmap: &Bitmap<'_>, count: usize, format: OutFormat) -> Result<()> {

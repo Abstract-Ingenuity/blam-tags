@@ -339,15 +339,12 @@ enum Commands {
         /// Output format. Defaults to `tif` (Tool-importable RGBA8
         /// TIFF). `dds` keeps the original-format DDS dump that's
         /// readable but not Tool-importable.
+        ///
+        /// Classic Halo CE / Halo 2 bitmaps automatically emit the
+        /// artist *color plate* (the lossless re-importable source
+        /// sheet) instead of the compiled `processed pixel data`.
         #[arg(long, default_value = "tif")]
         format: String,
-        /// Extract the artist's original *color plate* (the lossless
-        /// RGBA source sheet Tool compiled the bitmap from) as a single
-        /// TIFF, instead of the per-image compiled `processed pixel
-        /// data`. Present on classic CE/H2 tags; gen3+ MCC tags ship
-        /// without source.
-        #[arg(long)]
-        color_plate: bool,
     },
 
     /// Extract geometry source files from a tag. Accepts:
@@ -638,9 +635,9 @@ pub(crate) fn dispatch(ctx: &mut CliContext, cmd: Commands, reload_tag: bool) ->
             commands::export::run(ctx, subtree.as_deref(), output.as_deref())
         }
 
-        Commands::ExtractBitmap { file, output, format, color_plate } => {
+        Commands::ExtractBitmap { file, output, format } => {
             ensure_loaded(ctx, &file, reload_tag)?;
-            commands::extract_bitmap::run(ctx, output.as_deref(), &format, color_plate)
+            commands::extract_bitmap::run(ctx, output.as_deref(), &format)
         }
 
         Commands::ExtractGeometry { file, kinds, output, flat, force } => {

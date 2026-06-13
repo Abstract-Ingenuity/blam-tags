@@ -311,6 +311,17 @@ impl TagFile {
         self.write_to(&mut writer)
     }
 
+    /// The classic engine (Halo CE / Halo 2) this tag was read as, or
+    /// `None` for MCC self-describing tags. Lets callers branch on the
+    /// engine — e.g. preferring the color-plate source for classic
+    /// bitmaps — without re-sniffing the header.
+    pub fn classic_engine(&self) -> Option<crate::classic::ClassicEngine> {
+        match self.container {
+            TagContainer::Classic { engine, .. } => Some(engine),
+            TagContainer::Mcc => None,
+        }
+    }
+
     /// Serialize this tag to a `Vec<u8>`. Mirrors [`TagFile::write`];
     /// useful for fuzzing roundtrips and in-memory tag pipelines.
     pub fn write_to_bytes(&self) -> std::io::Result<Vec<u8>> {

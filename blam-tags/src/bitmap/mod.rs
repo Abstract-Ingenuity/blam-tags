@@ -417,9 +417,21 @@ pub struct ColorPlate {
 }
 
 impl ColorPlate {
-    /// Write the color plate as a Tool-importable RGBA8 TIFF.
+    /// Write the color plate as a Tool-importable RGBA8 TIFF (the
+    /// natural source format).
     pub fn write_tiff(&self, out: &mut impl Write) -> Result<(), BitmapError> {
         tiff::write_rgba8_tiff(out, self.width, self.height, &self.rgba)
+    }
+
+    /// Write the color plate as a single-mip A8R8G8B8 DDS.
+    pub fn write_dds(&self, out: &mut impl Write) -> Result<(), BitmapError> {
+        // Legacy A8R8G8B8 DDS stores little-endian BGRA bytes.
+        let mut bgra = self.rgba.clone();
+        for px in bgra.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+        write_dds(out, BitmapFormat::A8r8g8b8, self.width, self.height, 1, false, &bgra)?;
+        Ok(())
     }
 }
 
