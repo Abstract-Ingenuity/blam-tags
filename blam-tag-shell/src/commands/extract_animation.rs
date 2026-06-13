@@ -61,6 +61,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde_json::json;
 
+use blam_tags::animation::classic::{CeAnimation, CeAnimations};
 use blam_tags::{Animation, AnimationGraph, AnimationGroup, JmaKind, NodeTransform, Skeleton, TagFile};
 
 use crate::context::CliContext;
@@ -85,6 +86,13 @@ pub fn run(
     format: Format,
 ) -> Result<()> {
     let loaded = ctx.loaded("extract-animation")?;
+
+    // Halo CE `model_animations` (group `antr`) predates the gen3
+    // codec-pack model entirely — route it through the classic decoder.
+    if &loaded.tag.header.group_tag.to_be_bytes() == b"antr" {
+        return run_ce(&loaded.tag, &loaded.path, anim, output, flat, format);
+    }
+
     let tags_root = derive_tags_root(&loaded.path)
         .context("failed to derive tags root from input path — input must live under a `tags/` directory")?;
 
@@ -194,6 +202,113 @@ pub fn run(
         eprintln!("skipped {skipped} composite/empty animation(s) with no codec payload");
     }
     Ok(())
+}
+
+/// Halo CE `model_animations` (antr) extraction. CE stores each
+/// animation's frames inline (no gen3 codec pack / tgrc resource), with
+/// the skeleton in the tag's own `nodes` block and the rest pose carried
+/// implicitly by the static (`default data`) stream — so CE poses are
+/// self-contained and need no render_model. Overlays/replacements compose
+/// onto the skeleton rest pose (CE has no per-graph base resolution like
+/// gen3; aim/look overlays are the common case and compose correctly onto
+/// rest). See `blam_tags::animation::classic`.
+fn run_ce(
+    tag: &TagFile,
+    path: &Path,
+    anim: Option<&str>,
+    output: Option<&str>,
+    flat: bool,
+    format: Format,
+) -> Result<()> {
+    let animations = CeAnimations::new(tag);
+    if animations.is_empty() {
+        anyhow::bail!("model_animations has no animations to extract");
+    }
+    let skeleton = Skeleton::from_tag(tag);
+    if matches!(format, Format::Jma) && skeleton.is_empty() {
+        anyhow::bail!("model_animations has no nodes — JMA export needs a skeleton");
+    }
+    let defaults = build_defaults(&skeleton, tag, None);
+
+    let target = OutputTarget::from_args(output);
+    let stem = tag_stem(path, "animation");
+
+    let groups: Vec<&CeAnimation<'_>> = match anim {
+        Some(a) => {
+            let g = a.parse::<usize>().ok().and_then(|i| animations.get(i))
+                .or_else(|| animations.find(a))
+                .ok_or_else(|| anyhow::anyhow!(
+                    "no animation named or indexed '{a}' (use `list-animations` to see names)"))?;
+            vec![g]
+        }
+        None => animations.iter().collect(),
+    };
+
+    if matches!(target, OutputTarget::ExactFile(_)) && groups.len() > 1 {
+        anyhow::bail!(
+            "{} animations selected; --output as a filename only works for a single \
+             animation. Pass a directory path or omit --output.",
+            groups.len(),
+        );
+    }
+
+    for group in &groups {
+        let clip = group.decode();
+        let kind = JmaKind::from_metadata(
+            group.animation_type.as_deref(),
+            group.frame_info_type.as_deref(),
+            group.world_relative,
+        );
+        let name = group.name.clone().unwrap_or_else(|| format!("anim_{}", group.index));
+        let ext = match format { Format::Json => "json", Format::Jma => kind.extension() };
+        let filename = format!("{}.{ext}", sanitize(&name));
+        let dest = ce_destination(&target, &stem, &filename, flat);
+
+        if matches!(format, Format::Json) {
+            ensure_parent_dir(&dest)?;
+            let json = serde_json::to_string_pretty(&json!({
+                "name": group.name, "type": group.animation_type,
+                "frame_info_type": group.frame_info_type, "frame_count": group.frame_count,
+                "node_count": group.node_count, "world_relative": group.world_relative,
+            }))?;
+            fs::write(&dest, json).with_context(|| format!("write {}", dest.display()))?;
+            println!("{}", dest.display());
+            continue;
+        }
+
+        // Base kinds pose against the rest defaults; overlay/replacement
+        // compose deltas onto the rest pose (CE base resolution is N/A).
+        let (pose, leading) = match kind {
+            JmaKind::Jmo => {
+                let (reference, body) = clip.overlay_pose(&skeleton, &defaults);
+                (body, reference)
+            }
+            JmaKind::Jmr => (clip.replacement_pose(&skeleton, &defaults), defaults.clone()),
+            _ => (clip.pose(&skeleton, Some(&defaults)), defaults.clone()),
+        };
+
+        ensure_parent_dir(&dest)?;
+        let mut w = BufWriter::new(
+            File::create(&dest).with_context(|| format!("create {}", dest.display()))?);
+        pose.write_jma(&mut w, &skeleton, &leading, group.node_list_checksum, kind, &stem, Some(&clip.movement))?;
+        w.flush().ok();
+        println!("{}: {} frames × {} bones [{}]  movement={:?}",
+            dest.display(), pose.frames.len(), skeleton.len(), kind.extension(), clip.movement.kind);
+    }
+    Ok(())
+}
+
+/// `resolve_destination` for the CE path — same layout rules, but keyed on
+/// a pre-rendered filename rather than an `AnimationGroup`.
+fn ce_destination(target: &OutputTarget, stem: &str, filename: &str, flat: bool) -> PathBuf {
+    let flat_filename = format!("{stem}.{filename}");
+    match (target, flat) {
+        (OutputTarget::ExactFile(p), _) => p.clone(),
+        (OutputTarget::Root(dir), true) => dir.join(flat_filename),
+        (OutputTarget::Root(dir), false) => dir.join(stem).join("animations").join(filename),
+        (OutputTarget::Default, true) => PathBuf::from(flat_filename),
+        (OutputTarget::Default, false) => PathBuf::from(stem).join("animations").join(filename),
+    }
 }
 
 /// Owned tags resolved from the input. Direct-jmad inputs leave

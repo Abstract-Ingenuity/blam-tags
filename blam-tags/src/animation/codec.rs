@@ -222,7 +222,7 @@ impl<'a> AnimationGroup<'a> {
         let static_size = if has_static_stream {
             match layout {
                 SizeLayout::H3 => self.data_sizes.as_ref().map(|d| d.get("default_data") as usize).unwrap_or(0),
-                SizeLayout::Reach => static_first_size,
+                SizeLayout::Reach | SizeLayout::Halo2 => static_first_size,
             }
         } else { 0 };
         // Per the Reach binary's `c_animation_data::get_animation_compression_codec`
@@ -235,7 +235,7 @@ impl<'a> AnimationGroup<'a> {
         // animated decoder.
         let animated_offset = static_size;
         let animated_blob_len = match layout {
-            SizeLayout::Reach => self.data_sizes.as_ref()
+            SizeLayout::Reach | SizeLayout::Halo2 => self.data_sizes.as_ref()
                 .and_then(|d| d.fields.get(1))
                 .map(|(_, v)| *v as usize)
                 .unwrap_or(0),
@@ -269,7 +269,7 @@ impl<'a> AnimationGroup<'a> {
             // explicitly at positional index 1 in `data sizes`. For
             // H3 we infer it from the codec header / payload extents.
             let size = match layout {
-                SizeLayout::Reach => self.data_sizes.as_ref()
+                SizeLayout::Reach | SizeLayout::Halo2 => self.data_sizes.as_ref()
                     .and_then(|d| d.fields.get(1))
                     .map(|(_, v)| *v as usize),
                 SizeLayout::H3 => matches!(status, AnimatedStreamStatus::Decoded)
@@ -284,7 +284,7 @@ impl<'a> AnimationGroup<'a> {
             // explicit sizes; H3 places them right after the animated
             // codec with sizes carried by the named fields.
             let (off, static_total, animated_total) = match layout {
-                SizeLayout::Reach => {
+                SizeLayout::Reach | SizeLayout::Halo2 => {
                     let cumsum = d.fields.iter().take(2).map(|(_, v)| *v as usize).sum::<usize>();
                     let s = d.fields.get(2).map(|(_, v)| *v as usize).unwrap_or(0);
                     let a = d.fields.get(3).map(|(_, v)| *v as usize).unwrap_or(0);
@@ -307,7 +307,7 @@ impl<'a> AnimationGroup<'a> {
         // elsewhere in the blob and isn't a `blob.len() - pill - movement` anchor.
         let movement = self.data_sizes.as_ref().map(|d| {
             let (off, size) = match layout {
-                SizeLayout::Reach => (
+                SizeLayout::Reach | SizeLayout::Halo2 => (
                     d.fields.iter().take(4).map(|(_, v)| *v as usize).sum::<usize>(),
                     d.fields.get(4).map(|(_, v)| *v as usize).unwrap_or(0),
                 ),

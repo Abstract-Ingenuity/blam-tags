@@ -56,4 +56,21 @@ impl Game {
             Game::Halo3 => Some(7),
         }
     }
+
+    /// The JMA-family (animation) text-format version this game's tools
+    /// read/write.
+    ///
+    /// Unlike JMS/ASS, all three generations share version **16392** —
+    /// the `header + node{name,first_child,next_sibling} + per-frame
+    /// transforms` layout. HABT (`io_scene_halo/file_jma`) lists 16392 as
+    /// valid for CE/H2/H3 (`__init__.py`: `16390` = "CE/H2/H3"), and our
+    /// writer already emits 16392 with H3+Reach corpus validation. The
+    /// later `16395` H2/H3 variant only adds an optional biped-controller
+    /// transform block, which extraction doesn't need; keeping one version
+    /// per game here gives a single dispatch point should that change.
+    pub fn jma_version(self) -> u16 {
+        match self {
+            Game::Halo1 | Game::Halo2 | Game::Halo3 => 16392,
+        }
+    }
 }

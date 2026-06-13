@@ -17,6 +17,7 @@
 //! engine-specific blob layouts (H3 hardcoded vs Reach cumulative-sum)
 //! and the binary references they were verified against.
 
+pub mod classic;
 pub mod codec;
 pub mod graph;
 pub mod jma;
@@ -113,6 +114,13 @@ impl PackedDataSizes {
     /// their SEMANTICS shift (e.g. `static_node_flags` becomes the
     /// static-codec byte size, not the static-flag byte size).
     pub fn layout(&self) -> SizeLayout {
+        // Halo 2 is built by `read_h2_data_sizes` with a leading
+        // `h2_static_data` marker field; its sections are ordered
+        // identically to Reach (codec/codec/flags/flags/movement/pill),
+        // so the decoder treats it positionally like Reach.
+        if self.fields.first().map(|(n, _)| n == "h2_static_data").unwrap_or(false) {
+            return SizeLayout::Halo2;
+        }
         let reach_only = ["blend_screen_data", "object_space_offset_data", "ik_chain_event_data"];
         if self.fields.iter().any(|(n, _)| reach_only.iter().any(|r| r == n)) {
             SizeLayout::Reach
@@ -135,6 +143,14 @@ pub enum SizeLayout {
     /// but several now carry codec/flag sizes rather than what the
     /// names suggest. See [`Self::reach_static_codec_size`] etc.
     Reach,
+    /// Halo 2 (`jmad`). The on-disk `data sizes` are stored either as
+    /// a 7-field unnamed struct (pool-block v1/v2) or as separate inline
+    /// fields (pool-block v0); [`read_h2_data_sizes`] normalizes both to
+    /// the positional order `[static_codec, animated_codec, static_flags,
+    /// animated_flags, movement, pill]`. That order matches Reach's, so
+    /// the codec decoder addresses Halo 2 with the same positional logic
+    /// as [`Self::Reach`].
+    Halo2,
 }
 
 /// One animation entry — header metadata from `animations[i]` joined
@@ -239,7 +255,8 @@ impl<'a> AnimationGroup<'a> {
         let sizes = self.data_sizes.as_ref()?;
         let off = match sizes.layout() {
             SizeLayout::H3 => sizes.get("default_data") as usize,
-            SizeLayout::Reach => sizes.fields.first().map(|(_, v)| *v as usize).unwrap_or(0),
+            SizeLayout::Reach | SizeLayout::Halo2 =>
+                sizes.fields.first().map(|(_, v)| *v as usize).unwrap_or(0),
         };
         self.blob.get(off).copied()
     }
@@ -265,6 +282,7 @@ impl<'a> Animation<'a> {
     /// non-`None` [`Self::parent`].
     pub fn new(tag: &'a TagFile) -> Result<Self, AnimationError> {
         let root = tag.root();
+        let game = crate::game::Game::of(tag);
 
         let top_prefix = TOP_LEVEL_NAMES.iter().copied()
             .find(|name| root.field_path(&format!("{name}/animations")).is_some())
@@ -355,11 +373,24 @@ impl<'a> Animation<'a> {
             // animation block element. Try inline only when the
             // resource lookup didn't find anything.
             if blob.is_empty() && data_sizes.is_none() {
-                if let Some(inline_blob) = read_inline_animation_data(&metadata) {
+                let inline_blob = if game == crate::game::Game::Halo2 {
+                    read_h2_animation_data(&metadata)
+                } else {
+                    read_inline_animation_data(&metadata)
+                };
+                if let Some(inline_blob) = inline_blob {
                     blob = inline_blob;
                     codec_byte = blob.first().copied();
                 }
-                data_sizes = read_packed_data_sizes(&metadata);
+                // Halo 2 stores the section sizes either as an unnamed
+                // 7-field `data sizes` struct (pool-block v1/v2) or as
+                // separate inline fields (v0); both need positional/
+                // explicit-name handling rather than the H3 named lookup.
+                data_sizes = if game == crate::game::Game::Halo2 {
+                    read_h2_data_sizes(&metadata)
+                } else {
+                    read_packed_data_sizes(&metadata)
+                };
                 if movement_type.is_none() {
                     movement_type = frame_info_type.clone();
                 }
@@ -605,6 +636,105 @@ fn read_packed_data_sizes(member: &TagStruct<'_>) -> Option<PackedDataSizes> {
     Some(PackedDataSizes { fields })
 }
 
+/// Build the codec decoder's positional [`PackedDataSizes`] from a Halo 2
+/// `animation_pool_block` element, normalizing the two on-disk shapes:
+///
+/// - **pool-block v1/v2** carry an unnamed 7-field `data sizes` struct in
+///   the order `StaticNodeFlags(b) AnimatedNodeFlags(b) MovementData(s)
+///   PillOffsetData(s) StaticDataSize(s) UncompressedDataSize(i)
+///   CompressedDataSize(i)` (TagTool `Gen2.ModelAnimationGraph.
+///   PackedDataSizesStructBlock`);
+/// - **pool-block v0** stores the same values as separate inline fields
+///   (`static node flag data size`, `animated node flag data size`,
+///   `movement_data size`, `default_data size`, `uncompressed_data size`,
+///   `compressed_data size`).
+///
+/// Both are emitted in the positional order the codec decoder expects for
+/// [`SizeLayout::Halo2`]: `[static_codec, animated_codec, static_flags,
+/// animated_flags, movement, pill]`, where `animated_codec = uncompressed
+/// + compressed` (the animated stream is one codec, either form). The
+/// leading `h2_static_data` name is the marker [`PackedDataSizes::layout`]
+/// keys on. Blob section order verified against TagTool's
+/// `AnimationResourceData.Read` (static codec → animated codec → static
+/// flags → animated flags → movement).
+/// Read a Halo 2 `animation_pool_block` element's `animation data` blob.
+/// Tries the named field first, then falls back to the element's sole
+/// `data`-typed field. The named lookup succeeds against the current
+/// definitions, but the `find_map` fallback guards against a re-dump:
+/// the versioned-layout generator emits the base `animation_pool_block`
+/// (pool-block v5) with this field's name NULL, and it is the only
+/// `data` field on the element. (The shipped def has the name patched
+/// back in — see the matching `data sizes` note in `read_h2_data_sizes`.)
+fn read_h2_animation_data<'a>(anim: &TagStruct<'a>) -> Option<&'a [u8]> {
+    anim.field("animation data").and_then(|f| f.as_data())
+        .or_else(|| anim.field("animation_data").and_then(|f| f.as_data()))
+        .or_else(|| anim.fields().find_map(|f| f.as_data()))
+}
+
+fn read_h2_data_sizes(anim: &TagStruct<'_>) -> Option<PackedDataSizes> {
+    let build = |static_data: i64, animated: i64, static_flags: i64,
+                 animated_flags: i64, movement: i64, pill: i64| {
+        PackedDataSizes {
+            fields: vec![
+                ("h2_static_data".into(), static_data),
+                ("h2_animated_data".into(), animated),
+                ("h2_static_flags".into(), static_flags),
+                ("h2_animated_flags".into(), animated_flags),
+                ("h2_movement".into(), movement),
+                ("h2_pill".into(), pill),
+            ],
+        }
+    };
+
+    // v1-v5: the `data sizes` struct, read positionally. The named
+    // lookup works against the current def; the `find_map` fallback
+    // guards against a re-dump — the versioned-layout generator emits
+    // the base `animation_pool_block` (pool-block v5) with this struct's
+    // name NULL (we patched the name back into the shipped def), and it
+    // is the element's sole `struct`-typed field. (v0 has no struct
+    // here; its sizes are separate inline fields, so the `find_map`
+    // returns `None` and we drop to the v0 branch below.)
+    if let Some(s) = anim.field("data sizes").and_then(|f| f.as_struct())
+        .or_else(|| anim.fields().find_map(|f| f.as_struct()))
+    {
+        let vals: Vec<i64> = s.fields().filter_map(|f| int_value(f.value()?)).collect();
+        if vals.len() >= 7 {
+            let (static_flags, animated_flags, movement, pill, static_data, uncompressed, compressed) =
+                (vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6]);
+            return Some(build(static_data, uncompressed + compressed,
+                static_flags, animated_flags, movement, pill));
+        }
+    }
+
+    // v0: separate inline size fields.
+    let g = |n: &str| anim.read_int_any(n).map(|v| v as i64);
+    let static_flags = g("static node flag data size")?;
+    let animated_flags = g("animated node flag data size")?;
+    let movement = g("movement_data size").unwrap_or(0);
+    let static_data = g("default_data size").unwrap_or(0);
+    let uncompressed = g("uncompressed_data size").unwrap_or(0);
+    let compressed = g("compressed_data size").unwrap_or(0);
+    Some(build(static_data, uncompressed + compressed,
+        static_flags, animated_flags, movement, 0))
+}
+
+/// Extract an integer from any integer-shaped [`TagFieldData`] variant.
+/// Used to read the Halo 2 `data sizes` struct's *unnamed* fields by
+/// position (where [`TagStruct::read_int_any`]'s name lookup can't help).
+pub(crate) fn int_value(v: TagFieldData) -> Option<i64> {
+    Some(match v {
+        TagFieldData::CharInteger(x) => x as i64,
+        TagFieldData::ShortInteger(x) => x as i64,
+        TagFieldData::LongInteger(x) => x as i64,
+        TagFieldData::Int64Integer(x) => x,
+        TagFieldData::ByteInteger(x) => x as i64,
+        TagFieldData::WordInteger(x) => x as i64,
+        TagFieldData::DwordInteger(x) => x as i64,
+        TagFieldData::QwordInteger(x) => x as i64,
+        _ => return None,
+    })
+}
+
 
 //================================================================================
 // Decoded data types
@@ -804,6 +934,13 @@ pub struct BitArray {
 }
 
 impl BitArray {
+    /// Build from a 64-bit mask (low word = bits 0–31, high = 32–63).
+    /// Used by the Halo CE antr path, whose node-flag masks are two
+    /// `long_integer`s.
+    pub fn from_u64(mask: u64) -> Self {
+        Self { words: vec![mask as u32, (mask >> 32) as u32] }
+    }
+
     /// Parse a tightly packed flag bitarray from little-endian u32
     /// words. Trailing bytes that don't fill a full u32 are dropped.
     pub fn from_bytes(bytes: &[u8]) -> Self {

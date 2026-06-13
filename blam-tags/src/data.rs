@@ -142,6 +142,23 @@ pub(crate) enum TagResourceChunk {
     Xsync { version: u32, payload: Vec<u8> },
 }
 
+/// Match a struct field's stored name against a lookup query, tolerating
+/// a trailing `|<code>` suffix on the stored name.
+///
+/// Some definitions (notably the Halo 2 `model_animation_graph`) carry a
+/// dumper artifact on block field names — e.g. `animations|ABCDCC` — where
+/// the portion after `|` is a name-code, not part of the addressable field
+/// name. Callers look the field up as plain `animations`, so we compare the
+/// stored name's pre-`|` segment. An exact match (no `|` present) still
+/// works because `split('|').next()` returns the whole string. Verified
+/// collision-free across the H2/H2A/H3 jmad definitions.
+pub(crate) fn field_name_matches(stored: Option<&str>, query: &str) -> bool {
+    match stored {
+        Some(s) => s.split('|').next() == Some(query),
+        None => false,
+    }
+}
+
 impl TagStructData {
     /// Parse a `tgst` chunk.
     ///
@@ -397,7 +414,7 @@ impl TagStructData {
             if field.field_type == TagFieldType::Terminator {
                 return None;
             }
-            if layout.get_string(field.name_offset) == Some(name) {
+            if field_name_matches(layout.get_string(field.name_offset), name) {
                 return Some(field_index);
             }
             field_index += 1;

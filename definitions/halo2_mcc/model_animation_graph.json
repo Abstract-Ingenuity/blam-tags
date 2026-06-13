@@ -1540,11 +1540,11 @@
     },
     {
      "type": "short_integer",
-     "name": null
+     "name": "previous variant sibling"
     },
     {
      "type": "short_integer",
-     "name": null
+     "name": "next variant sibling"
     },
     {
      "type": "pad",
@@ -1553,12 +1553,12 @@
     },
     {
      "type": "data",
-     "name": null,
+     "name": "animation data",
      "definition": "unnamed_data"
     },
     {
      "type": "struct",
-     "name": null,
+     "name": "data sizes",
      "definition": "packed_data_sizes_struct"
     },
     {

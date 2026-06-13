@@ -314,7 +314,7 @@ fn find_field_in_struct(
         if field.field_type == TagFieldType::Terminator {
             return None;
         }
-        if layout.get_string(field.name_offset) == Some(name) {
+        if crate::data::field_name_matches(layout.get_string(field.name_offset), name) {
             let type_name_offset = layout.field_types[field.type_index as usize].name_offset;
             let type_name = layout.get_string(type_name_offset).unwrap_or("");
             if type_name.eq_ignore_ascii_case(filter) {

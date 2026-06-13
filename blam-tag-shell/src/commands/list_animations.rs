@@ -10,12 +10,19 @@
 use anyhow::{Context, Result};
 use serde_json::json;
 
+use blam_tags::animation::classic::CeAnimations;
 use blam_tags::Animation;
 
 use crate::context::CliContext;
 
 pub fn run(ctx: &mut CliContext, json_output: bool) -> Result<()> {
     let loaded = ctx.loaded("list-animations")?;
+
+    // Halo CE `model_animations` (antr) — different on-disk model.
+    if &loaded.tag.header.group_tag.to_be_bytes() == b"antr" {
+        return run_ce(&CeAnimations::new(&loaded.tag), json_output);
+    }
+
     let animation = Animation::new(&loaded.tag)
         .with_context(|| format!("failed to walk animations in {}", loaded.path.display()))?;
 
@@ -94,5 +101,47 @@ pub fn run(ctx: &mut CliContext, json_output: bool) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// `list-animations` for Halo CE `model_animations` (antr).
+fn run_ce(animations: &CeAnimations<'_>, json_output: bool) -> Result<()> {
+    if json_output {
+        let rows: Vec<_> = animations.iter().map(|g| json!({
+            "index": g.index,
+            "name": g.name,
+            "type": g.animation_type,
+            "frame_info_type": g.frame_info_type,
+            "frame_count": g.frame_count,
+            "node_count": g.node_count,
+            "node_list_checksum": g.node_list_checksum,
+            "world_relative": g.world_relative,
+        })).collect();
+        println!("{}", serde_json::to_string_pretty(&json!({
+            "count": animations.len(), "animations": rows,
+        }))?);
+        return Ok(());
+    }
+
+    if animations.is_empty() {
+        println!("(no animations)");
+        return Ok(());
+    }
+
+    println!(
+        "{:>5}  {:>5} {:>4}  {:<12}  {:<14}  {}",
+        "idx", "frame", "node", "type", "movement", "name",
+    );
+    for g in animations.iter() {
+        println!(
+            "{:>5}  {:>5} {:>4}  {:<12}  {:<14}  {}",
+            g.index,
+            g.frame_count,
+            g.node_count,
+            g.animation_type.as_deref().unwrap_or(""),
+            g.frame_info_type.as_deref().unwrap_or(""),
+            g.name.as_deref().unwrap_or("(unnamed)"),
+        );
+    }
     Ok(())
 }

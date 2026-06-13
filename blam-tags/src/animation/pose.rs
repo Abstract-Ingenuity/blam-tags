@@ -62,6 +62,27 @@ impl Skeleton {
                 return Self { nodes };
             }
         }
+        // Halo CE `model_animations` (antr): the skeleton is a root-level
+        // `nodes` block whose fields drop the `index` suffix (`first child
+        // node` / `next sibling node` / `parent node`) and store the name
+        // as an inline string rather than a string-id.
+        if let Some(block) = root.field_path("nodes").and_then(|f| f.as_block()) {
+            let mut nodes = Vec::with_capacity(block.len());
+            for i in 0..block.len() {
+                let Some(elem) = block.element(i) else { continue };
+                let name = elem.read_string("name")
+                    .or_else(|| elem.read_string_id("name"))
+                    .unwrap_or_default();
+                let idx = |n: &str| elem.read_int_any(n).map(|v| v as i16).unwrap_or(-1);
+                nodes.push(SkeletonNode {
+                    name,
+                    first_child: idx("first child node"),
+                    next_sibling: idx("next sibling node"),
+                    parent: idx("parent node"),
+                });
+            }
+            return Self { nodes };
+        }
         Self { nodes: Vec::new() }
     }
 
