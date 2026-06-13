@@ -96,9 +96,16 @@ pub fn run(
             reject_hlmt_only_args(kinds, force, "collision_model")?;
             run_collision(ctx, output, flat)
         }
+        // Direct physics input. H2/H3 standalone `physics_model` → JMS
+        // shapes. No skeleton on a standalone tag, so shape transforms
+        // stay node-local (pass the `.model` for skeleton composition).
+        b"phmo" => {
+            reject_hlmt_only_args(kinds, force, "physics_model")?;
+            run_physics(ctx, output, flat)
+        }
         _ => anyhow::bail!(
             "extract-geometry expects `.model` (hlmt), `.gbxmodel` (mod2, Halo CE), \
-             `.collision_model`/`.model_collision_geometry` (coll), \
+             `.collision_model`/`.model_collision_geometry` (coll), `.physics_model` (phmo), \
              `.scenario` (scnr), or `.scenario_structure_bsp` (sbsp) — got group `{}`.",
             std::str::from_utf8(&group).unwrap_or("?"),
         ),
@@ -134,6 +141,19 @@ fn read_render_jms(tag: &TagFile, game: blam_tags::game::Game) -> Result<JmsFile
         Game::Halo1 => JmsFile::from_gbxmodel(tag)?,
         Game::Halo2 => JmsFile::from_h2_render_model(tag)?,
         Game::Halo3 => JmsFile::from_render_model(tag)?,
+    })
+}
+
+/// Build the physics_model JMS using the engine-correct reader. Halo 2
+/// stores each Havok shape FLAT (name/material/radius/transform on the
+/// shape block, parented by name) whereas Halo 3 uses nested substructs
+/// + a rigid-body shape reference. Halo CE has no `physics_model` (it
+/// uses the older `physics` tag), so it never reaches here.
+fn read_physics_jms(tag: &TagFile, skeleton: &[blam_tags::JmsNode], game: blam_tags::game::Game) -> Result<JmsFile> {
+    use blam_tags::game::Game;
+    Ok(match game {
+        Game::Halo2 => JmsFile::from_physics_model_h2_with_skeleton(tag, skeleton)?,
+        _ => JmsFile::from_physics_model_with_skeleton(tag, skeleton)?,
     })
 }
 
@@ -250,7 +270,7 @@ fn run_hlmt(
                     let t = ctx
                         .load_referenced_tag(r, Kind::Physics.extension())
                         .with_context(|| format!("read physics_model `{r}`"))?;
-                    let jms = JmsFile::from_physics_model_with_skeleton(&t, skel)
+                    let jms = read_physics_jms(&t, skel, game)
                         .context("build physics_model JMS")?;
                     let path = output_path_for(&out_root, &stem, kind, flat, "jms");
                     write_to(&path, |w| Ok(jms.write(w, jms_version)?))?;
@@ -525,6 +545,23 @@ fn run_collision(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Resu
     let path = output_path_for(&out_root, &stem, Kind::Collision, flat, "jms");
     write_to(&path, |w| Ok(jms.write(w, game.jms_version())?))?;
     println!("{}: [collision] {}", path.display(), jms_summary(&jms));
+    Ok(())
+}
+
+/// Direct `phmo` input → physics JMS shapes. Dispatches on engine (H2
+/// flat shapes vs H3 nested). No skeleton on a standalone tag, so shape
+/// transforms stay node-local; pass the parent `.model` for world-space
+/// composition against the render skeleton.
+fn run_physics(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()> {
+    use blam_tags::game::Game;
+    let loaded = ctx.loaded("extract-geometry")?;
+    let game = Game::of(&loaded.tag);
+    let jms = read_physics_jms(&loaded.tag, &[], game).context("build physics_model JMS")?;
+    let stem = tag_stem(&loaded.path, "physics_model");
+    let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    let path = output_path_for(&out_root, &stem, Kind::Physics, flat, "jms");
+    write_to(&path, |w| Ok(jms.write(w, game.jms_version())?))?;
+    println!("{}: [physics] {}", path.display(), jms_summary(&jms));
     Ok(())
 }
 

@@ -958,6 +958,76 @@ impl JmsFile {
         })
     }
 
+    /// Reconstruct the JMS from a Halo 2 `physics_model`. Same shape
+    /// set as H3 (spheres / pills / boxes / polyhedra + ragdoll/hinge
+    /// constraints) but H2 stores each shape FLAT (name / material /
+    /// radius / transform directly on the shape block, with no `base` /
+    /// `box shape` / `capsule shape` substructs) and references nodes by
+    /// the shape's `name` string_id matching a node name (its rigid
+    /// bodies carry no shape reference). Constraints, nodes and
+    /// materials reuse the shared phmo readers.
+    pub fn from_physics_model_h2(tag: &TagFile) -> Result<Self, JmsError> {
+        Self::build_physics_model_h2(tag, None)
+    }
+
+    /// Same as [`Self::from_physics_model_h2`] but overlays the supplied
+    /// skeleton's world-space transforms onto the phmo nodes (matched by
+    /// name), exactly like [`Self::from_physics_model_with_skeleton`].
+    pub fn from_physics_model_h2_with_skeleton(
+        tag: &TagFile,
+        skeleton: &[JmsNode],
+    ) -> Result<Self, JmsError> {
+        Self::build_physics_model_h2(tag, Some(skeleton))
+    }
+
+    fn build_physics_model_h2(tag: &TagFile, skeleton: Option<&[JmsNode]>) -> Result<Self, JmsError> {
+        let root = tag.root();
+        let nodes = read_phmo_nodes(&root)?;
+        let nodes = if let Some(skel) = skeleton {
+            let by_name: std::collections::HashMap<&str, &JmsNode> =
+                skel.iter().map(|n| (n.name.as_str(), n)).collect();
+            nodes.into_iter().map(|mut n| {
+                if let Some(src) = by_name.get(n.name.as_str()) {
+                    n.rotation = src.rotation;
+                    n.translation = src.translation;
+                }
+                n
+            }).collect()
+        } else {
+            nodes
+        };
+        let materials = read_phmo_materials(&root)?;
+        // Primary parenting: each H2 rigid_body carries node + a
+        // (shape_type, shape_index) reference — the same scheme the H3
+        // reader uses. Our generated def leaves that 4-byte reference as
+        // an unnamed pointer field, so read it from the element bytes
+        // (shape_type @ +56, shape_index @ +58 in the v1/144-byte rigid
+        // body; verified against masterchief). Map (type, index) → node.
+        // Falls back to name-matching (shape name == bone name) when the
+        // reference is unavailable (e.g. an older v0 rigid-body layout).
+        let (parent_map, default_node) = build_h2_shape_parent_map(&root);
+        let name_to_node: std::collections::HashMap<String, i32> = nodes.iter()
+            .enumerate().map(|(i, n)| (n.name.clone(), i as i32)).collect();
+        let spheres = read_phmo_h2_spheres(&root, &parent_map, &name_to_node, default_node);
+        let boxes = read_phmo_h2_boxes(&root, &parent_map, &name_to_node, default_node);
+        let capsules = read_phmo_h2_pills(&root, &parent_map, &name_to_node, default_node);
+        let convex_shapes = read_phmo_h2_polyhedra(&root, &parent_map, &name_to_node, default_node);
+        let ragdolls = read_phmo_ragdolls(&root);
+        let mut hinges = read_phmo_hinges(&root, false);
+        hinges.extend(read_phmo_hinges(&root, true));
+        Ok(Self {
+            nodes,
+            materials,
+            spheres,
+            boxes,
+            capsules,
+            convex_shapes,
+            ragdolls,
+            hinges,
+            ..Default::default()
+        })
+    }
+
     /// Write the JMS as version 8213 text format (the H3 source
     /// convention) into `w`. Layout matches the embedded-source
     /// section ordering exactly so byte-diffs against artist
@@ -1055,7 +1125,6 @@ impl JmsFile {
     fn write_modern_after_version<W: Write>(
         &self, w: &mut W, version: u16, has_vertex_color: bool,
     ) -> Result<(), JmsError> {
-        let _ = version;
         writeln!(w, ";### NODES ###")?;
         writeln!(w, "{}", self.nodes.len())?;
         writeln!(w, ";\t<name>")?;
@@ -1247,10 +1316,15 @@ impl JmsFile {
             writeln!(w)?;
         }
 
+        // The ragdoll `<friction limit>` (max friction torque) is an 8213
+        // (Halo 3) addition — the 8210 (Halo 2) ragdoll format omits it.
+        let ragdoll_has_friction = version >= 8213;
         writeln!(w, ";### RAGDOLLS ###")?;
         writeln!(w, "{}", self.ragdolls.len())?;
-        for h in ["<name>", "<attached index>", "<referenced index>", "<attached transform>", "<reference transform>", "<min twist>", "<max twist>", "<min cone>", "<max cone>", "<min plane>", "<max plane>", "<friction limit>"] {
-            writeln!(w, ";\t{h}")?;
+        {
+            let mut headers: Vec<&str> = vec!["<name>", "<attached index>", "<referenced index>", "<attached transform>", "<reference transform>", "<min twist>", "<max twist>", "<min cone>", "<max cone>", "<min plane>", "<max plane>"];
+            if ragdoll_has_friction { headers.push("<friction limit>"); }
+            for h in headers { writeln!(w, ";\t{h}")?; }
         }
         writeln!(w)?;
         for (i, r) in self.ragdolls.iter().enumerate() {
@@ -1268,7 +1342,9 @@ impl JmsFile {
             write_floats(w, &[r.max_cone])?;
             write_floats(w, &[r.min_plane])?;
             write_floats(w, &[r.max_plane])?;
-            write_floats(w, &[r.friction_limit])?;
+            if ragdoll_has_friction {
+                write_floats(w, &[r.friction_limit])?;
+            }
             writeln!(w)?;
         }
 
@@ -1612,6 +1688,174 @@ fn read_phmo_polyhedra(root: &TagStruct<'_>, parents: &std::collections::HashMap
             name: base.read_string_id("name").unwrap_or_default(),
             parent: parent_for(parents, SHAPE_TYPE_POLYHEDRON, i),
             material: base.read_int_any("material").map(|v| v as i32).unwrap_or(0),
+            rotation: RealQuaternion::IDENTITY,
+            translation: RealPoint3d::ZERO,
+            vertices: verts,
+        });
+        fv_offset += fv_size;
+    }
+    out
+}
+
+/// Build the `(shape_type, shape_index) → node` map from the H2
+/// `rigid bodies` block. Each rigid body carries its node index plus a
+/// shape reference our generated def exposes only as an unnamed pointer
+/// field — read it straight from the element bytes: `shape_type` is the
+/// i16 at +56 and `shape_index` the i16 at +58 (the v1/144-byte rigid
+/// body layout). Skips bodies whose element is too short (older v0).
+/// Returns `(map, default_node)`. `default_node` is the lone rigid
+/// body's node when there is exactly one — for scenery whose shapes are
+/// wrapped in a list/mopp (type 14/15), the child shapes are runtime
+/// havok pointers not modeled on disk, so the shape-ref map can't reach
+/// them; but a single-rigid-body model's shapes all belong to that one
+/// node, so it's the correct fallback. Multi-body models leave it `-1`.
+fn build_h2_shape_parent_map(root: &TagStruct<'_>) -> (std::collections::HashMap<(i64, i64), i32>, i32) {
+    let mut out = std::collections::HashMap::new();
+    let Some(rbs) = root.field_path("rigid bodies").and_then(|f| f.as_block()) else { return (out, -1); };
+    let mut nodes_seen: std::collections::HashSet<i32> = std::collections::HashSet::new();
+    for i in 0..rbs.len() {
+        let rb = rbs.element(i).unwrap();
+        let node = rb.read_int_any("node").map(|v| v as i32).unwrap_or(-1);
+        nodes_seen.insert(node);
+        let raw = rb.raw();
+        if raw.len() < 60 { continue; }
+        let shape_type = i16::from_le_bytes([raw[56], raw[57]]) as i64;
+        let shape_index = i16::from_le_bytes([raw[58], raw[59]]) as i64;
+        if shape_index >= 0 {
+            out.insert((shape_type, shape_index), node);
+        }
+    }
+    let default_node = if nodes_seen.len() == 1 { *nodes_seen.iter().next().unwrap() } else { -1 };
+    (out, default_node)
+}
+
+/// Parent-node index + name for a Halo 2 shape: prefer the rigid-body
+/// shape reference (`(shape_type, index) → node`); fall back to matching
+/// the shape's `name` string_id against the node names (works for
+/// character ragdolls whose shapes carry bone names).
+fn h2_shape_parent(
+    s: &TagStruct<'_>,
+    shape_type: i64,
+    index: usize,
+    parent_map: &std::collections::HashMap<(i64, i64), i32>,
+    name_to_node: &std::collections::HashMap<String, i32>,
+    default_node: i32,
+) -> (String, i32) {
+    let name = s.read_string_id("name").unwrap_or_default();
+    let parent = parent_map.get(&(shape_type, index as i64)).copied()
+        .or_else(|| name_to_node.get(&name).copied())
+        .unwrap_or(default_node);
+    (name, parent)
+}
+
+fn read_phmo_h2_spheres(root: &TagStruct<'_>, parent_map: &std::collections::HashMap<(i64, i64), i32>, name_to_node: &std::collections::HashMap<String, i32>, default_node: i32) -> Vec<JmsSphere> {
+    let Some(block) = root.field_path("spheres").and_then(|f| f.as_block()) else { return Vec::new(); };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let s = block.element(i).unwrap();
+        let (name, parent) = h2_shape_parent(&s, SHAPE_TYPE_SPHERE, i, parent_map, name_to_node, default_node);
+        out.push(JmsSphere {
+            name,
+            parent,
+            material: s.read_int_any("material").map(|v| v as i32).unwrap_or(0),
+            rotation: rotation_from_basis(&s),
+            translation: s.read_vec3("translation").as_point() * SCALE,
+            radius: s.read_real("radius").unwrap_or(0.0) * SCALE,
+        });
+    }
+    out
+}
+
+fn read_phmo_h2_boxes(root: &TagStruct<'_>, parent_map: &std::collections::HashMap<(i64, i64), i32>, name_to_node: &std::collections::HashMap<String, i32>, default_node: i32) -> Vec<JmsBox> {
+    let Some(block) = root.field_path("boxes").and_then(|f| f.as_block()) else { return Vec::new(); };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let b = block.element(i).unwrap();
+        let (name, parent) = h2_shape_parent(&b, SHAPE_TYPE_BOX, i, parent_map, name_to_node, default_node);
+        // Flat layout: `half extents` + convex skin `radius` + the
+        // `rotation i/j/k` + `translation` are all on the box block.
+        // Same dimension formula as H3: side = (half + radius) × 2 × 100.
+        let half = b.read_vec3("half extents");
+        let convex_radius = b.read_real("radius").unwrap_or(0.0);
+        out.push(JmsBox {
+            name,
+            parent,
+            material: b.read_int_any("material").map(|v| v as i32).unwrap_or(0),
+            rotation: rotation_from_basis(&b),
+            translation: b.read_vec3("translation").as_point() * SCALE,
+            width:  (half.i + convex_radius) * 2.0 * SCALE,
+            length: (half.j + convex_radius) * 2.0 * SCALE,
+            height: (half.k + convex_radius) * 2.0 * SCALE,
+        });
+    }
+    out
+}
+
+fn read_phmo_h2_pills(root: &TagStruct<'_>, parent_map: &std::collections::HashMap<(i64, i64), i32>, name_to_node: &std::collections::HashMap<String, i32>, default_node: i32) -> Vec<JmsCapsule> {
+    let Some(block) = root.field_path("pills").and_then(|f| f.as_block()) else { return Vec::new(); };
+    let mut out = Vec::with_capacity(block.len());
+    for i in 0..block.len() {
+        let p = block.element(i).unwrap();
+        let (name, parent) = h2_shape_parent(&p, SHAPE_TYPE_PILL, i, parent_map, name_to_node, default_node);
+        let radius = p.read_real("radius").unwrap_or(0.0);
+        let bottom = p.read_vec3("bottom");
+        let top = p.read_vec3("top");
+        // Same anchor/orientation math as the H3 pill reader.
+        let dir = bottom - top;
+        let anchor = bottom + dir.normalized() * radius;
+        let height = (top - bottom).length() * SCALE;
+        let rot = RealQuaternion::shortest_arc(
+            RealVector3d { i: 0.0, j: 0.0, k: -1.0 },
+            top - bottom,
+        );
+        out.push(JmsCapsule {
+            name,
+            parent,
+            material: p.read_int_any("material").map(|v| v as i32).unwrap_or(0),
+            rotation: rot,
+            translation: anchor.as_point() * SCALE,
+            height,
+            radius: radius * SCALE,
+        });
+    }
+    out
+}
+
+fn read_phmo_h2_polyhedra(root: &TagStruct<'_>, parent_map: &std::collections::HashMap<(i64, i64), i32>, name_to_node: &std::collections::HashMap<String, i32>, default_node: i32) -> Vec<JmsConvex> {
+    let Some(block) = root.field_path("polyhedra").and_then(|f| f.as_block()) else { return Vec::new(); };
+    // H2 keeps the packed Havok four-vectors in the top-level
+    // `polyhedron four vectors` block (like H3), each polyhedron's
+    // `four vectors size` advancing a running offset. NOTE: H2 only
+    // names the x/y/z vec3 of each four-vector group — the 4th packed
+    // vertex (the Havok `w` lane) sits in unnamed skip bytes, so we
+    // recover 3 of every 4 hull vertices. Polyhedra are rare in phmo
+    // (most shapes are sphere/pill/box); the convex hull is slightly
+    // under-sampled but positioned correctly.
+    let four_vectors = root.field_path("polyhedron four vectors").and_then(|f| f.as_block());
+    let mut out = Vec::with_capacity(block.len());
+    let mut fv_offset: usize = 0;
+    for i in 0..block.len() {
+        let p = block.element(i).unwrap();
+        let (name, parent) = h2_shape_parent(&p, SHAPE_TYPE_POLYHEDRON, i, parent_map, name_to_node, default_node);
+        let fv_size = p.read_int_any("four vectors size").unwrap_or(0).max(0) as usize;
+        let mut verts: Vec<RealPoint3d> = Vec::new();
+        if let Some(fvb) = &four_vectors {
+            for k in 0..fv_size {
+                let Some(fv) = fvb.element(fv_offset + k) else { continue };
+                let xv = fv.read_vec3("four vectors x");
+                let yv = fv.read_vec3("four vectors y");
+                let zv = fv.read_vec3("four vectors z");
+                verts.push(RealPoint3d { x: xv.i, y: yv.i, z: zv.i } * SCALE);
+                verts.push(RealPoint3d { x: xv.j, y: yv.j, z: zv.j } * SCALE);
+                verts.push(RealPoint3d { x: xv.k, y: yv.k, z: zv.k } * SCALE);
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        verts.retain(|v| seen.insert((v.x.to_bits(), v.y.to_bits(), v.z.to_bits())));
+        out.push(JmsConvex {
+            name,
+            parent,
+            material: p.read_int_any("material").map(|v| v as i32).unwrap_or(0),
             rotation: RealQuaternion::IDENTITY,
             translation: RealPoint3d::ZERO,
             vertices: verts,
