@@ -215,7 +215,9 @@ impl CliContext {
              (or pass `--cache` to read from a monolithic cache)",
         )?;
         let path = resolve_tag_path(&tags_root, rel_path, group_ext);
-        TagFile::read(&path).map_err(|e| anyhow::anyhow!("failed to read {}: {e}", path.display()))
+        // Route through `read_tag_file` (not the MCC-only `TagFile::read`)
+        // so referenced classic CE/H2 tags decode via the classic path.
+        self.read_tag_file(&path)
     }
 
     /// True when this context resolves tag references through a

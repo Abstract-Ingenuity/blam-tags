@@ -1,0 +1,59 @@
+//! Engine/game identity for a tag and the asset-format versions each
+//! game uses.
+//!
+//! This is the single dispatch point for engine-specific asset
+//! extraction: it decides which tag-structure reader to use and which
+//! JMS/ASS text-format version to emit. The classic engines (Halo CE,
+//! Halo 2) carry their own older render/collision tag structures and
+//! older JMS/ASS versions; the gen3+ MCC engines (Halo 3, ODST, Reach,
+//! Halo 4, H2A) share one structure and one version pair.
+
+use crate::classic::ClassicEngine;
+use crate::file::TagFile;
+
+/// The Halo game (engine generation) a tag belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Game {
+    /// Halo 1 / Combat Evolved (Anniversary). `gbxmodel` render geometry,
+    /// JMS version 8200, no ASS (its BSP source is also JMS).
+    Halo1,
+    /// Halo 2. `render_model` (section-based) geometry, JMS version 8210,
+    /// ASS version 2.
+    Halo2,
+    /// Halo 3 and the later gen3/gen4 MCC engines (ODST, Reach, Halo 4,
+    /// H2A) — they share `render_model` (per-mesh-temporary) geometry,
+    /// JMS version 8213, and ASS version 7.
+    Halo3,
+}
+
+impl Game {
+    /// Classify a tag by its container engine: classic Halo CE → Halo1,
+    /// classic Halo 2 (any sub-version) → Halo2, MCC self-describing →
+    /// Halo3.
+    pub fn of(tag: &TagFile) -> Game {
+        match tag.classic_engine() {
+            Some(ClassicEngine::HaloCe) => Game::Halo1,
+            Some(_) => Game::Halo2,
+            None => Game::Halo3,
+        }
+    }
+
+    /// The JMS text-format version this game's tools read/write.
+    pub fn jms_version(self) -> u16 {
+        match self {
+            Game::Halo1 => 8200,
+            Game::Halo2 => 8210,
+            Game::Halo3 => 8213,
+        }
+    }
+
+    /// The ASS text-format version, or `None` for Halo 1 (no ASS format —
+    /// Halo 1 BSP source is JMS).
+    pub fn ass_version(self) -> Option<u16> {
+        match self {
+            Game::Halo1 => None,
+            Game::Halo2 => Some(2),
+            Game::Halo3 => Some(7),
+        }
+    }
+}

@@ -43,7 +43,7 @@ use crate::api::TagStruct;
 use crate::fields::TagFieldData;
 use crate::file::TagFile;
 use crate::geometry::{
-    read_compression_bounds, strip_to_list_u32, walk_surface_ring,
+    read_compression_bounds, strip_to_list, strip_to_list_u32, walk_surface_ring,
     CompressionBounds, EdgeRow, SCALE,
 };
 use crate::math::{RealPoint3d, RealQuaternion, RealVector3d};
@@ -257,6 +257,148 @@ impl JmsFile {
         // TagTool extracts this only for `VertexType.Decorator`; we
         // run it for every render_model that has placements.
         append_instance_geometry(&root, &mut materials, &mut vertices, &mut triangles, &bounds)?;
+        Ok(Self { nodes: world_nodes, materials, markers, vertices, triangles, ..Default::default() })
+    }
+
+    /// Walk a Halo 2 `render_model` and reconstruct the JMS scene.
+    ///
+    /// Halo 2 stores render geometry differently from Halo 3: per-section
+    /// under `sections[i]/section data[0]/section/{parts, raw vertices,
+    /// strip indices}` rather than `render geometry/per mesh temporary`.
+    /// `regions[]/permutations[]` carry per-LOD `Lx section index` fields
+    /// (L1 = highest detail, which we export). Vertices are decompressed
+    /// floats — the per-section `geometry compression` bounds are
+    /// vestigial X360 metadata, so no dequantization is applied. Triangle
+    /// strips index the section's own `raw vertices`; each part owns a
+    /// `[strip start .. strip start + strip length]` sub-range and a
+    /// material. Node binding follows the section's classification:
+    /// worldspace/rigid bind every vertex to the section's single `rigid
+    /// node`; rigid-boned/skinned use the per-vertex node indices/weights
+    /// (node-map remap is not yet applied — H2 sections in the corpus
+    /// carry `node map size == 0`, i.e. already-global indices).
+    pub fn from_h2_render_model(tag: &TagFile) -> Result<Self, JmsError> {
+        let root = tag.root();
+        let world_nodes = chain_local_to_world(&read_nodes(&root)?);
+        let markers = read_markers(&root)?;
+
+        let mats_block = root.field_path("materials").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("materials"))?;
+        let regions_block = root.field_path("regions").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("regions"))?;
+        let sections_block = root.field_path("sections").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("sections"))?;
+
+        let mut materials: Vec<JmsMaterial> = Vec::new();
+        let mut vertices: Vec<JmsVertex> = Vec::new();
+        let mut triangles: Vec<JmsTriangle> = Vec::new();
+        let mut emitted_sections: Vec<i32> = Vec::new();
+
+        for ri in 0..regions_block.len() {
+            let region = regions_block.element(ri).unwrap();
+            let region_name = region.read_string_id("name").unwrap_or_default();
+            let perms = match region.field("permutations").and_then(|f| f.as_block()) {
+                Some(b) => b, None => continue,
+            };
+            for pi in 0..perms.len() {
+                let perm = perms.element(pi).unwrap();
+                let perm_name = perm.read_string_id("name").unwrap_or_default();
+                // Export the highest-detail LOD whose section index is in
+                // range. Some perms carry stale/garbage values in the
+                // higher LOD slots (e.g. L1 = 27765 on a 1-section model)
+                // while a lower slot holds the real index — require the
+                // index to actually address a section, not merely be >= 0.
+                let nsec = sections_block.len();
+                let sec_idx = ["L1 section index", "L2 section index", "L3 section index",
+                               "L4 section index", "L5 section index", "L6 section index"]
+                    .iter()
+                    .find_map(|f| perm.read_int_any(f).map(|v| v as i32)
+                        .filter(|&v| v >= 0 && (v as usize) < nsec))
+                    .unwrap_or(-1);
+                if sec_idx < 0 { continue; }
+                // A section may be referenced by several (region, perm)
+                // pairs; emit it once (first reference wins the label).
+                if emitted_sections.contains(&sec_idx) { continue; }
+                emitted_sections.push(sec_idx);
+
+                let section = sections_block.element(sec_idx as usize).unwrap();
+                let classification = section
+                    .read_int_any("global_geometry_classification_enum_definition")
+                    .unwrap_or(1) as i32;
+                let rigid_node = section.read_int_any("rigid node").map(|v| v as i16).unwrap_or(-1);
+
+                let Some(sd) = section
+                    .field("section data").and_then(|f| f.as_block())
+                    .and_then(|b| b.element(0))
+                    .and_then(|e| e.field("section").and_then(|f| f.as_struct()))
+                else { continue };
+
+                let raw_v = match sd.field("raw vertices").and_then(|f| f.as_block()) {
+                    Some(b) => b, None => continue,
+                };
+                let strip = match sd.field("strip indices").and_then(|f| f.as_block()) {
+                    Some(b) => b, None => continue,
+                };
+                let parts = match sd.field("parts").and_then(|f| f.as_block()) {
+                    Some(b) => b, None => continue,
+                };
+
+                // H2 strip indices are u16 with a `0xFFFF` restart
+                // sentinel between subparts (use the u16 strip decoder,
+                // NOT the u32 one whose sentinel is `0xFFFFFFFF`).
+                let strip_idx: Vec<u16> = (0..strip.len())
+                    .filter_map(|k| strip.element(k))
+                    .map(|e| e.read_int_any("index").unwrap_or(0) as u16)
+                    .collect();
+
+                for part_i in 0..parts.len() {
+                    let part = parts.element(part_i).unwrap();
+                    let mat_idx = part.read_int_any("material").unwrap_or(0);
+                    let shader_name = if mat_idx >= 0 && (mat_idx as usize) < mats_block.len() {
+                        let m = mats_block.element(mat_idx as usize).unwrap();
+                        let path = m.read_tag_ref_path("shader").unwrap_or_default();
+                        Path::new(&path.replace('\\', "/"))
+                            .file_stem().and_then(|s| s.to_str()).unwrap_or("default").to_owned()
+                    } else {
+                        "default".to_owned()
+                    };
+                    let cell_label = format!("{perm_name} {region_name}");
+                    let jms_mat = match materials.iter().position(|m|
+                        m.name == shader_name && m.material_name.ends_with(&cell_label)
+                    ) {
+                        Some(idx) => idx as i32,
+                        None => {
+                            let slot = materials.len() + 1;
+                            materials.push(JmsMaterial {
+                                name: shader_name,
+                                material_name: format!("({slot}) {cell_label}"),
+                            });
+                            (materials.len() - 1) as i32
+                        }
+                    };
+
+                    let start = part.read_int_any("strip start index").unwrap_or(0).max(0) as usize;
+                    let len = part.read_int_any("strip length").unwrap_or(0).max(0) as usize;
+                    if start >= strip_idx.len() { continue; }
+                    let end = (start + len).min(strip_idx.len());
+                    for (a, b, c) in strip_to_list(&strip_idx[start..end]) {
+                        let base = vertices.len() as u32;
+                        for vi in [a, b, c] {
+                            let Some(v) = raw_v.element(vi as usize) else { continue };
+                            let mut jv = read_h2_vertex(&v);
+                            // Classification 0/1 = worldspace/rigid: bind
+                            // the whole section to its single rigid node.
+                            if classification <= 1 {
+                                jv.node_sets = vec![(rigid_node.max(0), 1.0)];
+                            } else if jv.node_sets.is_empty() && rigid_node >= 0 {
+                                jv.node_sets.push((rigid_node, 1.0));
+                            }
+                            vertices.push(jv);
+                        }
+                        triangles.push(JmsTriangle { material: jms_mat, v: [base, base + 1, base + 2] });
+                    }
+                }
+            }
+        }
         Ok(Self { nodes: world_nodes, materials, markers, vertices, triangles, ..Default::default() })
     }
 
@@ -486,9 +628,20 @@ impl JmsFile {
     /// convention) into `w`. Layout matches the embedded-source
     /// section ordering exactly so byte-diffs against artist
     /// originals stay focused on the data, not boilerplate.
-    pub fn write<W: Write>(&self, w: &mut W) -> Result<(), JmsError> {
+    /// Serialize as JMS text at the given format `version`. Use
+    /// [`crate::game::Game::jms_version`] to pick it per engine: 8200
+    /// (Halo CE), 8210 (Halo 2), 8213 (Halo 3+). The in-memory section
+    /// data is version-neutral; this method emits the version-correct
+    /// field layout. Currently the 8210/8213 deltas (vertex color,
+    /// trailing SKYLIGHT section) are handled; the older 8200 layout
+    /// (region section, child/sibling nodes, 2-node vertices) is a
+    /// separate path added with the Halo CE reader.
+    pub fn write<W: Write>(&self, w: &mut W, version: u16) -> Result<(), JmsError> {
+        // 8211+ (Halo 3) appends a per-vertex color triple; 8205 (Halo 2)
+        // does not.
+        let has_vertex_color = version >= 8211;
         writeln!(w, ";### VERSION ###")?;
-        writeln!(w, "8213")?;
+        writeln!(w, "{version}")?;
         writeln!(w)?;
 
         writeln!(w, ";### NODES ###")?;
@@ -562,8 +715,10 @@ impl JmsFile {
         writeln!(w, ";\t<texture coordinate count>")?;
         writeln!(w, ";\t\t<texture coordinates <u,v>>")?;
         writeln!(w, ";\t\t<...>")?;
-        writeln!(w, ";\t\t<vertex color <r,g,b>>")?;
-        writeln!(w, ";\t\t<...>")?;
+        if has_vertex_color {
+            writeln!(w, ";\t\t<vertex color <r,g,b>>")?;
+            writeln!(w, ";\t\t<...>")?;
+        }
         writeln!(w)?;
         for (i, v) in self.vertices.iter().enumerate() {
             writeln!(w, ";VERTEX {i}")?;
@@ -578,7 +733,9 @@ impl JmsFile {
             for uv in &v.uvs {
                 write_floats(w, &uv.to_array())?;
             }
-            write_floats(w, &[0.0, 0.0, 0.0])?; // vertex color always zero per TagTool
+            if has_vertex_color {
+                write_floats(w, &[0.0, 0.0, 0.0])?; // vertex color always zero per TagTool
+            }
             writeln!(w)?;
         }
 
@@ -725,8 +882,12 @@ impl JmsFile {
             writeln!(w)?;
         }
 
-        // Sections we don't currently populate stay empty.
+        // Sections we don't currently populate stay empty. SKYLIGHT is
+        // a Halo 3 (8213) addition — omit it for older versions.
         for (name, helps) in EMPTY_SECTIONS_TRAILING {
+            if *name == "SKYLIGHT" && version < 8213 {
+                continue;
+            }
             writeln!(w, ";### {name} ###")?;
             writeln!(w, "0")?;
             for h in *helps { writeln!(w, ";\t{h}")?; }
@@ -1525,6 +1686,45 @@ fn read_vertex(v: &TagStruct<'_>, bounds: &CompressionBounds) -> JmsVertex {
     JmsVertex {
         position, normal, node_sets,
         uvs: vec![crate::math::RealPoint2d { x: texcoord.x, y: 1.0 - texcoord.y }],
+    }
+}
+
+/// Read one Halo 2 `raw vertices[]` element into a JMS vertex. Positions
+/// and texcoords are already decompressed floats (the per-section
+/// compression bounds are vestigial), so no dequantization is applied.
+/// Node influences come from the `(NEW)` or `(OLD)` index arrays paired
+/// with `node weights`, selected by `use new node indices`; weights of
+/// zero are dropped. The caller overrides these for rigid sections.
+fn read_h2_vertex(v: &TagStruct<'_>) -> JmsVertex {
+    let position = v.read_point3d("position") * SCALE;
+    // H2 declares the vertex normal as `real_vector_3d` (Halo 3 used
+    // `real_point_3d`).
+    let normal = v.read_vec3("normal");
+    let uv = v.read_point2d("texcoord");
+    let use_new = v.read_int_any("use new node indices").unwrap_or(1) != 0;
+    let (idx_field, idx_elem) = if use_new {
+        ("node indices (NEW)", "node index (NEW)")
+    } else {
+        ("node indices (OLD)", "node index (OLD)")
+    };
+    let mut node_sets = Vec::with_capacity(4);
+    if let (Some(ia), Some(wa)) = (
+        v.field(idx_field).and_then(|f| f.as_array()),
+        v.field("node weights").and_then(|f| f.as_array()),
+    ) {
+        for k in 0..ia.len().min(wa.len()) {
+            let idx = ia.element(k).and_then(|e| e.read_int_any(idx_elem)).unwrap_or(-1) as i16;
+            let wt = wa.element(k).and_then(|e| e.read_real("node_weight")).unwrap_or(0.0);
+            if wt > 0.0 && idx >= 0 {
+                node_sets.push((idx, wt));
+            }
+        }
+    }
+    JmsVertex {
+        position,
+        normal,
+        node_sets,
+        uvs: vec![crate::math::RealPoint2d { x: uv.x, y: 1.0 - uv.y }],
     }
 }
 

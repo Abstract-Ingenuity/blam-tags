@@ -78,6 +78,7 @@ pub mod definition;
 pub mod bitmap;
 pub mod animation;
 pub mod geometry;
+pub mod game;
 pub mod jms;
 pub mod ass;
 pub mod render_geometry;

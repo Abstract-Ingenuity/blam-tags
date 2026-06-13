@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let jms = JmsFile::from_render_model(&tag)?;
 
     let mut w = BufWriter::new(File::create(&out_path)?);
-    jms.write(&mut w)?;
+    jms.write(&mut w, blam_tags::game::Game::of(&tag).jms_version())?;
     println!(
         "{}: {} nodes, {} materials, {} markers, {} vertices, {} triangles",
         out_path, jms.nodes.len(), jms.materials.len(), jms.markers.len(),

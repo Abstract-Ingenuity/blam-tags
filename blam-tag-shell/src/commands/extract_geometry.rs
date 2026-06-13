@@ -109,6 +109,18 @@ fn reject_hlmt_only_args(kinds: &[String], force: Option<Force>, input_kind: &st
     Ok(())
 }
 
+/// Build the render-model JMS using the engine-correct reader. Halo 2
+/// stores render geometry in a section-based structure distinct from
+/// Halo 3+'s `render geometry/per mesh temporary`.
+fn read_render_jms(tag: &TagFile, game: blam_tags::game::Game) -> Result<JmsFile> {
+    use blam_tags::game::Game;
+    Ok(match game {
+        Game::Halo2 => JmsFile::from_h2_render_model(tag)?,
+        Game::Halo3 => JmsFile::from_render_model(tag)?,
+        Game::Halo1 => anyhow::bail!("Halo CE gbxmodel → JMS is not yet supported"),
+    })
+}
+
 fn run_hlmt(
     ctx: &mut CliContext,
     kinds: &[String],
@@ -117,6 +129,13 @@ fn run_hlmt(
     force: Option<Force>,
 ) -> Result<()> {
     let loaded = ctx.loaded("extract-geometry")?;
+
+    // Engine drives both the render-model reader (Halo 2 uses a different
+    // tag structure) and the JMS text-format version (CE 8200 / H2 8210 /
+    // H3+ 8213). The `.model` and every tag it references share the
+    // engine, so resolve once from the loaded tag.
+    let game = blam_tags::game::Game::of(&loaded.tag);
+    let jms_version = game.jms_version();
 
     let selected: HashSet<Kind> = if kinds.is_empty() || kinds.iter().any(|k| k == "all") {
         [Kind::Render, Kind::Collision, Kind::Physics].into_iter().collect()
@@ -160,7 +179,7 @@ fn run_hlmt(
     let need_skeleton = selected.contains(&Kind::Collision) || selected.contains(&Kind::Physics);
     let render_jms = match &render_tag {
         Some(t) if matches!(render_format, Some(Force::Jms)) || need_skeleton =>
-            Some(JmsFile::from_render_model(t).context("build render_model JMS")?),
+            Some(read_render_jms(t, game).context("build render_model JMS")?),
         _ => None,
     };
     let skeleton = render_jms.as_ref().map(|j| j.nodes.as_slice());
@@ -181,10 +200,10 @@ fn run_hlmt(
                     Force::Jms => {
                         let jms = render_jms.clone()
                             .map(Ok)
-                            .unwrap_or_else(|| JmsFile::from_render_model(rt))
+                            .unwrap_or_else(|| read_render_jms(rt, game))
                             .context("build render_model JMS")?;
                         let path = output_path_for(&out_root, &stem, kind, flat, "jms");
-                        write_to(&path, |w| Ok(jms.write(w)?))?;
+                        write_to(&path, |w| Ok(jms.write(w, jms_version)?))?;
                         emitted.push((kind, path, format!("[render: JMS]  {}", jms_summary(&jms))));
                     }
                     Force::Ass => {
@@ -204,7 +223,7 @@ fn run_hlmt(
                     let jms = JmsFile::from_collision_model_with_skeleton(&t, skel)
                         .context("build collision_model JMS")?;
                     let path = output_path_for(&out_root, &stem, kind, flat, "jms");
-                    write_to(&path, |w| Ok(jms.write(w)?))?;
+                    write_to(&path, |w| Ok(jms.write(w, jms_version)?))?;
                     emitted.push((kind, path, format!("[collision] {}", jms_summary(&jms))));
                 }
                 (Some(_), None) => skipped.push((kind, "needs render_model for skeleton".to_owned())),
@@ -218,7 +237,7 @@ fn run_hlmt(
                     let jms = JmsFile::from_physics_model_with_skeleton(&t, skel)
                         .context("build physics_model JMS")?;
                     let path = output_path_for(&out_root, &stem, kind, flat, "jms");
-                    write_to(&path, |w| Ok(jms.write(w)?))?;
+                    write_to(&path, |w| Ok(jms.write(w, jms_version)?))?;
                     emitted.push((kind, path, format!("[physics]   {}", jms_summary(&jms))));
                 }
                 (Some(_), None) => skipped.push((kind, "needs render_model for skeleton".to_owned())),
