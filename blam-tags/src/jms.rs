@@ -703,7 +703,14 @@ impl JmsFile {
             // H2/H3 store it as a string_id, CE as an inline string.
             let shader_name = if surface_material >= 0 && (surface_material as usize) < materials_block.len() {
                 let m = materials_block.element(surface_material as usize).unwrap();
-                m.read_string_id("name").or_else(|| m.read_string("name")).unwrap_or_default()
+                // collision_model materials carry a `name`; structure-BSP
+                // collision materials instead carry a `shader` tag_reference
+                // — accept either, using the shader tag's basename.
+                m.read_string_id("name").or_else(|| m.read_string("name"))
+                    .or_else(|| m.read_tag_ref_path("shader").map(|p| {
+                        p.rsplit(['\\', '/']).next().unwrap_or(&p).to_owned()
+                    }))
+                    .unwrap_or_default()
             } else {
                 "default".to_owned()
             };
@@ -743,6 +750,154 @@ impl JmsFile {
                 });
             }
         }
+    }
+
+    /// Reconstruct the render JMS for a Halo CE
+    /// `scenario_structure_bsp`. CE level geometry lives in
+    /// `lightmaps[i]/materials[j]`: each material carries its own
+    /// `uncompressed vertices` blob (an array of 56-byte
+    /// position/normal/binormal/tangent/uv vertices) and a
+    /// `[surfaces, surfaces+surface count)` range into the top-level
+    /// `surfaces` triangle list, whose `vertex0/1/2 index` are local
+    /// to that material's vertex array. Emits one JMS mesh with a
+    /// single `frame` node (CE structure JMS form: no skeleton, no
+    /// regions) and per-shader materials. Vertex floats are read
+    /// big-endian to match the CE engine.
+    pub fn from_scenario_structure_bsp_ce(tag: &TagFile) -> Result<Self, JmsError> {
+        let root = tag.root();
+        let global_surfaces = root.field_path("surfaces").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("surfaces"))?;
+        let lightmaps = root.field_path("lightmaps").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("lightmaps"))?;
+
+        // CE structure JMS still needs a node — a single root `frame`.
+        let nodes = vec![JmsNode {
+            name: "frame".to_owned(),
+            parent: -1,
+            rotation: RealQuaternion::IDENTITY,
+            translation: RealPoint3d::ZERO,
+        }];
+        let mut materials: Vec<JmsMaterial> = Vec::new();
+        let mut vertices: Vec<JmsVertex> = Vec::new();
+        let mut triangles: Vec<JmsTriangle> = Vec::new();
+
+        for li in 0..lightmaps.len() {
+            let lm = lightmaps.element(li).unwrap();
+            let mats = match lm.field("materials").and_then(|f| f.as_block()) {
+                Some(b) => b, None => continue,
+            };
+            for mi in 0..mats.len() {
+                let material = mats.element(mi).unwrap();
+                let nverts = material.field("rendered vertices").and_then(|f| f.as_struct())
+                    .and_then(|s| s.read_int_any("vertex count")).unwrap_or(0) as usize;
+                let surf_start = material.read_int_any("surfaces").unwrap_or(0) as i64;
+                let surf_count = material.read_int_any("surface count").unwrap_or(0) as i64;
+                let blob = match material.field("uncompressed vertices").and_then(|f| f.as_data()) {
+                    Some(b) => b, None => continue,
+                };
+                // The rendered vertex is 56 bytes — position(3)
+                // normal(3) binormal(3) tangent(3) uv(2), 14 floats.
+                // The blob holds two CONTIGUOUS arrays: the rendered
+                // vertices (56 B each) followed by the lightmap
+                // vertices (normal(3)+uv(2), 20 B each) when present —
+                // so blob.len() is 56*n or 76*n, but the rendered
+                // array is always the leading 56*n bytes at stride 56.
+                // (Matches invader's `uncompressed_vertices[v]` indexing
+                // by sizeof(UncompressedRenderedVertex)=56.) Floats are
+                // little-endian — the vertex blob keeps original LE byte
+                // order even though CE's structured fields are big-endian.
+                if nverts == 0 { continue; }
+                const STRIDE: usize = 56;
+                let avail = blob.len() / STRIDE;
+                let n = nverts.min(avail);
+                let base = vertices.len() as u32;
+                for v in 0..n {
+                    let o = v * STRIDE;
+                    let f = |k: usize| {
+                        let p = o + k * 4;
+                        f32::from_le_bytes([blob[p], blob[p + 1], blob[p + 2], blob[p + 3]])
+                    };
+                    vertices.push(JmsVertex {
+                        position: RealPoint3d { x: f(0) * SCALE, y: f(1) * SCALE, z: f(2) * SCALE },
+                        normal: RealVector3d { i: f(3), j: f(4), k: f(5) },
+                        node_sets: vec![(0, 1.0)],
+                        uvs: vec![crate::math::RealPoint2d { x: f(12), y: f(13) }],
+                    });
+                }
+
+                // Material slot, keyed by shader basename.
+                let shader_name = material.read_tag_ref_path("shader")
+                    .map(|p| p.rsplit(['\\', '/']).next().unwrap_or(&p).to_owned())
+                    .unwrap_or_else(|| "default".to_owned());
+                let jms_idx = match materials.iter().position(|m| m.name == shader_name) {
+                    Some(i) => i as i32,
+                    None => {
+                        let slot = materials.len() + 1;
+                        materials.push(JmsMaterial {
+                            name: shader_name.clone(),
+                            material_name: format!("({}) {}", slot, shader_name),
+                        });
+                        (materials.len() - 1) as i32
+                    }
+                };
+
+                for si in surf_start..(surf_start + surf_count) {
+                    if si < 0 || si as usize >= global_surfaces.len() { continue; }
+                    let s = global_surfaces.element(si as usize).unwrap();
+                    let v0 = s.read_int_any("vertex0 index").unwrap_or(-1);
+                    let v1 = s.read_int_any("vertex1 index").unwrap_or(-1);
+                    let v2 = s.read_int_any("vertex2 index").unwrap_or(-1);
+                    if v0 < 0 || v1 < 0 || v2 < 0 { continue; }
+                    let (v0, v1, v2) = (v0 as u32, v1 as u32, v2 as u32);
+                    if (v0 as usize) >= n || (v1 as usize) >= n || (v2 as usize) >= n { continue; }
+                    triangles.push(JmsTriangle {
+                        material: jms_idx,
+                        v: [base + v0, base + v1, base + v2],
+                        region: 0,
+                    });
+                }
+            }
+        }
+
+        Ok(Self { nodes, materials, vertices, triangles, ..Default::default() })
+    }
+
+    /// Reconstruct the collision JMS for a Halo CE
+    /// `scenario_structure_bsp`. The structure's collision lives in the
+    /// `collision bsp` block (planes/surfaces/edges/vertices, the same
+    /// edge-ring shape as `model_collision_geometry`); material names
+    /// come from the `collision materials` block's `shader` tag-refs.
+    /// Vertices stay in world space (BSP geometry is already there).
+    pub fn from_scenario_structure_bsp_ce_collision(tag: &TagFile) -> Result<Self, JmsError> {
+        let root = tag.root();
+        let materials_block = root.field_path("collision materials").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("collision materials"))?;
+        let coll_bsps = root.field_path("collision bsp").and_then(|f| f.as_block())
+            .ok_or(JmsError::MissingField("collision bsp"))?;
+
+        let nodes = vec![JmsNode {
+            name: "frame".to_owned(),
+            parent: -1,
+            rotation: RealQuaternion::IDENTITY,
+            translation: RealPoint3d::ZERO,
+        }];
+        let mut materials: Vec<JmsMaterial> = Vec::new();
+        let mut vertices: Vec<JmsVertex> = Vec::new();
+        let mut triangles: Vec<JmsTriangle> = Vec::new();
+
+        for bi in 0..coll_bsps.len() {
+            let bsp = coll_bsps.element(bi).unwrap();
+            let surfaces = match bsp.field("surfaces").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+            let edges = match bsp.field("edges").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+            let bsp_verts = match bsp.field("vertices").and_then(|f| f.as_block()) { Some(b) => b, None => continue };
+            Self::emit_collision_bsp(
+                &surfaces, &edges, &bsp_verts, 0, None,
+                &materials_block, "collision",
+                &mut materials, &mut vertices, &mut triangles,
+            );
+        }
+
+        Ok(Self { nodes, materials, vertices, triangles, ..Default::default() })
     }
 
     /// Walk a parsed `physics_model` tag and reconstruct the JMS
