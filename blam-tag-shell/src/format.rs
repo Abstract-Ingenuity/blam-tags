@@ -141,6 +141,17 @@ pub fn write_tag_reference(ctx: &CliContext, out: &mut String, r: &TagReferenceD
         out.push_str("NONE");
         return;
     };
+    // An empty path is an UNSET reference. MCC stores these as a truly
+    // null ref (`group_tag_and_name == None` → handled above); the classic
+    // (CE/H2) decoder instead keeps the 4 inline group bytes, yielding
+    // `Some((group, ""))` — either the declared group (e.g. `effect`) or
+    // the -1/`0xFFFFFFFF` "none" sentinel. Render all of these as NONE so
+    // unset references look identical regardless of engine, instead of
+    // `.effect` / four non-printable `0xFF` bytes.
+    if path.is_empty() {
+        out.push_str("NONE");
+        return;
+    }
     match ctx.tag_index.name_for(*group_tag) {
         Some(name) => write!(out, "{path}.{name}").unwrap(),
         None => write!(out, "{}:{}", format_group_tag(*group_tag), path).unwrap(),

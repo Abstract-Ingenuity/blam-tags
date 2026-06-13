@@ -221,18 +221,26 @@ impl TagReferenceData {
             Endian::Le => u32::from_le_bytes(b),
             Endian::Be => u32::from_be_bytes(b),
         };
-        let name = String::from_utf8_lossy(&payload[4..]).into_owned();
+        // The on-disk path is NUL-terminated; strip the terminator so the
+        // stored name is the clean path (re-added by `to_bytes`). Keeps
+        // displays/diffs free of an embedded `\0` while staying byte-exact.
+        let name = String::from_utf8_lossy(&payload[4..])
+            .trim_end_matches('\0')
+            .to_owned();
         Self { group_tag_and_name: Some((group_tag, name)) }
     }
 
-    /// Serialize back to a `tgrf` payload (caller writes the header).
+    /// Serialize back to a `tgrf` payload (caller writes the header). The
+    /// path is re-emitted NUL-terminated (the terminator stripped by
+    /// [`Self::from_bytes`]).
     pub fn to_bytes(&self) -> Vec<u8> {
         match &self.group_tag_and_name {
             None => Vec::new(),
             Some((group_tag, name)) => {
-                let mut bytes = Vec::with_capacity(4 + name.len());
+                let mut bytes = Vec::with_capacity(5 + name.len());
                 bytes.extend_from_slice(&group_tag.to_le_bytes());
                 bytes.extend_from_slice(name.as_bytes());
+                bytes.push(0);
                 bytes
             }
         }
