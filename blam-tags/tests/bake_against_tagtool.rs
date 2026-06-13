@@ -302,7 +302,7 @@ fn shrine_clouds_sandstorm_full_postprocess_diff() {
         (APT::TranslationY, 230.0),
     ];
     for (i, &(ptype, period)) in expect_overlays.iter().enumerate() {
-        assert_eq!(pp.overlays[i].parameter_type, Some(ptype), "overlays[{i}].type");
+        assert_eq!(pp.overlays[i].parameter_type.map(|e| e.get()), Some(ptype), "overlays[{i}].type");
         assert_eq!(pp.overlays[i].time_period_in_seconds, period, "overlays[{i}].period");
     }
 
@@ -321,9 +321,13 @@ fn shrine_clouds_sandstorm_full_postprocess_diff() {
     // ─── Top-level rmsh fields (not part of postprocess) ─────────────
     // TagTool: RenderFlags=None, SortLayer=Normal (=2), RuntimeFlags=0,
     //          CustomFogSettingIndex=0, PredictionAtomIndex=-1.
-    assert_eq!(rmsh.flags, 0, "rmsh.flags = None");
-    assert_eq!(rmsh.sort_layer, 2, "rmsh.sort_layer = Normal (2)");
-    assert_eq!(rmsh.runtime_flags, 0, "rmsh.runtime_flags");
+    assert!(rmsh.flags.is_empty(), "rmsh.flags = None");
+    assert_eq!(
+        rmsh.sort_layer,
+        blam_tags::render_method::GlobalSortLayer::Normal,
+        "rmsh.sort_layer = Normal (2)"
+    );
+    assert!(rmsh.runtime_flags.is_empty(), "rmsh.runtime_flags");
     assert_eq!(rmsh.custom_fog_setting_index, 0, "rmsh.custom_fog_setting_index");
     assert_eq!(rmsh.prediction_atom_index, -1, "rmsh.prediction_atom_index");
 }
