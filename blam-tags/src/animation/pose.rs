@@ -91,6 +91,28 @@ impl Skeleton {
 
     /// `true` when the tag has no skeleton nodes (e.g. inheriting jmads).
     pub fn is_empty(&self) -> bool { self.nodes.is_empty() }
+
+    /// Convert per-node OBJECT/model-space transforms into parent-LOCAL
+    /// transforms (`local = parent_object⁻¹ · node_object`). Reach and
+    /// Halo 4 store the rest pose (`additional node data`) in object space;
+    /// the JMA family — and [`AnimationClip::pose`] — want parent-local, so
+    /// the caller converts before using them as defaults (Foundry's
+    /// `world_to_local`). `object[i]` must align with `self.nodes[i]`;
+    /// nodes assume parent-before-child order (true for skeleton blocks).
+    pub fn object_to_local(&self, object: &[NodeTransform]) -> Vec<NodeTransform> {
+        let world: Vec<Matrix4> = object.iter()
+            .map(|t| Matrix4::from_loc_rot_scale(t.translation, t.rotation, t.scale))
+            .collect();
+        self.nodes.iter().enumerate().map(|(i, n)| {
+            let local = if n.parent >= 0 && (n.parent as usize) < world.len() {
+                world[n.parent as usize].inverse() * world[i]
+            } else {
+                world[i]
+            };
+            let (translation, rotation, scale) = local.decompose();
+            NodeTransform { translation, rotation, scale }
+        }).collect()
+    }
 }
 
 /// One bone's transform at one frame — the unit JMA writes per

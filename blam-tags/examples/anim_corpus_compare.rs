@@ -74,11 +74,11 @@ fn main() {
             let key = stem.to_ascii_lowercase();
             let Some((nodes, our_frames)) = ours.get(&key) else { continue };
             let Some(ref_frames) = parse_jma(reffile, *nodes) else { continue };
-            let (rd, _td) = compare(&ref_frames, our_frames, *nodes);
+            let (rd, td) = compare(&ref_frames, our_frames, *nodes);
             let e = per_type.entry(ext.clone()).or_default();
             e[2] += 1;
-            if rd < ROT_TOL { e[0] += 1; }
-            if rd < 0.1 { e[1] += 1; }
+            if rd < 0.1 { e[0] += 1; }
+            if rd < 0.1 && td < 1.0 { e[1] += 1; }
             if rd >= 0.1 {
                 worst.push((rd, ext.clone(), format!("{}/{}", rel.display(), stem)));
             }
@@ -87,15 +87,17 @@ fn main() {
 
     println!("=== {} ===", ref_dir.file_name().and_then(|s| s.to_str()).unwrap_or("?"));
     println!("tags: {tags_ok} matched, {tags_missing} reference tags with no corpus tag");
-    println!("  type:  exact(<0.01) / close(<0.1) / total   [non-root rotation]");
+    println!("  type:  rot-close / rot+trn-close / total");
     let (mut tr, mut tc, mut tn) = (0, 0, 0);
     for (ext, [r, c, n]) in &per_type {
-        let pct = 100.0 * *c as f64 / *n as f64;
-        println!("  .{ext:<4} {r:>6} / {c:>6} / {n}   ({pct:.1}% close)", r = r, c = c, n = n);
+        let rp = 100.0 * *r as f64 / *n as f64;
+        let tp = 100.0 * *c as f64 / *n as f64;
+        println!("  .{ext:<4} {r:>6} / {c:>6} / {n}   (rot {rp:.0}%, rot+trn {tp:.0}%)", r = r, c = c, n = n);
         tr += r; tc += c; tn += n;
     }
-    let pct = 100.0 * tc as f64 / tn.max(1) as f64;
-    println!("  TOTAL {tr:>6} / {tc:>6} / {tn}   ({pct:.1}% close)");
+    let rp = 100.0 * tr as f64 / tn.max(1) as f64;
+    let tp = 100.0 * tc as f64 / tn.max(1) as f64;
+    println!("  TOTAL {tr:>6} / {tc:>6} / {tn}   (rot {rp:.1}%, rot+trn {tp:.1}%)");
     worst.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
     println!("  worst non-root rotation diffs:");
     for (d, ext, name) in worst.iter().take(15) {
@@ -109,7 +111,16 @@ fn compose_all(tag: &TagFile) -> BTreeMap<String, (usize, Vec<Vec<NodeTransform>
     let mut out = BTreeMap::new();
     let Ok(animation) = Animation::new(tag) else { return out };
     let skeleton = Skeleton::from_tag(tag);
-    let defaults = build_defaults(&skeleton, tag);
+    let mut defaults = build_defaults(&skeleton, tag);
+    // Reach/H4 store `additional node data` in object space (Foundry's
+    // world_to_local); H2/H3 store it parent-local. Detect Reach/H4 by the
+    // Reach-style data-sizes layout.
+    let object_space = animation.iter().any(|g| {
+        g.data_sizes.as_ref().map(|d| d.layout()) == Some(blam_tags::animation::SizeLayout::Reach)
+    });
+    if object_space {
+        defaults = object_to_local(&defaults, &skeleton);
+    }
     let graph = AnimationGraph::from_tag(tag);
 
     for group in animation.iter() {
@@ -135,6 +146,25 @@ fn compose_all(tag: &TagFile) -> BTreeMap<String, (usize, Vec<Vec<NodeTransform>
         out.insert(key, (skeleton.len(), frames));
     }
     out
+}
+
+/// Convert per-node OBJECT-space defaults into parent-LOCAL space.
+/// H4's `additional node data` is stored in model/object space; the JMA
+/// needs local-to-parent (Foundry's `world_to_local`).
+fn object_to_local(defaults: &[NodeTransform], skel: &Skeleton) -> Vec<NodeTransform> {
+    use blam_tags::math::Matrix4;
+    let world: Vec<Matrix4> = defaults.iter()
+        .map(|d| Matrix4::from_loc_rot_scale(d.translation, d.rotation, d.scale))
+        .collect();
+    skel.nodes.iter().enumerate().map(|(i, n)| {
+        let local = if n.parent >= 0 && (n.parent as usize) < world.len() {
+            world[n.parent as usize].inverse() * world[i]
+        } else {
+            world[i]
+        };
+        let (t, r, s) = local.decompose();
+        NodeTransform { translation: t, rotation: r, scale: s }
+    }).collect()
 }
 
 fn build_defaults(skeleton: &Skeleton, jmad: &TagFile) -> Vec<NodeTransform> {

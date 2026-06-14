@@ -120,8 +120,10 @@ pub fn run(
 
     // Build per-bone defaults from render_model first (authoritative)
     // and fill gaps with the jmad's `additional node data`. Bones
-    // missing from both fall back to identity.
-    let defaults = build_defaults(&skeleton, jmad_tag, render_model);
+    // missing from both fall back to identity. Reach/H4 store that data
+    // in object space, so convert it to parent-local first.
+    let object_space = additional_node_data_is_object_space(&animation);
+    let defaults = build_defaults(&skeleton, jmad_tag, render_model, object_space);
 
     // Graph tree (`content/modes[]`) drives overlay/replacement base
     // resolution — see `Animation::overlay_base_pose`.
@@ -228,7 +230,8 @@ fn run_ce(
     if matches!(format, Format::Jma) && skeleton.is_empty() {
         anyhow::bail!("model_animations has no nodes — JMA export needs a skeleton");
     }
-    let defaults = build_defaults(&skeleton, tag, None);
+    // Halo CE `additional node data` is parent-local (no conversion).
+    let defaults = build_defaults(&skeleton, tag, None, false);
 
     let target = OutputTarget::from_args(output);
     let stem = tag_stem(path, "animation");
@@ -410,25 +413,37 @@ fn build_defaults(
     skeleton: &Skeleton,
     jmad: &TagFile,
     render_model: Option<&TagFile>,
+    object_space_anim_data: bool,
 ) -> Vec<NodeTransform> {
-    let mut by_name: HashMap<String, NodeTransform> = HashMap::new();
-
-    // Lower priority first: jmad's `additional node data`.
+    // Lower priority: jmad's `additional node data`, indexed per skeleton
+    // node. Reach/H4 store these in object/model space; H2/H3 store them
+    // parent-local. Build the per-node table first so we can convert the
+    // whole object-space set to local in one parent-aware pass.
+    let mut anim_by_name: HashMap<String, NodeTransform> = HashMap::new();
     if let Some(block) = jmad.root().field_path("additional node data").and_then(|f| f.as_block()) {
         for i in 0..block.len() {
             let Some(elem) = block.element(i) else { continue };
             let Some(name) = elem.read_string_id("node name") else { continue };
             if name.is_empty() { continue; }
-            by_name.insert(name, NodeTransform {
+            anim_by_name.insert(name, NodeTransform {
                 translation: elem.read_point3d("default translation"),
                 rotation: elem.read_quat("default rotation"),
                 scale: elem.read_real("default scale").unwrap_or(1.0),
             });
         }
     }
+    let mut anim: Vec<NodeTransform> = skeleton.nodes.iter()
+        .map(|n| anim_by_name.get(&n.name).copied().unwrap_or(NodeTransform::IDENTITY))
+        .collect();
+    // Reach/H4 `additional node data` is object-space → convert to local
+    // (Foundry's world_to_local). H2/H3 are already local — leave as-is.
+    if object_space_anim_data {
+        anim = skeleton.object_to_local(&anim);
+    }
 
-    // Higher priority: render_model `nodes[]`. Overwrites the
-    // additional_node_data entry when both exist for a bone name.
+    // Higher priority: render_model `nodes[]` (always parent-local). Build
+    // a name lookup and overlay it on top of the (now-local) anim defaults.
+    let mut rm_by_name: HashMap<String, NodeTransform> = HashMap::new();
     if let Some(rm) = render_model
         && let Some(block) = rm.root().field_path("nodes").and_then(|f| f.as_block())
     {
@@ -436,22 +451,30 @@ fn build_defaults(
             let Some(elem) = block.element(i) else { continue };
             let Some(name) = elem.read_string_id("name") else { continue };
             if name.is_empty() { continue; }
-            by_name.insert(name, NodeTransform {
+            rm_by_name.insert(name, NodeTransform {
                 translation: elem.read_point3d("default translation"),
                 rotation: elem.read_quat("default rotation"),
-                // Render_model's `default scale` is buried inside
-                // the inverse matrix per the schema's "Old Mistakes
-                // Die Hard" warning. Animation rest poses have
-                // scale=1.0 in practice.
+                // Render_model's `default scale` is buried inside the
+                // inverse matrix per the schema's "Old Mistakes Die Hard"
+                // warning. Animation rest poses have scale=1.0 in practice.
                 scale: 1.0,
             });
         }
     }
 
-    skeleton.nodes
-        .iter()
-        .map(|node| by_name.get(&node.name).copied().unwrap_or(NodeTransform::IDENTITY))
+    skeleton.nodes.iter().enumerate()
+        .map(|(i, node)| rm_by_name.get(&node.name).copied().unwrap_or(anim[i]))
         .collect()
+}
+
+/// Whether a jmad's `additional node data` rest pose is in object/model
+/// space (Reach/H4) rather than parent-local (H2/H3). Detected by the
+/// Reach-style packed-data-sizes layout, which Reach and Halo 4 share.
+fn additional_node_data_is_object_space(animation: &Animation<'_>) -> bool {
+    use blam_tags::animation::SizeLayout;
+    animation.iter().any(|g| {
+        g.data_sizes.as_ref().map(|d| d.layout()) == Some(SizeLayout::Reach)
+    })
 }
 
 /// Resolved meaning of the `--output` argument. The CLI is overloaded:
