@@ -214,6 +214,26 @@ pub struct AnimationGroup<'a> {
     /// composition; applied by the JMA writer's object-space correction.
     /// Empty ⇒ not a 3D pose overlay (Foundry's `is_pose_overlay` false).
     pub object_space_parents: Vec<ObjectSpaceParentNode>,
+    /// Halo 4 graph-level **shared static** value pool (`codec data/
+    /// shared_static_codec`). The H4 static rest pose isn't in the
+    /// per-animation blob — `SharedStatic` (codec 11) stores only int16
+    /// indices into this graph-shared pool. Shared (cheap `Rc` clone)
+    /// across all groups of one tag; `None` for non-H4 / tags without it.
+    /// See [`AnimationGroup::decode`]'s shared-static path.
+    pub shared_static: Option<std::rc::Rc<SharedStaticPool>>,
+}
+
+/// Halo 4's graph-level shared-static value pool — decoded once from
+/// `codec data/shared_static_codec/{rotations,translations,scale}` on the
+/// `model_animation_graph`. The per-animation `compressed_static_pose`
+/// codec stream (codec 11) holds int16 indices into these vectors.
+/// Rotations are 4×int16/0x7FFF quaternions; translations/scales are
+/// raw f32. RE'd from the H4 Xbox debug build (`c_shared_static_data_codec`).
+#[derive(Debug, Default)]
+pub struct SharedStaticPool {
+    pub rotations: Vec<RealQuaternion>,
+    pub translations: Vec<RealPoint3d>,
+    pub scales: Vec<f32>,
 }
 
 /// One `object-space parent nodes` entry: a node whose object-space
@@ -324,6 +344,10 @@ impl<'a> Animation<'a> {
             }
         }
 
+        // Halo 4 graph-level shared-static value pool (read once; shared
+        // across every animation in this tag via a cheap `Rc` clone).
+        let shared_static = read_shared_static_pool(&root).map(std::rc::Rc::new);
+
         // Walk per-animation entries.
         let mut animations = Vec::with_capacity(animations_block.len());
         for i in 0..animations_block.len() {
@@ -422,6 +446,7 @@ impl<'a> Animation<'a> {
                 blob,
                 world_relative,
                 object_space_parents,
+                shared_static: shared_static.clone(),
             });
         }
 
@@ -669,6 +694,43 @@ fn read_h2_animation_data<'a>(anim: &TagStruct<'a>) -> Option<&'a [u8]> {
     anim.field("animation data").and_then(|f| f.as_data())
         .or_else(|| anim.field("animation_data").and_then(|f| f.as_data()))
         .or_else(|| anim.fields().find_map(|f| f.as_data()))
+}
+
+/// Read Halo 4's graph-level shared-static value pool from
+/// `codec data/shared_static_codec/{rotations,translations,scale}`.
+/// Returns `None` when the field is absent (non-H4 / no shared-static).
+/// Rotations are 4×int16/0x7FFF quaternions (`c_quantized_quaternion_8byte`),
+/// translations are `(x,y,z)` f32, scales are f32.
+fn read_shared_static_pool(root: &TagStruct<'_>) -> Option<SharedStaticPool> {
+    let base = "codec data/shared_static_codec";
+    let rotations = root
+        .field_path(&format!("{base}/rotations"))
+        .and_then(|f| f.as_block())?;
+    let mut pool = SharedStaticPool::default();
+    for i in 0..rotations.len() {
+        let Some(e) = rotations.element(i) else { continue };
+        let g = |n: &str| e.read_int_any(n).unwrap_or(0) as f32 / 32767.0;
+        let q = RealQuaternion { i: g("i"), j: g("j"), k: g("k"), w: g("w") };
+        pool.rotations.push(if q.length() <= 1e-6 { RealQuaternion::IDENTITY } else { q.normalized() });
+    }
+    if let Some(b) = root.field_path(&format!("{base}/translations")).and_then(|f| f.as_block()) {
+        for i in 0..b.len() {
+            let Some(e) = b.element(i) else { continue };
+            pool.translations.push(RealPoint3d {
+                x: e.read_real("x").unwrap_or(0.0),
+                y: e.read_real("y").unwrap_or(0.0),
+                z: e.read_real("z").unwrap_or(0.0),
+            });
+        }
+    }
+    if let Some(b) = root.field_path(&format!("{base}/scale")).and_then(|f| f.as_block()) {
+        for i in 0..b.len() {
+            if let Some(e) = b.element(i) {
+                pool.scales.push(e.read_real("scale").unwrap_or(1.0));
+            }
+        }
+    }
+    Some(pool)
 }
 
 fn read_h2_data_sizes(anim: &TagStruct<'_>) -> Option<PackedDataSizes> {

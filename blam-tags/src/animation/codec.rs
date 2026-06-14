@@ -186,6 +186,10 @@ impl<'a> AnimationGroup<'a> {
             && static_first_size > 0;
         let static_tracks = if has_static_stream {
             decode_uncompressed_static(self.blob)?
+        } else if let Some(tracks) = self.decode_shared_static() {
+            // Halo 4: the static rest pose is a `SharedStatic` (codec 11)
+            // stream of int16 indices into the graph-level shared pool.
+            tracks
         } else {
             // No static stream — start with empty static tracks so
             // pose composition has something to fall back to. The
@@ -337,6 +341,51 @@ impl<'a> AnimationGroup<'a> {
             node_flags,
             movement,
         })
+    }
+
+    /// Halo 4 `SharedStatic` (codec 11) static rest pose. The
+    /// `compressed_static_pose` blob section (the LAST section) holds only
+    /// int16 indices into the graph-level [`super::SharedStaticPool`];
+    /// each component's values come from that pool. Returns one static
+    /// frame per component, in codec-node order (= the static-flag
+    /// popcount order [`super::AnimationClip::pose`] expects). `None` when
+    /// there's no pool / no `compressed_static_pose` section / the section
+    /// header isn't a `SharedStatic` codec. RE'd from the H4 Xbox debug
+    /// build (`c_shared_static_data_codec::get_node_*_index`): rotation
+    /// index table at byte 32, translation at `u32@12`, scale at `u32@16`.
+    fn decode_shared_static(&self) -> Option<AnimationTracks> {
+        let pool = self.shared_static.as_ref()?;
+        let cps = self.data_sizes.as_ref()?.get("compressed_static_pose") as usize;
+        if cps == 0 || cps > self.blob.len() { return None; }
+        // `compressed_static_pose` is the last data_sizes section, so it
+        // sits at the tail of the blob.
+        let s = &self.blob[self.blob.len() - cps..];
+        if s.len() < 32 || s[0] != Codec::SharedStatic as u8 { return None; }
+        let (n_rot, n_trn, n_scl) = (s[1] as usize, s[2] as usize, s[3] as usize);
+        let trn_off = u32::from_le_bytes(s.get(12..16)?.try_into().ok()?) as usize;
+        let scl_off = u32::from_le_bytes(s.get(16..20)?.try_into().ok()?) as usize;
+        let index = |o: usize| -> Option<i16> {
+            s.get(o..o + 2).map(|b| i16::from_le_bytes([b[0], b[1]]))
+        };
+        let mut rotations = Vec::with_capacity(n_rot);
+        for k in 0..n_rot {
+            let idx = index(32 + 2 * k)?;
+            let q = (idx >= 0).then(|| pool.rotations.get(idx as usize).copied()).flatten();
+            rotations.push(vec![q.unwrap_or(RealQuaternion::IDENTITY)]);
+        }
+        let mut translations = Vec::with_capacity(n_trn);
+        for k in 0..n_trn {
+            let idx = index(trn_off + 2 * k)?;
+            let t = (idx >= 0).then(|| pool.translations.get(idx as usize).copied()).flatten();
+            translations.push(vec![t.unwrap_or_default()]);
+        }
+        let mut scales = Vec::with_capacity(n_scl);
+        for k in 0..n_scl {
+            let idx = index(scl_off + 2 * k)?;
+            let v = (idx >= 0).then(|| pool.scales.get(idx as usize).copied()).flatten();
+            scales.push(vec![v.unwrap_or(1.0)]);
+        }
+        Some(AnimationTracks { codec: Codec::SharedStatic, frame_count: 1, rotations, translations, scales })
     }
 }
 
