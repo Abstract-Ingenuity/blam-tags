@@ -686,6 +686,21 @@ fn read_h2_data_sizes(anim: &TagStruct<'_>) -> Option<PackedDataSizes> {
         }
     };
 
+    // The animated codec stream that the engine plays (and TagTool
+    // extracts) is the COMPRESSED block, laid out right after the static
+    // block: `[static][compressed][static_flags][animated_flags][movement]
+    // [pill][uncompressed]`. The trailing `uncompressed` block is an
+    // unplayed lossless mirror — NOT part of the animated codec stream and
+    // NOT counted toward the flag offset. So the positional "animated
+    // data" size we hand the codec decoder is `compressed` alone (falling
+    // back to `uncompressed` for the rare compressed-less animation, where
+    // the uncompressed block takes the compressed block's slot). Summing
+    // the two was the bug that put the flag offset 14 KB into the trailing
+    // mirror, scrambling every node's transform.
+    let animated_stream = |uncompressed: i64, compressed: i64| {
+        if compressed > 0 { compressed } else { uncompressed }
+    };
+
     // v1-v5: the `data sizes` struct, read positionally. The named
     // lookup works against the current def; the `find_map` fallback
     // guards against a re-dump — the versioned-layout generator emits
@@ -701,7 +716,7 @@ fn read_h2_data_sizes(anim: &TagStruct<'_>) -> Option<PackedDataSizes> {
         if vals.len() >= 7 {
             let (static_flags, animated_flags, movement, pill, static_data, uncompressed, compressed) =
                 (vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6]);
-            return Some(build(static_data, uncompressed + compressed,
+            return Some(build(static_data, animated_stream(uncompressed, compressed),
                 static_flags, animated_flags, movement, pill));
         }
     }
@@ -714,7 +729,7 @@ fn read_h2_data_sizes(anim: &TagStruct<'_>) -> Option<PackedDataSizes> {
     let static_data = g("default_data size").unwrap_or(0);
     let uncompressed = g("uncompressed_data size").unwrap_or(0);
     let compressed = g("compressed_data size").unwrap_or(0);
-    Some(build(static_data, uncompressed + compressed,
+    Some(build(static_data, animated_stream(uncompressed, compressed),
         static_flags, animated_flags, movement, 0))
 }
 
