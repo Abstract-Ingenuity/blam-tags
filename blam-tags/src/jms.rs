@@ -274,7 +274,8 @@ impl JmsFile {
     /// under `sections[i]/section data[0]/section/{parts, raw vertices,
     /// strip indices}` rather than `render geometry/per mesh temporary`.
     /// `regions[]/permutations[]` carry per-LOD `Lx section index` fields
-    /// (L1 = highest detail, which we export). Vertices are decompressed
+    /// (L1 = super low … L6 = hollywood/highest; we export the highest
+    /// available, walking L6→L1). Vertices are decompressed
     /// floats — the per-section `geometry compression` bounds are
     /// vestigial X360 metadata, so no dequantization is applied. Triangle
     /// strips index the section's own `raw vertices`; each part owns a
@@ -311,13 +312,15 @@ impl JmsFile {
                 let perm = perms.element(pi).unwrap();
                 let perm_name = perm.read_string_id("name").unwrap_or_default();
                 // Export the highest-detail LOD whose section index is in
-                // range. Some perms carry stale/garbage values in the
-                // higher LOD slots (e.g. L1 = 27765 on a 1-section model)
-                // while a lower slot holds the real index — require the
-                // index to actually address a section, not merely be >= 0.
+                // range. In Halo 2 the `Lx` slots run *low→high*: L1 is
+                // "super low", L6 is "hollywood" (the highest detail), so
+                // walk them HIGH→LOW and take the first valid one. Some
+                // perms carry stale/garbage values in unused slots (e.g.
+                // 27765 on a 1-section model), so require the index to
+                // actually address a section, not merely be >= 0.
                 let nsec = sections_block.len();
-                let sec_idx = ["L1 section index", "L2 section index", "L3 section index",
-                               "L4 section index", "L5 section index", "L6 section index"]
+                let sec_idx = ["L6 section index", "L5 section index", "L4 section index",
+                               "L3 section index", "L2 section index", "L1 section index"]
                     .iter()
                     .find_map(|f| perm.read_int_any(f).map(|v| v as i32)
                         .filter(|&v| v >= 0 && (v as usize) < nsec))
