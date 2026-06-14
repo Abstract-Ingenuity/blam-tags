@@ -87,6 +87,16 @@ pub fn run(
             reject_hlmt_only_args(kinds, force, "gbxmodel")?;
             run_gbxmodel(ctx, output, flat)
         }
+        // Direct render input. H2/H3 store render geometry in a
+        // standalone `render_model` (mode); objects reach it via the
+        // `.model` (hlmt) wrapper, but accept it directly too for a
+        // plain render JMS (matching the `mod2`/`coll`/`phmo` direct
+        // paths). The JMS-vs-ASS instance-geometry decision is hlmt-only;
+        // a bare `mode` always emits JMS.
+        b"mode" => {
+            reject_hlmt_only_args(kinds, force, "render_model")?;
+            run_render_model(ctx, output, flat)
+        }
         // Direct collision input. Halo CE collision lives in a standalone
         // `model_collision_geometry`, and CE objects reference it directly
         // (no `.model` wrapper), so it's the only way to reach CE collision
@@ -104,7 +114,8 @@ pub fn run(
             run_physics(ctx, output, flat)
         }
         _ => anyhow::bail!(
-            "extract-geometry expects `.model` (hlmt), `.gbxmodel` (mod2, Halo CE), \
+            "extract-geometry expects `.model` (hlmt), `.render_model` (mode), \
+             `.gbxmodel` (mod2, Halo CE), \
              `.collision_model`/`.model_collision_geometry` (coll), `.physics_model` (phmo), \
              `.scenario` (scnr), or `.scenario_structure_bsp` (sbsp) — got group `{}`.",
             std::str::from_utf8(&group).unwrap_or("?"),
@@ -518,6 +529,23 @@ fn run_gbxmodel(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Resul
     let game = blam_tags::game::Game::of(&loaded.tag);
     let jms = JmsFile::from_gbxmodel(&loaded.tag).context("build gbxmodel JMS")?;
     let stem = tag_stem(&loaded.path, "gbxmodel");
+    let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    let path = output_path_for(&out_root, &stem, Kind::Render, flat, "jms");
+    write_to(&path, |w| Ok(jms.write(w, game.jms_version())?))?;
+    println!("{}: [render: JMS] {}", path.display(), jms_summary(&jms));
+    Ok(())
+}
+
+/// Direct `mode` input → render JMS. H2/H3 store render geometry in a
+/// standalone `render_model` referenced by the `.model` (hlmt) wrapper;
+/// this dumps it directly (engine-dispatched reader) without skeleton
+/// composition beyond the model's own nodes. Instance-placement ASS
+/// output stays hlmt-only.
+fn run_render_model(ctx: &mut CliContext, output: Option<&str>, flat: bool) -> Result<()> {
+    let loaded = ctx.loaded("extract-geometry")?;
+    let game = blam_tags::game::Game::of(&loaded.tag);
+    let jms = read_render_jms(&loaded.tag, game).context("build render_model JMS")?;
+    let stem = tag_stem(&loaded.path, "render_model");
     let out_root = output.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
     let path = output_path_for(&out_root, &stem, Kind::Render, flat, "jms");
     write_to(&path, |w| Ok(jms.write(w, game.jms_version())?))?;

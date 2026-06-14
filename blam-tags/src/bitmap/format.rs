@@ -136,6 +136,15 @@ pub enum BitmapFormat {
     Dxt5Blue,
     /// 24-bit depth (Reach+). Render-only; not observed in shipped tags.
     Depth24,
+    /// Classic Halo CE / Halo 2 palettized 8-bit. Each pixel is an
+    /// index into a fixed 256-entry palette ([`super::p8::P8_PALETTE`]).
+    /// Used for height / vector (bump) maps. Decodes to A8R8G8B8 via
+    /// the palette — no native DDS pixelformat.
+    P8,
+    /// Classic Halo CE / Halo 2 palettized 8-bit *bump* — same on-disk
+    /// storage and palette as [`Self::P8`] (the palette entries encode
+    /// normal vectors). Kept distinct so the schema name round-trips.
+    P8Bump,
 }
 
 impl BitmapFormat {
@@ -196,6 +205,8 @@ impl BitmapFormat {
             "dxt5_green" => Self::Dxt5Green,
             "dxt5_blue" => Self::Dxt5Blue,
             "depth 24" | "depth24" => Self::Depth24,
+            "p8" => Self::P8,
+            "p8-bump" | "p8_bump" => Self::P8Bump,
             _ => return None,
         })
     }
@@ -298,7 +309,7 @@ impl BitmapFormat {
     /// TagTool's `BitmapFormat.BitsPerPixelTable`.
     pub fn bytes_per_pixel(self) -> u32 {
         match self {
-            Self::A8 | Self::Y8 | Self::Ay8 | Self::R8 => 1,
+            Self::A8 | Self::Y8 | Self::Ay8 | Self::R8 | Self::P8 | Self::P8Bump => 1,
             Self::A8y8
             | Self::R5g6b5
             | Self::A1r5g5b5

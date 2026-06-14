@@ -59,6 +59,9 @@ pub fn decode_to_rgba8(
         R8 => decode_r8(&input[..need], &mut out),
         Ay8 => decode_ay8(&input[..need], &mut out),
 
+        // Classic palettized 8-bit (fixed 256-entry palette).
+        P8 | P8Bump => super::p8::decode_p8(&input[..need], &mut out),
+
         // 16-bit packed
         A8y8 => decode_a8y8(&input[..need], &mut out),
         R5g6b5 => decode_r5g6b5(&input[..need], &mut out),
@@ -1336,6 +1339,18 @@ mod tests {
         for i in 0..16 {
             assert_eq!(&out[i * 4..i * 4 + 4], &[0xA0, 0xA0, 0xA0, 0x60]);
         }
+    }
+
+    /// P8 / P8-bump are palettized: each byte indexes the fixed 256-entry
+    /// normal palette. Index 0xFF is the flat normal (R=G=128, B=255) with
+    /// zero alpha; index 0x00 is the leading black entry.
+    #[test]
+    fn p8_bump_palette_lookup() {
+        let out = decode_to_rgba8(BitmapFormat::P8Bump, 2, 1, &[0xFF, 0x00]).unwrap();
+        assert_eq!(&out[0..4], &rgba(0x80, 0x80, 0xFF, 0x00));
+        // Plain `p8` shares the same palette.
+        let out2 = decode_to_rgba8(BitmapFormat::P8, 1, 1, &[0xFF]).unwrap();
+        assert_eq!(&out2, &rgba(0x80, 0x80, 0xFF, 0x00));
     }
 
     /// Sub-4-pixel mip (1×1) for a BC format: input is still one

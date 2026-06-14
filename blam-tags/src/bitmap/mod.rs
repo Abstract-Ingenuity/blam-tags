@@ -39,6 +39,7 @@ pub mod dds;
 pub mod decode;
 pub mod format;
 pub mod layout;
+mod p8;
 pub mod tiff;
 pub mod xbox360;
 
