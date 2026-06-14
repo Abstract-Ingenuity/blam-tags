@@ -337,11 +337,32 @@ impl JmsFile {
                     .unwrap_or(1) as i32;
                 let rigid_node = section.read_int_any("rigid node").map(|v| v as i16).unwrap_or(-1);
 
-                let Some(sd) = section
+                let Some(sd_elem) = section
                     .field("section data").and_then(|f| f.as_block())
                     .and_then(|b| b.element(0))
-                    .and_then(|e| e.field("section").and_then(|f| f.as_struct()))
                 else { continue };
+                let Some(sd) = sd_elem.field("section").and_then(|f| f.as_struct())
+                else { continue };
+
+                // Halo 2 stores per-vertex bone indices LOCAL to the
+                // section; the section's `node map` remaps them to global
+                // skeleton nodes (Reclaimer's `nodeMap[blendIndex]`). Without
+                // this the mesh skins to the wrong bones — invisible at the
+                // bind pose, but every animation explodes the model. An empty
+                // node map means the indices are already global.
+                let node_map: Vec<i16> = sd_elem
+                    .field("node map").and_then(|f| f.as_block())
+                    .map(|b| (0..b.len())
+                        .filter_map(|k| b.element(k))
+                        .map(|e| e.read_int_any("node index").unwrap_or(-1) as i16)
+                        .collect())
+                    .unwrap_or_default();
+                let remap = |idx: i16| -> i16 {
+                    match usize::try_from(idx) {
+                        Ok(i) if !node_map.is_empty() && i < node_map.len() => node_map[i],
+                        _ => idx,
+                    }
+                };
 
                 let raw_v = match sd.field("raw vertices").and_then(|f| f.as_block()) {
                     Some(b) => b, None => continue,
@@ -398,10 +419,17 @@ impl JmsFile {
                             let mut jv = read_h2_vertex(&v);
                             // Classification 0/1 = worldspace/rigid: bind
                             // the whole section to its single rigid node.
+                            // Skinned/rigid-boned: remap each per-vertex
+                            // local bone index through the section node map.
                             if classification <= 1 {
-                                jv.node_sets = vec![(rigid_node.max(0), 1.0)];
-                            } else if jv.node_sets.is_empty() && rigid_node >= 0 {
-                                jv.node_sets.push((rigid_node, 1.0));
+                                jv.node_sets = vec![(remap(rigid_node.max(0)), 1.0)];
+                            } else {
+                                for ns in jv.node_sets.iter_mut() {
+                                    ns.0 = remap(ns.0);
+                                }
+                                if jv.node_sets.is_empty() && rigid_node >= 0 {
+                                    jv.node_sets.push((remap(rigid_node), 1.0));
+                                }
                             }
                             vertices.push(jv);
                         }
