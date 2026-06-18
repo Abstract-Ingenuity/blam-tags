@@ -436,31 +436,41 @@ fn eval_value_at(
     range_name: &str,
     ctx: &dyn RenderMethodEvalContext,
 ) -> f32 {
-    let input = resolve_one_input(input_name, time_period, ctx);
-    let range = resolve_one_input(range_name, time_period, ctx);
-    f.evaluate(input, range)
-}
-
-fn resolve_one_input(name: &str, time_period: f32, ctx: &dyn RenderMethodEvalContext) -> f32 {
-    match name {
-        // Engine `m_input_name == 0` (empty) AND string_id 492
-        // ("time"): time-based — divide by `time_period` and wrap mod
-        // 1.0. We collapse both cases (the engine's function-type
-        // early-out for non-cyclic outputs isn't ported yet —
-        // wrapping is the safe default).
+    use crate::tag_function::FunctionType;
+    // Mirror engine `evaluate_function @0x1806864d0` exactly:
+    //   - NAMED input: `input = context(input_name)`,
+    //     `range = context(range_name)` — passed straight to
+    //     `evaluate_legacy`, NO time-wrap.
+    //   - TIME input (empty / "time"): `input = game_time / time_period`,
+    //     then `if (function_type != Periodic) input = fmod(input, 1.0)`.
+    //     Periodic (type 3) functions get the UNWRAPPED, continuously-
+    //     growing phase so their LUT advances smoothly; wrapping them (the
+    //     old `resolve_one_input` did this for every type) resets the phase
+    //     every period and produces the odd flicker. `range` stays 0 here
+    //     (engine `v6` is never set on the time path).
+    let (input, range) = match input_name {
         "" | "time" => {
-            let eval_time = ctx.eval_time();
-            if time_period > 0.0 {
-                (eval_time.rem_euclid(time_period)) / time_period
+            let raw = if time_period > 0.0 {
+                ctx.eval_time() / time_period
             } else {
-                eval_time
-            }
+                ctx.eval_time()
+            };
+            let input = if f.function_type() == FunctionType::Periodic {
+                raw
+            } else {
+                raw % 1.0
+            };
+            (input, 0.0)
         }
-        // Named input: delegate to the caller's resolver. Engine
-        // analog: `c_render_method_data::m_context_interface →
-        // object_get_function_value`.
-        other => ctx.resolve_named(other),
-    }
+        other => {
+            let range = match range_name {
+                "" | "time" => 0.0,
+                r => ctx.resolve_named(r),
+            };
+            (ctx.resolve_named(other), range)
+        }
+    };
+    f.evaluate(input, range)
 }
 
 fn extract_first_color(f: &TagFunction) -> Option<[f32; 4]> {

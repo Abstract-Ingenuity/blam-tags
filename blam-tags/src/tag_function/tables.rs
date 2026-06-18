@@ -74,6 +74,21 @@ pub fn periodic_function_evaluate(function_index: u8, time: f32) -> f32 {
     if function_index == 0 {
         return 1.0;
     }
+    // The noise / jitter / wander / spark rows (8..=11) hold baked
+    // pseudo-random data. The engine walks them by `time * 36.57143`
+    // (≈36.6 LUT entries/sec at freq=1, period=1) → a fast on/off flicker
+    // on whatever they drive (e.g. self_illum_intensity, amp [0..2] on the
+    // sidewinder heatprobe + ceiling lights). That flicker does NOT appear
+    // in MCC at these materials, so the engine evidently does not run these
+    // noise curves here (gated/stabilised by a path not yet ported). The
+    // eval below is byte-exact to `periodic_function_evaluate @0x180346AC0`
+    // (verified against the dllcache table), so stubbing to the noise's
+    // mid-amplitude (0.5 → intensity = amp_min + 0.5*(amp_max-amp_min)) is
+    // the stable match to MCC until that gate is found. See
+    // `examples/probe_noise` for the affected parameters.
+    if (8..=11).contains(&function_index) {
+        return 0.5;
+    }
     let row = (function_index as usize - 1).min(PERIODIC_ROWS - 1);
     let base = PERIODIC_BASE + row * LUT_LEN;
     let scaled = time * 36.57143;
