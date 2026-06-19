@@ -30,6 +30,24 @@ pub enum AtmosphereFlags {
     #[strum(serialize = "Raining")] Raining = 3,
 }
 
+/// `sky_atm_flags` (`sky_atm_parameters.json` `word_flags`). Engine
+/// `e_sky_atm_flags` — the per-tag (not per-setting) flags at struct
+/// offset 0x0.
+#[derive(Clone, Copy, PartialEq, Eq, Debug,
+         num_derive::FromPrimitive, num_derive::ToPrimitive,
+         strum::EnumString, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(ascii_case_insensitive)]
+#[repr(u16)]
+pub enum SkyAtmFlags {
+    /// `k_atmosphere_lock_effects_to_nearest_cluster`. When set,
+    /// `c_atmosphere_fog_interface::compute_cluster_weights @ 0x1803ADE40`
+    /// makes per-setting `effect_weight` BINARY on the starting cluster's
+    /// setting (instead of the normalized falloff blend used for `weight`),
+    /// and weather effects bind to the nearest cluster rather than blending.
+    #[strum(serialize = "Lock Effects To Nearest Cluster")]
+    LockEffectsToNearestCluster = 0,
+}
+
 /// Errors from sky_atm_parameters walking.
 #[derive(Debug)]
 pub enum SkyAtmosphereError {
@@ -222,6 +240,11 @@ impl UnderwaterSettings {
 /// Decoded `sky_atm_parameters` tag.
 #[derive(Debug, Clone, Default)]
 pub struct SkyAtmosphere {
+    /// `m_sky_atm_flags` (offset 0x0). Engine `e_sky_atm_flags`. Bit 0
+    /// (`LockEffectsToNearestCluster`) gates the per-setting `effect_weight`
+    /// behaviour in `compute_cluster_weights` and weather-effect cluster
+    /// locking.
+    pub sky_atm_flags: Flags<SkyAtmFlags, u16>,
     /// Indexed by name; typically 4 elements (haze_level, haze_skydome,
     /// not_used, haze_skydome_alt).
     pub atmosphere_settings: Vec<AtmosphereSettings>,
@@ -269,6 +292,7 @@ impl SkyAtmosphere {
     }
 
     pub fn from_struct(s: &TagStruct<'_>) -> Self {
+        let sky_atm_flags = s.try_read_flags("Flags").unwrap_or_default();
         let atmosphere_settings = s
             .field("atmosphere settings")
             .and_then(|f| f.as_block())
@@ -309,6 +333,7 @@ impl SkyAtmosphere {
             .read_int_any("Transparent sort layer")
             .unwrap_or(0) as u8;
         Self {
+            sky_atm_flags,
             atmosphere_settings,
             underwater_settings,
             patchy_fog_texture,
@@ -326,6 +351,14 @@ impl SkyAtmosphere {
     /// Find the first enabled atmosphere setting (Enable Atmosphere
     /// flag set). Falls back to the first element if none are flagged
     /// — some scenarios have all flags set.
+    /// True iff `m_sky_atm_flags & LockEffectsToNearestCluster` is set —
+    /// the engine then makes `effect_weight` binary-on-starting-cluster and
+    /// binds weather effects to the nearest cluster.
+    pub fn lock_effects_to_nearest_cluster(&self) -> bool {
+        self.sky_atm_flags
+            .contains(SkyAtmFlags::LockEffectsToNearestCluster)
+    }
+
     pub fn primary_setting(&self) -> Option<&AtmosphereSettings> {
         self.atmosphere_settings
             .iter()
