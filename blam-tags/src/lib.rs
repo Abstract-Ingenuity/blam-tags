@@ -170,7 +170,7 @@ pub use render_model::{
     RenderModel, RenderModelError, RenderVertex, Subpart,
 };
 pub use tag_function::{
-    ColorGraphType, FunctionFlags, FunctionType, TagFunction, TagFunctionError,
+    ColorGraphType, FunctionFlags, FunctionKind, FunctionType, TagFunction, TagFunctionError,
     TagFunctionHeader,
 };
 pub use animation::{

@@ -563,9 +563,11 @@ impl ExponentCompact {
 // TagFunction enum
 // ---------------------------------------------------------------------------
 
-/// Decoded TagFunction. All 11 function types parse + evaluate.
+/// Decoded per-type function curve. All 11 function types parse +
+/// evaluate. This is the internal curve representation; the public
+/// [`TagFunction`] wraps one (or two, for RANGE-flagged functions).
 #[derive(Debug, Clone)]
-pub enum TagFunction {
+pub enum FunctionKind {
     Identity { header: TagFunctionHeader },
     Constant { header: TagFunctionHeader },
     Transition { header: TagFunctionHeader, compact: TransitionCompact },
@@ -611,17 +613,26 @@ impl std::fmt::Display for TagFunctionError {
 
 impl std::error::Error for TagFunctionError {}
 
-impl TagFunction {
-    /// Parse a `mapping_function` `data` blob. The slice should be
-    /// the raw bytes from the schema's `data` field; we read 32
-    /// bytes for the header and stash the rest for phase-2+ decoders.
+impl FunctionKind {
+    /// Parse a single per-type curve from a `mapping_function` blob:
+    /// the 32-byte header followed by the per-type compact at offset 32.
     pub fn parse(data: &[u8]) -> Result<Self, TagFunctionError> {
+        Self::parse_at(data, 32)
+    }
+
+    /// Parse a single per-type curve, reading the 32-byte header at the
+    /// start of `data` but taking the compact block from `compact_offset`.
+    /// For unranged / first-curve parsing this is the usual offset 32; for
+    /// the second curve of a RANGE-flagged function it is
+    /// `32 + header.compact_size` (the two compacts sit back-to-back, both
+    /// described by the single shared header).
+    fn parse_at(data: &[u8], compact_offset: usize) -> Result<Self, TagFunctionError> {
         let header = TagFunctionHeader::parse(data)?;
         // Compact data follows the 32-byte header. Length = `compact_size`
         // when the header reports it; older blobs may have it in
         // `m_constants[0]` — for now we trust the header field and
         // bound by remaining bytes.
-        let compact = data.get(32..).unwrap_or(&[]);
+        let compact = data.get(compact_offset..).unwrap_or(&[]);
         Ok(match header.function_type {
             FunctionType::Identity => Self::Identity { header },
             FunctionType::Constant => Self::Constant { header },
@@ -681,6 +692,97 @@ impl TagFunction {
         }
     }
 
+    /// The raw per-type curve value at `(input, range)` BEFORE exclusion
+    /// re-expansion and BEFORE output-range remapping. This is the body of
+    /// the engine `c_function_definition::evaluate_legacy @0x1804F9390`
+    /// per-type `switch`. The exclusion + range-lerp steps are applied by
+    /// the public [`TagFunction::evaluate_legacy`].
+    fn eval_legacy(&self, input: f32, range: f32) -> f32 {
+        match self {
+            Self::Identity { .. } => input,
+            Self::Constant { header } => {
+                if header.flags.is_ranged() { range } else { 0.0 }
+            }
+            // Compact-data evaluators output the function's value
+            // directly; map_to_output_range_legacy is then applied by
+            // the caller (`evaluate`). The compacts already encode
+            // amplitude_min/max for types that need them
+            // (Exponent), so the outer map is a no-op for those when
+            // clamp_range = (0, 1). For Linear / Spline / Spline2,
+            // the engine applies clamp_range as the [out_min, out_max]
+            // interpretation per `map_to_output_range_legacy`.
+            Self::Transition     { compact, .. } => compact.evaluate(input),
+            Self::Periodic       { compact, .. } => compact.evaluate(input),
+            Self::Linear         { compact, .. } => compact.evaluate(input),
+            Self::LinearKey      { compact, .. } => compact.evaluate(input),
+            Self::MultiLinearKey { compact, .. } => compact.evaluate(input),
+            Self::Spline         { compact, .. } => compact.evaluate(input),
+            Self::Spline2        { compact, .. } => compact.evaluate(input),
+            Self::MultiSpline    { compact, .. } => compact.evaluate(input),
+            Self::Exponent       { compact, .. } => compact.evaluate(input),
+            Self::Unsupported { .. } => 0.0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// TagFunction — public wrapper (single curve, or two for RANGE-flagged)
+// ---------------------------------------------------------------------------
+
+/// Public decoded `mapping_function`. Wraps the primary [`FunctionKind`]
+/// curve plus, for RANGE-flagged non-Constant functions, an optional
+/// second curve of the same type — the engine blends the two by the
+/// `range` argument (`first + (second - first) * range`).
+#[derive(Debug, Clone)]
+pub struct TagFunction {
+    kind: FunctionKind,
+    /// Second back-to-back compact for RANGE-flagged non-Constant
+    /// functions; `None` otherwise. Boxed to keep `TagFunction` small.
+    ranged_second: Option<Box<FunctionKind>>,
+}
+
+impl TagFunction {
+    /// Parse a `mapping_function` `data` blob. The slice should be the raw
+    /// bytes from the schema's `data` field; we read 32 bytes for the
+    /// header and the per-type compact that follows. When the RANGE flag is
+    /// set on a non-Constant function, a SECOND compact of the same type
+    /// sits at `32 + compact_size` and is parsed into `ranged_second`.
+    pub fn parse(data: &[u8]) -> Result<Self, TagFunctionError> {
+        let kind = FunctionKind::parse(data)?;
+        let header = kind.header();
+        let compact_size = header.compact_size;
+        // Engine `c_function_definition::evaluate_legacy @0x1804F9390`: a
+        // RANGE-flagged NON-Constant function holds two compacts back-to-back
+        // (the second at offset 32 + compact_size). Constant has compact_size
+        // 0 and no second compact — it returns `range` directly.
+        let ranged_second = if header.flags.is_ranged()
+            && header.function_type != FunctionType::Constant
+            && compact_size > 0
+        {
+            let cs = compact_size as usize;
+            // Need both compacts present: header (32) + 2*compact_size.
+            if data.len() >= 32 + 2 * cs {
+                match FunctionKind::parse_at(data, 32 + cs) {
+                    Ok(second) => Some(Box::new(second)),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        Ok(Self { kind, ranged_second })
+    }
+
+    pub fn header(&self) -> &TagFunctionHeader { self.kind.header() }
+
+    /// The primary per-type curve. Consumers that read the raw compact
+    /// (e.g. the GPU particle property compiler) match on this. The
+    /// optional RANGE second curve is intentionally not exposed here —
+    /// it only affects scalar `evaluate*`.
+    pub fn kind(&self) -> &FunctionKind { &self.kind }
+
     pub fn function_type(&self)    -> FunctionType    { self.header().function_type }
     pub fn flags(&self)            -> FunctionFlags   { self.header().flags }
     pub fn color_graph_type(&self) -> ColorGraphType  { self.header().color_graph_type }
@@ -708,32 +810,18 @@ impl TagFunction {
     }
 
     /// The "normalized" curve output before output-range remapping.
-    /// Ports `c_function_definition::evaluate_legacy` for the types
-    /// implemented so far.
-    fn evaluate_legacy(&self, input: f32, range: f32) -> f32 {
-        let v = match self {
-            Self::Identity { .. } => input,
-            Self::Constant { header } => {
-                if header.flags.is_ranged() { range } else { 0.0 }
+    /// Ports `c_function_definition::evaluate_legacy`: per-type value, then
+    /// the RANGE second-curve lerp, then exclusion re-expansion.
+    pub fn evaluate_legacy(&self, input: f32, range: f32) -> f32 {
+        let v = self.kind.eval_legacy(input, range);
+        // Engine RANGE branch: when a second compact is present, blend the
+        // two curves by `range`: first + (second - first) * range.
+        let v = match &self.ranged_second {
+            Some(second) => {
+                let s = second.eval_legacy(input, range);
+                v + (s - v) * range
             }
-            // Compact-data evaluators output the function's value
-            // directly; map_to_output_range_legacy is then applied by
-            // the caller (`evaluate`). The compacts already encode
-            // amplitude_min/max for types that need them
-            // (Exponent), so the outer map is a no-op for those when
-            // clamp_range = (0, 1). For Linear / Spline / Spline2,
-            // the engine applies clamp_range as the [out_min, out_max]
-            // interpretation per `map_to_output_range_legacy`.
-            Self::Transition     { compact, .. } => compact.evaluate(input),
-            Self::Periodic       { compact, .. } => compact.evaluate(input),
-            Self::Linear         { compact, .. } => compact.evaluate(input),
-            Self::LinearKey      { compact, .. } => compact.evaluate(input),
-            Self::MultiLinearKey { compact, .. } => compact.evaluate(input),
-            Self::Spline         { compact, .. } => compact.evaluate(input),
-            Self::Spline2        { compact, .. } => compact.evaluate(input),
-            Self::MultiSpline    { compact, .. } => compact.evaluate(input),
-            Self::Exponent       { compact, .. } => compact.evaluate(input),
-            Self::Unsupported { .. } => 0.0,
+            None => v,
         };
         // Engine `evaluate_legacy @0x1804F9390` applies `unexclude_value
         // @0x1804facd0` to the per-type result (before the output map): when the
@@ -773,22 +861,27 @@ impl TagFunction {
     /// for constant (and trivially-constant compact) functions, `None`
     /// for anything that genuinely depends on input.
     pub fn as_constant(&self) -> Option<f32> {
-        match self {
-            Self::Constant { header } if !header.flags.is_ranged() => {
+        // A RANGE-flagged function genuinely depends on `range`, so it is
+        // never a compile-time constant — fall through to None.
+        if self.ranged_second.is_some() {
+            return None;
+        }
+        match &self.kind {
+            FunctionKind::Constant { header } if !header.flags.is_ranged() => {
                 Some(header.clamp_range_min)
             }
             // A linear function with slope=0 is constant at `offset`,
             // remapped through clamp_range. Same idea for other types
             // whose compact data trivially collapses to a constant.
-            Self::Linear { compact, .. } if compact.slope == 0.0 => {
+            FunctionKind::Linear { compact, .. } if compact.slope == 0.0 => {
                 Some(self.map_to_output_range(compact.offset))
             }
-            Self::Spline { compact, .. }
+            FunctionKind::Spline { compact, .. }
                 if compact.i == 0.0 && compact.j == 0.0 && compact.k == 0.0 =>
             {
                 Some(self.map_to_output_range(compact.l))
             }
-            Self::Exponent { compact, .. }
+            FunctionKind::Exponent { compact, .. }
                 if compact.exponent.abs() < 1e-4
                     || compact.amplitude_min == compact.amplitude_max =>
             {
@@ -1261,5 +1354,36 @@ mod tests {
         assert!((f.evaluate(0.3, 0.0) - 0.3).abs() < 1e-5);
         // 0.7 > min → 0.7 + (1.5 - 0.5) = 1.7
         assert!((f.evaluate(0.7, 0.0) - 1.7).abs() < 1e-5);
+    }
+
+    #[test]
+    fn ranged_linear_lerps_two_curves() {
+        // Type 4 (Linear) with the RANGE flag set. Two back-to-back 8-byte
+        // linear compacts: the first (slope=0, offset=0 → always 0), the
+        // second (slope=0, offset=1 → always 1). The engine blends them by
+        // the `range` argument: first + (second - first) * range = range.
+        let mut blob = header_with(4, 0.0, 1.0).to_vec();
+        blob[1] |= FunctionFlags::RANGE; // set RANGE flag on byte 1
+        // compact_size (bytes 28..32) = 8 (one linear compact).
+        blob[28..32].copy_from_slice(&8i32.to_le_bytes());
+        // First compact @ offset 32: slope=0, offset=0 → f(x) = 0.
+        blob.extend_from_slice(&0.0f32.to_le_bytes()); // slope
+        blob.extend_from_slice(&0.0f32.to_le_bytes()); // offset
+        // Second compact @ offset 40: slope=0, offset=1 → f(x) = 1.
+        blob.extend_from_slice(&0.0f32.to_le_bytes()); // slope
+        blob.extend_from_slice(&1.0f32.to_le_bytes()); // offset
+
+        let f = TagFunction::parse(&blob).unwrap();
+        assert_eq!(f.function_type(), FunctionType::Linear);
+        assert!(f.flags().is_ranged());
+        // Confirm the header's compact_size field decoded as 8.
+        assert_eq!(f.header().compact_size, 8);
+        // RANGE-flagged → not a compile-time constant.
+        assert!(f.as_constant().is_none());
+        // clamp_range [0,1] → map is identity; result == range-lerp == range.
+        // input is irrelevant (both curves are constant), so probe at 0.42.
+        assert!((f.evaluate(0.42, 0.0) - 0.0).abs() < 1e-5);
+        assert!((f.evaluate(0.42, 1.0) - 1.0).abs() < 1e-5);
+        assert!((f.evaluate(0.42, 0.5) - 0.5).abs() < 1e-5);
     }
 }
