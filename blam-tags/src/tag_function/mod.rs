@@ -384,11 +384,11 @@ impl PeriodicCompact {
 /// float        m_increment_vector[4]; // 0x30 (16 bytes — 1/(x[i+1]-x[i]))
 /// float        m_y_delta_vector[4];   // 0x40 (16 bytes — y[i+1]-y[i])
 /// ```
-/// Body of `c_linear_key_function::evaluate` isn't decompiled, but the
-/// stored vectors are clear: the engine pre-computes per-segment slope
-/// reciprocals + y deltas at postprocess time so runtime evaluate is
-/// `y[i] + (input - x[i]) * increment[i] * y_delta[i]` with a segment
-/// search. We replicate that.
+/// `c_linear_key_function::evaluate @0x1804FBAF0` is a **sum of three clamped
+/// ramps** over the postprocess-cached vectors — `graph_points` are NOT read at
+/// runtime: `y_delta[0] + Σ_{k=1,2,3} clamp((input-times[k])·increment[k],0,1)
+/// · y_delta[k]`. (`y_delta[0]` is the base y; `times[k]`/`increment[k]` are the
+/// per-segment start-x and 1/width.) `graph_points` is kept only for the parse.
 #[derive(Debug, Clone, Copy)]
 pub struct LinearKeyCompact {
     pub graph_points: [(f32, f32); 4],
@@ -419,24 +419,15 @@ impl LinearKeyCompact {
         Some(Self { graph_points, times_vector, increment_vector, y_delta_vector })
     }
     fn evaluate(&self, input: f32) -> f32 {
-        // Clamp before first point / after last point.
-        if input <= self.graph_points[0].0 { return self.graph_points[0].1; }
-        if input >= self.graph_points[3].0 { return self.graph_points[3].1; }
-        // Find the segment [i, i+1] containing input.
-        for i in 0..3 {
-            let (x_a, y_a) = self.graph_points[i];
-            let (x_b, _)   = self.graph_points[i + 1];
-            if input <= x_b {
-                // Use precomputed reciprocal slope when valid; fall
-                // back to direct compute. The engine's
-                // increment_vector[i] = 1.0 / (x_b - x_a).
-                let dx = x_b - x_a;
-                let inv = if dx > 0.0 { 1.0 / dx } else { 0.0 };
-                let t = (input - x_a) * inv;
-                return y_a + t * self.y_delta_vector[i];
-            }
-        }
-        self.graph_points[3].1
+        // Engine `c_linear_key_function::evaluate @0x1804FBAF0`: sum of three
+        // clamped ramps over the cached vectors (NOT a graph_points search).
+        let ramp = |k: usize| {
+            ((input - self.times_vector[k]) * self.increment_vector[k]).clamp(0.0, 1.0)
+        };
+        self.y_delta_vector[0]
+            + ramp(1) * self.y_delta_vector[1]
+            + ramp(2) * self.y_delta_vector[2]
+            + ramp(3) * self.y_delta_vector[3]
     }
 }
 
@@ -1170,16 +1161,15 @@ mod tests {
             blob.extend_from_slice(&x.to_le_bytes());
             blob.extend_from_slice(&y.to_le_bytes());
         }
-        // times_vector (unused by our evaluator — compute fresh)
-        for _ in 0..4 { blob.extend_from_slice(&0.0_f32.to_le_bytes()); }
-        // increment_vector — engine pre-computes 1/(x[i+1]-x[i])
-        // — our evaluator falls back to live compute, so values here
-        // don't matter.
-        for _ in 0..4 { blob.extend_from_slice(&0.0_f32.to_le_bytes()); }
-        // y_delta_vector — y[i+1] - y[i] for i=0..2; sentinel at [3].
-        for &v in &[1.0_f32, 0.0, -1.0, 0.0] {
-            blob.extend_from_slice(&v.to_le_bytes());
-        }
+        // The engine evaluator reads ONLY these postprocess-cached vectors
+        // (3-ramp-sum), not graph_points. For the trapezoid: a rise ramp over
+        // [0,0.25] and a fall ramp over [0.75,1.0].
+        // times_vector: per-ramp start-x (k=1 rise@0, k=2 fall@0.75).
+        for &v in &[0.0_f32, 0.0, 0.75, 0.0] { blob.extend_from_slice(&v.to_le_bytes()); }
+        // increment_vector: 1/width per ramp (both 1/0.25 = 4).
+        for &v in &[0.0_f32, 4.0, 4.0, 0.0] { blob.extend_from_slice(&v.to_le_bytes()); }
+        // y_delta_vector: [base_y, +rise, -fall, unused].
+        for &v in &[0.0_f32, 1.0, -1.0, 0.0] { blob.extend_from_slice(&v.to_le_bytes()); }
         let f = TagFunction::parse(&blob).unwrap();
         assert_eq!(f.function_type(), FunctionType::LinearKey);
         // Ramp up: at t=0.125 → halfway between (0,0) and (0.25,1) = 0.5
