@@ -75,20 +75,19 @@ pub fn periodic_function_evaluate(function_index: u8, time: f32) -> f32 {
         return 1.0;
     }
     // The noise / jitter / wander / spark rows (8..=11) hold baked
-    // pseudo-random data. The engine walks them by `time * 36.57143`
-    // (≈36.6 LUT entries/sec at freq=1, period=1) → a fast on/off flicker
-    // on whatever they drive (e.g. self_illum_intensity, amp [0..2] on the
-    // sidewinder heatprobe + ceiling lights). That flicker does NOT appear
-    // in MCC at these materials, so the engine evidently does not run these
-    // noise curves here (gated/stabilised by a path not yet ported). The
-    // eval below is byte-exact to `periodic_function_evaluate @0x180346AC0`
-    // (verified against the dllcache table), so stubbing to the noise's
-    // mid-amplitude (0.5 → intensity = amp_min + 0.5*(amp_max-amp_min)) is
-    // the stable match to MCC until that gate is found. See
-    // `examples/probe_noise` for the affected parameters.
-    if (8..=11).contains(&function_index) {
-        return 0.5;
-    }
+    // pseudo-random data and run through the same LUT below — byte-exact to
+    // `periodic_function_evaluate @0x180346AC0`. These were previously stubbed
+    // to a constant 0.5 to suppress a "flicker", but that flicker was an
+    // artifact of the animated-param path wrongly applying `map_to_output_range`
+    // on top of the periodic compact (which already bakes amp_min/amp_max),
+    // amplifying the gentle amp-bounded noise into huge swings. The engine runs
+    // these noise curves per-frame with NO gate or cache: verified
+    // `render_method_submit_volatile_per_node @0x180683af0` →
+    // `update_constants @0x180685300` → `evaluate_function @0x1806864d0`
+    // (game_time, deterministic) → `evaluate_legacy` (no output map). With the
+    // periodic skip-map in `TagFunction::evaluate` the noise is gently
+    // amp-bounded, so it must run — it drives e.g. the mainmenu storm cloud's
+    // animated self-illum.
     let row = (function_index as usize - 1).min(PERIODIC_ROWS - 1);
     let base = PERIODIC_BASE + row * LUT_LEN;
     let scaled = time * 36.57143;

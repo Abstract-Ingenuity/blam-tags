@@ -703,6 +703,15 @@ impl TagFunction {
     /// who need a fallback should check `function_type()` first or
     /// use `as_constant()` on the constant path.
     pub fn evaluate(&self, input: f32, range: f32) -> f32 {
+        // Engine animated-scalar path = `evaluate_function @0x1806864d0`
+        // (→ `evaluate_legacy`) followed by `update_constants @0x180685300`
+        // applying `map_to_output_range_legacy` to the result. So the full
+        // value IS `map_to_output_range(evaluate_legacy)`, periodic included —
+        // the periodic compact's amp_min/amp_max is the NORMALIZED curve, then
+        // the header clamp_range maps it (with the CLAMPED-flag [0,1] clamp,
+        // see `map_to_output_range`). For the storm self_illum_intensity
+        // (amp [-8,1.5], clamp_range [1,20], CLAMPED): clamp(amp·noise) to
+        // [0,1] → map to [1,20] = a bright positive flash, never negative.
         let normalized = self.evaluate_legacy(input, range);
         self.map_to_output_range(normalized)
     }
@@ -813,23 +822,26 @@ impl TagFunction {
             green: ((c >> 8) & 0xff) as f32 / 255.0,
             blue: (c & 0xff) as f32 / 255.0,
         };
-        let n = match h.color_graph_type {
+        // Engine `map_to_color_range_legacy @0x1804f9af0` indexes the 4-slot
+        // m_colors array NON-consecutively: TwoColor interpolates [0]→[3];
+        // ThreeColor uses stops [0],[1],[3] (skips [2]); FourColor [0..3].
+        let stops: &[usize] = match h.color_graph_type {
             ColorGraphType::Scalar => return RealRgbColor { red: 1.0, green: 1.0, blue: 1.0 },
-            ColorGraphType::OneColor => 1usize,
-            ColorGraphType::TwoColor => 2,
-            ColorGraphType::ThreeColor => 3,
-            ColorGraphType::FourColor => 4,
+            ColorGraphType::OneColor => &[0],
+            ColorGraphType::TwoColor => &[0, 3],
+            ColorGraphType::ThreeColor => &[0, 1, 3],
+            ColorGraphType::FourColor => &[0, 1, 2, 3],
         };
-        if n == 1 {
-            return unpack(h.colors[0]);
+        if stops.len() == 1 {
+            return unpack(h.colors[stops[0]]);
         }
         // Position along the gradient from the underlying scalar curve.
         let t = self.evaluate_legacy(input, range).clamp(0.0, 1.0);
-        let pos = t * (n - 1) as f32;
-        let i = (pos.floor() as usize).min(n - 2);
+        let pos = t * (stops.len() - 1) as f32;
+        let i = (pos.floor() as usize).min(stops.len() - 2);
         let f = pos - i as f32;
-        let a = unpack(h.colors[i]);
-        let b = unpack(h.colors[i + 1]);
+        let a = unpack(h.colors[stops[i]]);
+        let b = unpack(h.colors[stops[i + 1]]);
         RealRgbColor {
             red: a.red + (b.red - a.red) * f,
             green: a.green + (b.green - a.green) * f,
