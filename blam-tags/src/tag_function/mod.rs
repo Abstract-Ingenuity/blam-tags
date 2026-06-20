@@ -742,7 +742,20 @@ impl TagFunction {
     /// `c_function_definition::map_to_output_range_legacy`.
     fn map_to_output_range(&self, normalized: f32) -> f32 {
         let h = self.header();
-        h.clamp_range_min + normalized * (h.clamp_range_max - h.clamp_range_min)
+        // Engine `c_function_definition::map_to_output_range_legacy`
+        // (@0x1804F99A0, verified vs Ares evaluate_scalar): when the CLAMPED
+        // flag (0x04 = engine header-dword bit 0x400) is set, the normalized
+        // output is clamped to [0,1] BEFORE the lerp. Without this, a periodic
+        // compact whose own amplitude (`amp_min/max`) already pushed the value
+        // outside [0,1] gets re-mapped through clamp_range and explodes — e.g.
+        // the mainmenu storm `self_illum_intensity` (periodic noise, amp
+        // [-8,1.5], clamp_range [1,20]) resolved to -60.75 instead of 1.0.
+        let n = if h.flags.is_clamped() {
+            normalized.clamp(0.0, 1.0)
+        } else {
+            normalized
+        };
+        h.clamp_range_min + n * (h.clamp_range_max - h.clamp_range_min)
     }
 
     /// Fast path for the common case: callers that just want a single
