@@ -514,14 +514,11 @@ impl MultiPartCompact {
                 };
             }
         }
-        // Past the last ending_x — evaluate the last part at its own
-        // domain. This matches the engine fallback when `found = false`.
-        let last = &self.parts[self.parts.len() - 1];
-        match &last.function {
-            MultiPartSubFunction::Linear(c)  => c.evaluate(input),
-            MultiPartSubFunction::Spline(c)  => c.evaluate(input),
-            MultiPartSubFunction::Spline2(c) => c.evaluate(input),
-        }
+        // Past the last part's ending_x: engine `c_multi_part_function_compact::
+        // evaluate @0x1804FBB90` returns 0.0 (the loop only writes its accumulator
+        // inside an accepted `input <= ending_x` branch; no match → 0.0). We do
+        // NOT extrapolate the last part.
+        0.0
     }
 }
 
@@ -575,10 +572,13 @@ pub enum TagFunction {
     Periodic { header: TagFunctionHeader, compact: PeriodicCompact },
     Linear   { header: TagFunctionHeader, compact: LinearCompact },
     LinearKey { header: TagFunctionHeader, compact: LinearKeyCompact },
-    /// `MultiLinearKey` — multi-graph LinearKey. The runtime treats it
-    /// the same shape as LinearKey (one graph per
-    /// `color_graph_type`-derived count); for scalar use we read the
-    /// first graph identically.
+    /// `MultiLinearKey` — multi-graph LinearKey (one graph per color channel).
+    /// NOTE: the engine `evaluate_legacy @0x1804F9390` has **no case 6** — type
+    /// 6 hits `default` and returns 0.0; it is a COLOR-only multi-graph type that
+    /// the cache-builder pre-splits into per-channel type-5 functions, so the
+    /// engine's scalar path never meaningfully sees it. We load loose (uncached)
+    /// tags, so we approximate by evaluating the FIRST graph as a LinearKey
+    /// (3-ramp-sum) — better than the engine's literal 0.0 for an animated color.
     MultiLinearKey { header: TagFunctionHeader, compact: LinearKeyCompact },
     Spline   { header: TagFunctionHeader, compact: SplineCompact },
     Spline2  { header: TagFunctionHeader, compact: Spline2Compact },
@@ -711,7 +711,7 @@ impl TagFunction {
     /// Ports `c_function_definition::evaluate_legacy` for the types
     /// implemented so far.
     fn evaluate_legacy(&self, input: f32, range: f32) -> f32 {
-        match self {
+        let v = match self {
             Self::Identity { .. } => input,
             Self::Constant { header } => {
                 if header.flags.is_ranged() { range } else { 0.0 }
@@ -734,6 +734,16 @@ impl TagFunction {
             Self::MultiSpline    { compact, .. } => compact.evaluate(input),
             Self::Exponent       { compact, .. } => compact.evaluate(input),
             Self::Unsupported { .. } => 0.0,
+        };
+        // Engine `evaluate_legacy @0x1804F9390` applies `unexclude_value
+        // @0x1804facd0` to the per-type result (before the output map): when the
+        // EXCLUSION flag (0x08) is set, re-expand the excluded discontinuity —
+        // `if v > exclusion_min { v += exclusion_max - exclusion_min }`.
+        let h = self.header();
+        if h.flags.has_exclusion() && v > h.exclusion_min {
+            v + (h.exclusion_max - h.exclusion_min)
+        } else {
+            v
         }
     }
 
@@ -804,8 +814,8 @@ impl TagFunction {
     /// Color-output evaluator — interpolates the `m_colors[4]` ARGB
     /// stops (bytes 4-19) by the scalar curve output. `OneColor` returns
     /// the single stop; `TwoColor`+ walk a piecewise gradient. `Scalar`
-    /// graphs carry no color data → white. Mirrors the engine's
-    /// `c_function_definition::evaluate_color`.
+    /// graphs carry no stops → grayscale (n,n,n). Mirrors the engine's
+    /// `c_function_definition::evaluate_color` → `map_to_color_range_legacy`.
     pub fn evaluate_color(&self, input: f32, range: f32) -> RealRgbColor {
         let h = self.header();
         let unpack = |c: u32| RealRgbColor {
@@ -813,11 +823,22 @@ impl TagFunction {
             green: ((c >> 8) & 0xff) as f32 / 255.0,
             blue: (c & 0xff) as f32 / 255.0,
         };
-        // Engine `map_to_color_range_legacy @0x1804f9af0` indexes the 4-slot
-        // m_colors array NON-consecutively: TwoColor interpolates [0]→[3];
-        // ThreeColor uses stops [0],[1],[3] (skips [2]); FourColor [0..3].
+        // Engine `map_to_color_range_legacy @0x1804f9af0` constant short-circuit:
+        // a Constant color function returns colors[0] directly when unranged, or
+        // when the graph is Scalar/OneColor (no gradient to walk).
+        if h.function_type == FunctionType::Constant
+            && (!h.flags.is_ranged()
+                || matches!(h.color_graph_type, ColorGraphType::Scalar | ColorGraphType::OneColor))
+        {
+            return unpack(h.colors[0]);
+        }
+        // Gradient position from the underlying scalar curve.
+        let t = self.evaluate_legacy(input, range).clamp(0.0, 1.0);
+        // Engine indexes the 4-slot m_colors array NON-consecutively: TwoColor
+        // interpolates [0]→[3]; ThreeColor uses [0],[1],[3] (skips [2]); FourColor
+        // [0..3]. A Scalar graph returns grayscale (n,n,n), NOT white.
         let stops: &[usize] = match h.color_graph_type {
-            ColorGraphType::Scalar => return RealRgbColor { red: 1.0, green: 1.0, blue: 1.0 },
+            ColorGraphType::Scalar => return RealRgbColor { red: t, green: t, blue: t },
             ColorGraphType::OneColor => &[0],
             ColorGraphType::TwoColor => &[0, 3],
             ColorGraphType::ThreeColor => &[0, 1, 3],
@@ -826,8 +847,6 @@ impl TagFunction {
         if stops.len() == 1 {
             return unpack(h.colors[stops[0]]);
         }
-        // Position along the gradient from the underlying scalar curve.
-        let t = self.evaluate_legacy(input, range).clamp(0.0, 1.0);
         let pos = t * (stops.len() - 1) as f32;
         let i = (pos.floor() as usize).min(stops.len() - 2);
         let f = pos - i as f32;
@@ -1210,8 +1229,8 @@ mod tests {
         assert!((f.evaluate(0.5, 0.0) - 1.0).abs() < 1e-5);
         // Part 2 at x=0.75 → -1.5 + 2 = 0.5
         assert!((f.evaluate(0.75, 0.0) - 0.5).abs() < 1e-5);
-        // Past end: still uses last part
-        assert!((f.evaluate(1.5, 0.0) - (-1.0)).abs() < 1e-5);
+        // Past the last part's ending_x: engine returns 0.0 (no extrapolation).
+        assert!(f.evaluate(1.5, 0.0).abs() < 1e-5);
     }
 
     #[test]
@@ -1226,5 +1245,21 @@ mod tests {
         // Exponent collapses to 1.0 via compact.evaluate, then maps
         // through clamp [0, 10] → 0 + 1.0*(10-0) = 10.
         assert!((f.evaluate(0.5, 0.0) - 10.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn exclusion_widens_above_min() {
+        // Identity + EXCLUSION flag: evaluate_legacy applies unexclude_value —
+        // input > exclusion_min → input + (exclusion_max - exclusion_min).
+        // clamp_range [0,1] without the CLAMPED flag is an identity map.
+        let mut hdr = header_with(0, 0.0, 1.0);
+        hdr[1] = 0x08; // EXCLUSION flag
+        hdr[20..24].copy_from_slice(&0.5f32.to_le_bytes()); // exclusion_min
+        hdr[24..28].copy_from_slice(&1.5f32.to_le_bytes()); // exclusion_max
+        let f = TagFunction::parse(&hdr).unwrap();
+        // 0.3 <= min → unchanged
+        assert!((f.evaluate(0.3, 0.0) - 0.3).abs() < 1e-5);
+        // 0.7 > min → 0.7 + (1.5 - 0.5) = 1.7
+        assert!((f.evaluate(0.7, 0.0) - 1.7).abs() < 1e-5);
     }
 }
