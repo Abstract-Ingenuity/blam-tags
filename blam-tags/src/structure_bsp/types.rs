@@ -1462,13 +1462,24 @@ pub struct BspInstanceDefinition {
 
     /// `render bsp[i]` count — Ares
     /// `structure_instanced_geometry_definition::render_bsp` (`s_tag_block`
-    /// at offset 0x74). When non-zero the definition is "render-only":
-    /// instances of this def carry geometry but no collision data.
-    /// Engine `s_decal_collision_result::decalable_surface() const @
-    /// 0x18039FE50` rejects decal hits on such instances. We only need
-    /// the count for that predicate, so we don't materialize the
-    /// contents.
+    /// at offset 0x74).
     pub render_bsp_count: usize,
+
+    /// `render bsp[0]` decoded as a full collision `Bsp3d` — the DETAILED
+    /// per-definition BSP whose `surfaces` are PARALLEL to this definition's
+    /// [`Self::structure_surfaces`] (same count/order). This is distinct from
+    /// [`Self::bsp`] (`collision info`), which is the simplified physics
+    /// collision (often a 6-surface bounding box).
+    ///
+    /// ⭐The lighting/geometry sampler MUST raycast against THIS bsp, not
+    /// `collision info`: engine `instanced_geometry_test_vector_internal @
+    /// 0x180400170` switches to `render_bsp` whenever the collision test flag
+    /// bit `0x10` (RENDER_ONLY_BSPS) is set — which `c_geometry_sampler::
+    /// geometry_test_vector` always sets (flags 0x4811/0x4819). Its bsp2d
+    /// leaves return surface indices into the 95-element structure-surface
+    /// space; the `collision info` box returns 0..5, which mis-index
+    /// `structure_surfaces` → wrong surface → black per-object lighting.
+    pub render_bsp: Option<Bsp3d>,
 
     /// Per-instance-definition surface descriptors (schema field
     /// `surfaces*`, `structure_surface_small_block`, 4 B each). Same shape
@@ -1497,11 +1508,14 @@ impl BspInstanceDefinition {
             .field("collision info")
             .and_then(|f| f.as_struct())
             .and_then(|cs| Bsp3d::from_inline_struct(&cs));
-        let render_bsp_count = s
-            .field("render bsp")
-            .and_then(|f| f.as_block())
-            .map(|b| b.len())
-            .unwrap_or(0);
+        let render_bsp_block = s.field("render bsp").and_then(|f| f.as_block());
+        let render_bsp_count = render_bsp_block.as_ref().map(|b| b.len()).unwrap_or(0);
+        // Decode render_bsp[0] as a full collision Bsp3d (the detailed,
+        // structure-surface-parallel BSP used by the geometry/lighting sampler).
+        let render_bsp = render_bsp_block
+            .as_ref()
+            .and_then(|b| b.element(0))
+            .and_then(|e| Bsp3d::from_inline_struct(&e));
         let structure_surfaces = read_block_named(
             s,
             "surfaces",
@@ -1523,6 +1537,7 @@ impl BspInstanceDefinition {
                 .unwrap_or(1.0),
             bsp,
             render_bsp_count,
+            render_bsp,
             structure_surfaces,
             structure_surface_to_triangle_mappings,
         }
