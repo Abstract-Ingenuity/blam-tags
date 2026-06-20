@@ -316,7 +316,18 @@ pub fn compile_real_constant_at_time(
             for anim in &rm.animated_parameters {
                 match anim.parameter_type.map(|e| e.get()) {
                     Some(A::Color) => {
-                        if let Some(c) = anim.function.as_ref().and_then(extract_first_color) {
+                        // Time-evaluate the color animation (NOT the static first
+                        // color — that froze pulsing channels at their t=0 stop,
+                        // e.g. the storm cloud's `channel_a/b/c` staying black).
+                        if let Some(c) = anim.function.as_ref().and_then(|f| {
+                            eval_color_at(
+                                f,
+                                anim.time_period_in_seconds,
+                                &anim.input_name,
+                                &anim.range_name,
+                                ctx,
+                            )
+                        }) {
                             slot[0] = c[0]; slot[1] = c[1]; slot[2] = c[2];
                             // alpha kept from Stage 1 / earlier anim
                         }
@@ -473,20 +484,47 @@ fn eval_value_at(
     f.evaluate(input, range)
 }
 
-fn extract_first_color(f: &TagFunction) -> Option<[f32; 4]> {
-    use crate::math::ArgbColor;
-    use crate::tag_function::ColorGraphType;
+/// Color variant of [`eval_value_at`] — time-evaluates an animated color
+/// function (engine `evaluate_function` → `c_function_definition::
+/// evaluate_color`). Same input resolution as the scalar path (periodic =
+/// unwrapped continuous phase, else `fmod(t, 1)`); returns the interpolated
+/// RGB. Scalar (non-color) functions carry no color stops → `None` (caller
+/// keeps the existing slot), matching the old `extract_first_color` guard.
+fn eval_color_at(
+    f: &TagFunction,
+    time_period: f32,
+    input_name: &str,
+    range_name: &str,
+    ctx: &dyn RenderMethodEvalContext,
+) -> Option<[f32; 3]> {
+    use crate::tag_function::{ColorGraphType, FunctionType};
     if f.color_graph_type() == ColorGraphType::Scalar {
         return None;
     }
-    let packed = ArgbColor(f.header().colors[0]);
-    let v = packed.0;
-    Some([
-        ((v >> 16) & 0xff) as f32 / 255.0,
-        ((v >> 8) & 0xff) as f32 / 255.0,
-        (v & 0xff) as f32 / 255.0,
-        ((v >> 24) & 0xff) as f32 / 255.0,
-    ])
+    let (input, range) = match input_name {
+        "" | "time" => {
+            let raw = if time_period > 0.0 {
+                ctx.eval_time() / time_period
+            } else {
+                ctx.eval_time()
+            };
+            let input = if f.function_type() == FunctionType::Periodic {
+                raw
+            } else {
+                raw % 1.0
+            };
+            (input, 0.0)
+        }
+        other => {
+            let range = match range_name {
+                "" | "time" => 0.0,
+                r => ctx.resolve_named(r),
+            };
+            (ctx.resolve_named(other), range)
+        }
+    };
+    let c = f.evaluate_color(input, range);
+    Some([c.red, c.green, c.blue])
 }
 
 // =============================================================================
