@@ -437,11 +437,19 @@ impl ZoneSet {
 pub struct TagReferencePalette {
     /// `name` field — the tag reference path (or empty if NONE).
     pub tag_path: String,
+    /// `name` field's group FOURCC (e.g. `mach` for a machine palette entry).
+    /// 0 when the reference is NONE. Resolve the on-disk extension via
+    /// [`crate::paths::group_tag_to_extension`] rather than guessing from the
+    /// object-type label (a machine's tag is `.device_machine`, not `.machine`).
+    pub group_tag: u32,
 }
 
 impl TagReferencePalette {
     fn from_struct(s: &TagStruct<'_>) -> Self {
-        Self { tag_path: s.read_tag_ref_path("name").unwrap_or_default() }
+        match s.read_tag_ref_with_group("name") {
+            Some((group_tag, tag_path)) => Self { tag_path, group_tag },
+            None => Self { tag_path: String::new(), group_tag: 0 },
+        }
     }
 }
 
