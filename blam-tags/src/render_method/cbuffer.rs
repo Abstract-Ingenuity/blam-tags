@@ -425,6 +425,22 @@ pub trait RenderMethodEvalContext {
     /// the engine logs `objects:function: object %s failed to find
     /// function '%s'` and returns 0).
     fn resolve_named(&self, input_name: &str) -> f32;
+
+    /// Engine `unique_id` input (`e_string_id_global` 692): a per-instance
+    /// value added to game_time before the period divide, so repeated
+    /// instances of an animated material don't pulse in lockstep
+    /// (`evaluate_function @0x1806864d0`: `(game_time + m_context) / period`).
+    /// Default 0 (no stagger). Used by e.g. pulsing light-strip shaders.
+    fn unique_id(&self) -> f32 { 0.0 }
+
+    /// Engine `scenario_interpolator1..4` inputs (`e_string_id_global`
+    /// 693-696): the value of scenario interpolator `index` (0-3), used as the
+    /// curve INPUT. The engine reads the live value when a script drives it,
+    /// else the start value; with no script runtime we default to 0. (No
+    /// shipped tag binds a material param to these — verified across the tag
+    /// set — so this stays a 0 default unless a scnr-interpolator source is
+    /// later wired.)
+    fn scenario_interpolator(&self, _index: u8) -> f32 { 0.0 }
 }
 
 /// Default evaluation context — time-based only. Used when no caller-
@@ -473,6 +489,25 @@ fn eval_value_at(
             };
             (input, 0.0)
         }
+        // Engine `unique_id` (string-id 692): time base + a per-instance offset,
+        // then the same Periodic-vs-other fmod rule — staggers animation phase.
+        "unique_id" => {
+            let base = ctx.eval_time() + ctx.unique_id();
+            let raw = if time_period > 0.0 { base / time_period } else { base };
+            let input = if f.function_type() == FunctionType::Periodic {
+                raw
+            } else {
+                raw % 1.0
+            };
+            (input, 0.0)
+        }
+        // Engine scenario_interpolator1..4 (string-ids 693-696): the interpolator
+        // value IS the curve input (named-input path → no time-wrap; range = 0,
+        // engine `v6` unset here).
+        "scenario_interpolator1" => (ctx.scenario_interpolator(0), 0.0),
+        "scenario_interpolator2" => (ctx.scenario_interpolator(1), 0.0),
+        "scenario_interpolator3" => (ctx.scenario_interpolator(2), 0.0),
+        "scenario_interpolator4" => (ctx.scenario_interpolator(3), 0.0),
         other => {
             let range = match range_name {
                 "" | "time" => 0.0,
@@ -515,6 +550,25 @@ fn eval_color_at(
             };
             (input, 0.0)
         }
+        // Engine `unique_id` (string-id 692): time base + a per-instance offset,
+        // then the same Periodic-vs-other fmod rule — staggers animation phase.
+        "unique_id" => {
+            let base = ctx.eval_time() + ctx.unique_id();
+            let raw = if time_period > 0.0 { base / time_period } else { base };
+            let input = if f.function_type() == FunctionType::Periodic {
+                raw
+            } else {
+                raw % 1.0
+            };
+            (input, 0.0)
+        }
+        // Engine scenario_interpolator1..4 (string-ids 693-696): the interpolator
+        // value IS the curve input (named-input path → no time-wrap; range = 0,
+        // engine `v6` unset here).
+        "scenario_interpolator1" => (ctx.scenario_interpolator(0), 0.0),
+        "scenario_interpolator2" => (ctx.scenario_interpolator(1), 0.0),
+        "scenario_interpolator3" => (ctx.scenario_interpolator(2), 0.0),
+        "scenario_interpolator4" => (ctx.scenario_interpolator(3), 0.0),
         other => {
             let range = match range_name {
                 "" | "time" => 0.0,
@@ -740,4 +794,53 @@ fn pack_cbuffer_at_time(
         total_bytes,
         bytes,
     })
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+    use crate::tag_function::TagFunction;
+
+    struct Ctx {
+        t: f32,
+        uid: f32,
+        interp: [f32; 4],
+    }
+    impl RenderMethodEvalContext for Ctx {
+        fn eval_time(&self) -> f32 { self.t }
+        fn resolve_named(&self, _: &str) -> f32 { 0.0 }
+        fn unique_id(&self) -> f32 { self.uid }
+        fn scenario_interpolator(&self, i: u8) -> f32 { self.interp[i as usize] }
+    }
+
+    /// Linear slope=1 offset=0, clamp_range [0,1] (no CLAMPED flag) → an
+    /// identity map, so `evaluate(input) == input`.
+    fn linear_identity() -> TagFunction {
+        let mut blob = vec![0u8; 32];
+        blob[0] = 4; // FunctionType::Linear
+        blob[8..12].copy_from_slice(&1.0f32.to_le_bytes()); // clamp_max = 1
+        blob[28..32].copy_from_slice(&8i32.to_le_bytes()); // compact_size = 8
+        blob.extend_from_slice(&1.0f32.to_le_bytes()); // slope
+        blob.extend_from_slice(&0.0f32.to_le_bytes()); // offset
+        TagFunction::parse(&blob).unwrap()
+    }
+
+    #[test]
+    fn unique_id_offsets_time() {
+        // #7: input "unique_id" → (eval_time + unique_id) / period.
+        let f = linear_identity();
+        let c0 = Ctx { t: 0.0, uid: 0.0, interp: [0.0; 4] };
+        assert!(eval_value_at(&f, 1.0, "unique_id", "", &c0).abs() < 1e-5);
+        let c1 = Ctx { t: 0.0, uid: 0.5, interp: [0.0; 4] };
+        assert!((eval_value_at(&f, 1.0, "unique_id", "", &c1) - 0.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn scenario_interpolator_is_the_input() {
+        // #8: input "scenario_interpolatorN" → interpolator value used as the
+        // curve input directly (no time-wrap).
+        let f = linear_identity();
+        let c = Ctx { t: 9.0, uid: 0.0, interp: [0.1, 0.3, 0.0, 0.0] };
+        assert!((eval_value_at(&f, 1.0, "scenario_interpolator2", "", &c) - 0.3).abs() < 1e-5);
+    }
 }
